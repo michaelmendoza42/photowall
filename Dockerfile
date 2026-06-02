@@ -17,7 +17,7 @@ COPY package.json package-lock.json* ./
 RUN --mount=type=cache,target=/root/.npm \
     npm install --no-audit --no-fund --include=dev
 
-COPY tsconfig.base.json tsconfig.json tsconfig.server.json tsconfig.client.json ./
+COPY tsconfig.base.json tsconfig.json tsconfig.server.json tsconfig.client.json tsconfig.test.json ./
 COPY vite.config.ts ./
 COPY src ./src
 COPY fixtures ./fixtures
