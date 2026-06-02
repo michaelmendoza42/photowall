@@ -1,0 +1,495 @@
+# Glossary
+Last edited: 2026-06-02
+Status: Active
+Scope: Shared behavioral and technical terminology for repositories created from this template
+Related files: `README.md`, `product/README.md`, `workshop-ideas/README.md`, `system/README.md`, `standards/documentation-model.md`, `standards/documentation-schema.md`
+
+Use this glossary for terms that should mean the same thing across the repo.
+
+## How this glossary is organized
+
+This glossary has two sections:
+
+- **Behavioral / product / repo terms** — shared language about canonical docs, authority, workflow, and product-facing intent
+- **Technical / implementation terms** — internal architecture, state, integration, rendering, reliability, and AI-built structure language
+
+When adding a term, put it in the section that best matches how the term is used.
+
+## Glossary maintenance
+
+Keep this file compact and deduplicated.
+
+Add a term only when it is genuinely shared, repeatedly useful, or important for avoiding confusion during implementation, review, or handoff.
+
+Prefer updating an existing term over adding a near-duplicate. If a term is no longer preferred, mark it as deprecated or alias it to the canonical term instead of silently drifting away from it.
+
+## Behavioral / product / repo terms
+
+### AGENTS.md
+The stable agent-instruction file for a repository or subtree. It contains rules that are expected to stay true across many sessions.
+
+### AI explicit proposal
+A draft policy, decision, convention, or durable suggestion written down by an AI agent. It is reviewable, but not binding until a human approves it.
+
+### AI implicit decision
+A temporary assumption, default, local implementation choice, or inferred convention made by an AI agent without explicit human approval. AI implicit decisions are disposable and may change at any time unless they conflict with human decisions.
+
+### Bootstrap-empty target
+A destination directory that only contains bootstrap-local state such as `.git/`, `.pi/`, or `.DS_Store`, with no real project files yet. Template scaffolding may treat this as a fresh repo target without requiring `--force`.
+
+### Canonical docs
+Durable source-of-truth documentation that humans and agents can rely on repeatedly. In this template, canonical docs are the home for approved durable policy and, when clearly marked, formal proposals under review.
+
+### Product docs
+Documentation in `docs/product/` that records intended product behavior, shared language, rules, and invariants.
+
+### Photo wall
+The core product surface in this repo: a large, minimal, gapless web page of photos sourced from a configured directory.
+
+- **Lives in:** `docs/product/photo-wall-experience.md`
+- **Why it exists:** names the primary user-facing experience and anchors later implementation decisions to the intended browsing surface
+- **Used by:** product behavior, future UI architecture, loading behavior, and filtering behavior
+- **Change risk:** high — changing this definition changes the whole product direction
+- **Surfaced to users:** yes — this is the product itself
+- **Notes:** the wall is photo-first, visually minimal, gapless, and browsed via true two-axis trackpad panning or mouse click-drag panning rather than vertical scrolling
+
+### Photos directory
+The configured filesystem directory that supplies the photo collection shown by the wall.
+
+- **Lives in:** `docs/product/photo-wall-experience.md`
+- **Why it exists:** defines the source of the library the product visualizes
+- **Used by:** future ingestion logic, folder filtering, and library-scoping behavior
+- **Change risk:** high — changing the source model affects loading, filtering, and project scope
+- **Alias:** source photos directory
+- **Surfaced to users:** indirectly — users depend on or choose the configured directory
+
+### Library root
+The single configured root folder that the app scans for photos and subfolders.
+
+- **Lives in:** `docs/product/photo-wall-experience.md`, `docs/system/photo-library-source-and-runtime.md`
+- **Why it exists:** defines the one filesystem entry point the app uses to discover the photo library
+- **Used by:** Docker configuration, scanning logic, folder filtering, and future indexing
+- **Change risk:** high — changing this affects ingest, deployment, and browsing assumptions
+- **Alias:** configured photos root
+- **Surfaced to users:** indirectly — operators configure it, and users browse what it contains
+
+### Year folder
+A likely top-level organizational folder under the library root, used to group photos by year.
+
+- **Lives in:** `docs/system/photo-library-source-and-runtime.md`
+- **Why it exists:** captures the current expected high-level organization of the library without hardcoding it as the only valid shape
+- **Used by:** year-oriented browsing, scan expectations, and test fixtures
+- **Change risk:** medium — it affects defaults and assumptions, but is not the sole valid source shape
+- **Surfaced to users:** indirectly — it may appear in folder-based browsing and filtering
+
+### Event folder
+A likely subfolder beneath a year folder that groups the actual photos for one event or shoot.
+
+- **Lives in:** `docs/system/photo-library-source-and-runtime.md`
+- **Why it exists:** names the expected mid-level grouping in the initial library organization
+- **Used by:** folder discovery, folder filters, and likely playlist organization
+- **Change risk:** medium — it shapes defaults, but should not become an inflexible hard requirement
+- **Surfaced to users:** indirectly — it may appear in folder-based browsing and filtering
+
+### Playlist
+A reusable, server-persisted saved-filter preset that the user can switch to from the interface. For the MVP, a playlist is a saved combination of year and folder filters, not a hand-curated photo list.
+
+- **Lives in:** `docs/product/photo-wall-experience.md`, `docs/system/photo-library-source-and-runtime.md`
+- **Why it exists:** gives the product a durable way to revisit meaningful filtered views of the library without a heavier curation model
+- **Used by:** filter controls, server-side persistence, and future saved-view behavior
+- **Change risk:** medium to high — changing this meaning will affect both product behavior and storage design
+- **Alias:** saved-filter playlist
+- **Surfaced to users:** yes — playlists are part of the planned UI
+- **Notes:** stale or missing folder references in a saved playlist must degrade gracefully rather than crash the app
+
+### Two-axis trackpad panning
+The MVP motion model for the photo wall: trackpad wheel deltas drive simultaneous horizontal and vertical camera movement across the wall, rather than only vertical scrolling.
+
+- **Lives in:** `docs/product/photo-wall-experience.md`
+- **Why it exists:** names the primary navigation gesture that makes the wall feel like a 2D photo surface instead of a normal scrollable gallery
+- **Used by:** camera/interaction subsystem, rendering logic, and UX validation
+- **Change risk:** medium to high — changing this alters the feel of the product
+- **Surfaced to users:** yes — users experience it directly even if the label stays internal
+
+### Click-drag panning
+The MVP fallback navigation gesture for mice without trackpad wheel input: pressing and dragging the wall moves the camera, and crossing the drag threshold suppresses the click-to-open-modal activation.
+
+- **Lives in:** `docs/product/photo-wall-experience.md`
+- **Why it exists:** ensures the wall stays navigable on mouse-only hardware while keeping the modal-open click intent unambiguous
+- **Used by:** camera/interaction subsystem and modal-open logic
+- **Change risk:** medium — affects both panning feel and accidental-modal-open behavior
+- **Surfaced to users:** yes — directly experienced when click-dragging
+
+### Focused-photo modal
+The simple, viewport-sized overlay opened when a user clicks a non-dragged photo. It has an explicit visible `X` close control and returns the user to the same wall context on close.
+
+- **Lives in:** `docs/product/photo-wall-experience.md`
+- **Why it exists:** preserves a minimal default UI while still letting users inspect a single photo at a larger size
+- **Used by:** tile interaction layer, modal rendering, and media derivative selection
+- **Change risk:** medium — changing this affects both the close affordance and how camera/filter context is restored
+- **Surfaced to users:** yes — it is the primary single-photo view
+
+### Trusted-LAN-only
+The deployment posture for the MVP: the app is intended to run on the operator's home network with no auth boundary and no internet exposure. Threat scope is limited to safe filesystem handling and operator-facing diagnostics, not hostile-network defense.
+
+- **Lives in:** `docs/system/photo-library-source-and-runtime.md`
+- **Why it exists:** scopes the runtime and threat model so MVP work is not pulled into multi-user, auth, or internet-facing concerns
+- **Used by:** runtime contracts, docs, operator workflow, and security-relevant decisions
+- **Change risk:** high — changing this would change which threats are in scope and could expand MVP scope substantially
+- **Surfaced to users:** indirectly — surfaces in operator-facing setup docs rather than the user UI
+
+### Seamless wall layout
+The layout rule that photos should pack together tightly with no intentional gaps in the wall.
+
+- **Lives in:** `docs/product/photo-wall-experience.md`
+- **Why it exists:** defines the visual density and cohesion of the browsing surface
+- **Used by:** layout logic, rendering validation, and future responsive behavior
+- **Change risk:** high — changing this would materially alter the look of the product
+- **Surfaced to users:** yes — visible in the core interface
+
+### Filter menu
+The secondary control surface opened from the small circular menu button. It exposes filtering controls without turning the page into a chrome-heavy application shell.
+
+- **Lives in:** `docs/product/photo-wall-experience.md`
+- **Why it exists:** preserves the minimal default UI while still allowing photo set controls
+- **Used by:** filtering behavior and future control-surface design
+- **Change risk:** medium — changing this impacts the balance between minimalism and control
+- **Surfaced to users:** yes — it is the main visible control entry point
+
+### Workshop idea
+A durable idea packet stored in `docs/workshop-ideas/` for a concept, problem statement, or discussion outcome that is worth preserving even though it is not approved product behavior or active execution work yet.
+
+### Ephemeral work artifacts
+Temporary documents that capture active work state, such as plans, task notes, migration slices, and disposable scratch notes. In this template they belong in `work/` and `scratch/`.
+
+### Human explicit decision
+A direction, policy, or decision explicitly approved by a human. These decisions are binding until superseded by a newer human-approved decision.
+
+### Human ratification
+The human approval step that turns a proposal into a binding repo decision. File placement alone does not count as ratification.
+
+### Inferred memory
+Convenience context derived from chat history, tools, or agent memory. It is useful for speed, but it is never the authority for correctness, architecture, onboarding, safety, or operations.
+
+### Promotion rule
+The rule that temporary or inferred knowledge must be promoted into a canonical document and explicitly approved by a human before the team relies on it long term.
+
+### Runbook
+A repeatable operational procedure stored in `docs/runbooks/`. A runbook should be usable by someone who was not part of the original discussion.
+
+### Scoped operational docs
+Explicit instructions that apply only to a specific subtree or workflow rather than the whole repository. A nested `AGENTS.md` is the main example in this template.
+
+### Standards docs
+Documentation in `docs/standards/` for repository-wide policy, conventions, testing rules, and structural guidance.
+
+### Warp Pipe
+The repository’s intake workflow/folder (`warp-pipe/`) for newly imported assets that need AI-assisted routing into their correct long-term location.
+
+## Technical / implementation terms
+
+### UI architecture terms
+
+#### Component boundary
+The functional edge around a component’s responsibilities: what state it owns, what it renders, what it delegates, and what inputs and outputs define its contract.
+
+#### Presentation component
+A component primarily responsible for rendering UI from inputs, with minimal business logic.
+
+#### Container component
+A component that coordinates data loading, state wiring, side effects, or orchestration for child presentation components.
+
+#### Slot
+A named insertion point where callers can provide custom UI or content.
+
+#### Variant
+A controlled visual or behavioral mode for a component, usually expressed through props, tokens, modifiers, or style classes.
+
+#### Composition layer
+The part of the UI tree that assembles reusable pieces into a larger screen, route, or section.
+
+#### View model
+A UI-oriented data shape prepared for rendering, often derived from domain objects so components stay simple.
+
+### State and data-flow terms
+
+#### Source of truth
+The authoritative location for a piece of state at a given layer.
+
+#### Derived state
+State computed from other state rather than authored directly.
+
+#### Local state
+State owned by one component, module, or narrow feature scope.
+
+#### Shared state
+State accessed by multiple components, modules, or subsystems.
+
+#### State transition
+A defined change from one meaningful state to another, often triggered by user action, async completion, or system events.
+
+#### Event bridge
+A small layer that translates one event system, emitter, callback style, or message shape into another.
+
+#### Synchronization point
+A place where multiple state updates, async operations, or subsystems must agree before proceeding.
+
+#### Hydration boundary
+The seam where serialized, server-generated, cached, or persisted data becomes live runtime state.
+
+### Domain-to-implementation mapping terms
+
+#### Domain model
+A representation of business entities and rules as the system understands them.
+
+#### Transport model
+The request/response or wire-format representation used across APIs, storage, or messaging boundaries.
+
+#### Persistence model
+The shape used to store data in a database, file, cache, or durable medium.
+
+#### Mapping layer
+The code that translates between domain, transport, persistence, or UI-specific representations.
+
+#### Normalization
+The process of reshaping data into a canonical internal form.
+
+#### Denormalized view
+A convenience shape optimized for reads, rendering, or reporting rather than strict normalization.
+
+### Integration terms
+
+#### Adapter
+A wrapper that reshapes an external dependency into an internal contract the codebase prefers.
+
+#### Gateway
+A boundary object or module that centralizes access to an external system.
+
+#### Provider
+A dependency source that supplies configuration, services, contexts, or external capabilities to consumers.
+
+#### Client
+A module responsible for making requests to another service or runtime boundary.
+
+#### Facade
+A simplified interface that hides a more complex subsystem behind a smaller API.
+
+#### Shim
+A thin compatibility layer added to smooth over version, environment, or API differences.
+
+#### Fallback path
+An alternate execution route used when the primary dependency, data source, or feature path is unavailable.
+
+### Async and job-processing terms
+
+#### Pipeline
+A staged sequence of transformations or operations where the output of one stage feeds the next.
+
+#### Stage
+A named step within a pipeline or workflow.
+
+#### Queue
+A buffer of work awaiting execution.
+
+#### Worker
+A unit that pulls queued or assigned work and executes it.
+
+#### Retry policy
+The rule set that determines when and how failed work is attempted again.
+
+#### Idempotent operation
+An operation that can run multiple times without changing the final result beyond the first successful application.
+
+#### Dead-letter path
+The holding area or failure route for work that cannot be processed successfully after normal attempts.
+
+### Rendering and styling terms
+
+#### Design token
+A named design value such as color, spacing, radius, duration, or typography scale intended for reuse.
+
+#### Semantic token
+A design token named by purpose rather than raw value, such as `surface-muted` instead of `gray-100`.
+
+#### Layout primitive
+A low-level reusable building block for spacing, stacking, alignment, grid, or containment.
+
+#### Interaction state
+A visual or behavioral state driven by focus, hover, pressed, selected, disabled, loading, or validation conditions.
+
+#### Motion contract
+The agreed timing, easing, trigger, and visibility rules for UI movement and transitions.
+
+#### Rendering path
+The path by which a screen or component reaches its final rendered form, including data preparation and conditional branches.
+
+### Code organization terms
+
+#### Module boundary
+The responsibility line around a file or module, including what it may import, expose, and coordinate.
+
+#### Public surface
+The intentionally supported exports, props, functions, routes, or commands that callers should depend on.
+
+#### Internal API
+A callable interface used inside the repo but not intended as a stable public contract.
+
+#### Leaf module
+A module with no meaningful internal dependents below it in a subsystem.
+
+#### Orchestrator
+A module that coordinates multiple lower-level helpers or services without owning all of their core logic.
+
+#### Utility
+A narrow helper with limited state and broad reuse potential.
+
+#### Helper
+A supporting function or module that serves a specific local need, usually with less durability than a utility.
+
+### Reliability and debugging terms
+
+#### Invariant
+A condition that must remain true for the system to be correct.
+
+#### Guardrail
+A code or process constraint that prevents misuse or unsafe change.
+
+#### Recovery path
+The route the system uses to restore a safe or usable state after an error.
+
+#### Failure mode
+A specific way a component, process, or dependency can break.
+
+#### Probe
+A targeted diagnostic check used to observe runtime behavior.
+
+#### Instrumentation point
+A code location where logs, metrics, traces, or debug signals are emitted.
+
+#### Backpressure
+A condition where downstream capacity limits require the system to slow, buffer, reject, or reshape incoming work.
+
+### AI-built structure terms
+
+#### AI-built abstraction
+A component, helper, pattern, or conceptual layer introduced by an AI agent during implementation.
+
+#### Hidden contract
+An unstated dependency or assumption that exists in code but is not obvious from names or public APIs.
+
+#### Ghost feature
+A capability partially implemented in code but not formally documented, named, or intentionally exposed.
+
+#### Shadow workflow
+An operational or code path that exists in practice but is not yet recognized as an official supported workflow.
+
+#### Naming debt
+The gap between what a thing is called in code and what it actually does.
+
+#### Intent drift
+The condition where a structure’s current behavior no longer matches the reason it was originally introduced.
+
+#### Compression artifact
+A misleading simplification introduced by AI or humans when collapsing a complex design into a smaller implementation explanation.
+
+### Documentation hygiene terms
+
+#### Canonical name
+The preferred stable term the repo should use for a concept.
+
+#### Alias term
+An older, local, transitional, or informal name that points to the canonical name.
+
+#### Deprecated term
+A term that should no longer be introduced in new code or docs, even if legacy references remain.
+
+#### Surfaced term
+A term intentionally exposed to users, operators, or API consumers.
+
+#### Internal term
+A term intended only for maintainers, implementers, and agent handoff.
+
+## Maintenance rule
+
+When the codebase gains non-obvious internal structure, update this glossary before relying on memory or chat context to explain it later.
+
+This is especially important when:
+
+- an AI introduced a new abstraction
+- a refactor created a new layer or responsibility boundary
+- a hidden workflow became important to operations
+- a new internal name started appearing in commits, plans, or reviews
+
+## Entry requirements for future repo-specific terms
+
+For repo-specific additions, use the structured format below when the concise definition is not enough.
+These fields are required unless a field truly does not apply:
+
+- **Lives in**
+- **Why it exists**
+- **Used by**
+- **Change risk**
+
+Add these when useful:
+
+- **Depends on**
+- **Alias**
+- **Surfaced to users**
+- **Notes**
+
+```md
+### Term name
+Short definition.
+
+- **Lives in:** `path/or/subsystem`
+- **Why it exists:** brief rationale
+- **Used by:** downstream consumers
+- **Change risk:** what can break if altered carelessly
+- **Depends on:** upstream inputs or collaborators
+- **Alias:** older or local names, if any
+- **Surfaced to users:** yes/no, and where if yes
+- **Notes:** debugging clues, invariants, or migration cautions
+```
+
+## Related docs
+
+- `README.md`
+- `product/README.md`
+- `workshop-ideas/README.md`
+- `system/README.md`
+- `standards/documentation-model.md`
+- `standards/documentation-schema.md`
+
+## Changelog
+
+### 2026-06-02
+- Replaced `Diagonal drift` with `Two-axis trackpad panning` and added `Click-drag panning` to match the approved MVP motion model.
+- Added `Focused-photo modal` and `Trusted-LAN-only` to capture the modal close behavior and the explicit MVP deployment posture.
+- Updated the `Playlist` entry to describe server-persisted saved-filter presets and the graceful degradation requirement when referenced folders are missing.
+- Updated the `Photo wall` notes to describe true 2D panning rather than diagonal-motion scrolling.
+
+### 2026-06-01
+- Added the repo-specific terms `Library root`, `Year folder`, and `Event folder`.
+- Added the repo-specific terms `Photo wall`, `Photos directory`, `Playlist`, `Diagonal drift`, `Seamless wall layout`, and `Filter menu`.
+
+### 2026-05-27
+- Added `Workshop idea` for durable parked ideas stored under `docs/workshop-ideas/`.
+
+### 2026-05-25
+- Added `Bootstrap-empty target` for scaffold destinations that only contain local bootstrap state such as `.git/` and `.pi/`.
+
+### 2026-05-20
+- Merged glossary maintenance guidance into the shared glossary.
+- Merged the separate behavioral and technical glossaries into one shared `docs/glossary.md`.
+- Split the glossary into explicit behavioral and technical sections.
+
+### 2026-05-17
+- Added authority-model terms for `Human explicit decision`, `Human ratification`, `AI explicit proposal`, and `AI implicit decision`.
+- Clarified that canonical docs can contain clearly marked proposals, but only human-approved decisions are binding.
+
+### 2026-05-12
+- Added `Warp Pipe` as the canonical term for the repo's AI-assisted asset intake workflow.
+
+### 2026-05-04
+- Added the initial glossary covering the template repo’s core documentation and workflow terms.
+- Added the initial technical glossary for internal implementation terms, AI-built abstractions, and hidden repo mechanics.
