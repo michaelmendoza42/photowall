@@ -1,5 +1,4 @@
 import type { LibraryStatusResponse } from '../../../../shared/api/library.js';
-import type { PhotosQuerySuccessResponse } from '../../../../shared/api/photos.js';
 import { summarizeFilters, type ActiveFilters } from '../../state/filters.js';
 
 function StateFrame({
@@ -163,54 +162,4 @@ export function SnapshotChangedState({
       </dl>
     </StateFrame>
   );
-}
-
-export function ReadyState({
-  status,
-  page,
-}: {
-  status: LibraryStatusResponse;
-  page: PhotosQuerySuccessResponse;
-}): JSX.Element {
-  return (
-    <section
-      className="wall__ready"
-      data-testid="wall-state-ready"
-      aria-live="polite"
-    >
-      <header className="wall__ready-header">
-        <span className="wall__ready-brand">photo · wall</span>
-        <span className="wall__ready-counts">
-          {page.totalMatching.toLocaleString()} photos · snapshot{' '}
-          <code>{shortSnapshot(page.snapshotId)}</code>
-        </span>
-      </header>
-      <div className="wall__ready-stage" aria-hidden>
-        <p className="wall__ready-stage-note">
-          backend data is loaded. The justified-row layout engine arrives in
-          the next task; this shell only proves the query pipeline.
-        </p>
-        <ul className="wall__ready-strip" data-testid="wall-ready-strip">
-          {page.photos.slice(0, 18).map((photo) => (
-            <li
-              key={photo.id}
-              className="wall__ready-cell"
-              style={{
-                aspectRatio: `${photo.width} / ${photo.height}`,
-              }}
-              title={photo.relativePath}
-            />
-          ))}
-        </ul>
-      </div>
-      <footer className="wall__ready-footer">
-        <span>library root: {status.libraryRoot}</span>
-        <span>page size: {page.photos.length}</span>
-      </footer>
-    </section>
-  );
-}
-
-function shortSnapshot(id: string): string {
-  return id.length > 10 ? `${id.slice(0, 10)}…` : id;
 }

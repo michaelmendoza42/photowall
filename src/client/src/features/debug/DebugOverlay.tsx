@@ -7,6 +7,7 @@ import type { CameraState } from '../../state/camera.js';
 import { summarizeFilters, type ActiveFilters } from '../../state/filters.js';
 import type { LayoutState } from '../../state/layout.js';
 import type { WallScreenState } from '../wall/wallScreenState.js';
+import type { WallStats } from '../wall/WallCanvas.js';
 
 interface DebugOverlayProps {
   screen: WallScreenState;
@@ -16,6 +17,7 @@ interface DebugOverlayProps {
   status: LibraryStatusResponse | null;
   facets: LibraryFacetsResponse | null;
   playlistCount: number | null;
+  wallStats?: WallStats | null;
 }
 
 /**
@@ -38,6 +40,7 @@ export function DebugOverlay(props: DebugOverlayProps): JSX.Element | null {
     status,
     facets,
     playlistCount,
+    wallStats,
   } = props;
 
   const pageInfo =
@@ -119,8 +122,15 @@ export function DebugOverlay(props: DebugOverlayProps): JSX.Element | null {
 
           <dt>layout</dt>
           <dd>
-            rows={layout.rows.length} · contentH={layout.contentHeight} ·
+            rows={layout.rows.length} · contentH={Math.round(layout.contentHeight)} ·
             overscan↑{layout.overscan.rowsAbove}↓{layout.overscan.rowsBelow}
+          </dd>
+
+          <dt>wall</dt>
+          <dd data-testid="debug-wall-stats">
+            {wallStats
+              ? `mounted=${wallStats.mountedRows}/${wallStats.totalRows} · visible=[${wallStats.visibleStart},${wallStats.visibleEnd}) · scrollY=${Math.round(wallStats.scrollTop)} · packed=${wallStats.packedPhotoCount}`
+              : '—'}
           </dd>
         </dl>
       )}

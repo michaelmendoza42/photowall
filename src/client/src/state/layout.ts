@@ -1,9 +1,9 @@
 // Layout state contract.
 //
-// The real justified-row layout engine lands in phase3-task2. This file
-// pins down the shape that engine will produce so the wall shell (and
-// the debug overlay) can already reason about it: loaded photos, row
-// list, content height, and the virtualization overscan window.
+// The justified-row layout engine itself lives in `features/wall/packer.ts`.
+// This module exposes the snapshot shape the shell and debug overlay
+// reason about: loaded photos, packed-row summary, content height, and
+// the virtualization overscan window.
 
 import type { PhotoQueryRecord } from '../../../shared/api/photos.js';
 
@@ -33,8 +33,11 @@ export const DEFAULT_OVERSCAN: LayoutOverscan = {
 export interface LayoutState {
   /** All photos currently fed into the packer, in deterministic order. */
   photos: PhotoQueryRecord[];
-  /** Packed rows. Empty until the layout engine runs. */
-  rows: PhotoRowPlaceholder[];
+  /**
+   * Packed rows. The full geometry lives inside the wall canvas; this
+   * field captures only the count summary the debug overlay needs.
+   */
+  rows: readonly unknown[];
   /** Sum of row heights; drives the world's vertical extent. */
   contentHeight: number;
   /** Virtualization window relative to the visible row range. */
@@ -47,10 +50,3 @@ export const INITIAL_LAYOUT: LayoutState = {
   contentHeight: 0,
   overscan: DEFAULT_OVERSCAN,
 };
-
-export function withLoadedPhotos(
-  state: LayoutState,
-  photos: PhotoQueryRecord[],
-): LayoutState {
-  return { ...state, photos };
-}

@@ -18,4 +18,15 @@ export const queryKeys = {
         cursor,
       },
     ] as const,
+  photoPages: (filters: PhotosQueryFilters, limit: number) =>
+    [
+      'photos',
+      'pages',
+      {
+        years: [...(filters.years ?? [])].sort((a, b) => a - b),
+        folders: [...(filters.folders ?? [])].sort(),
+        playlistId: filters.playlistId ?? null,
+        limit,
+      },
+    ] as const,
 } as const;

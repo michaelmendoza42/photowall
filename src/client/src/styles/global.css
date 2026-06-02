@@ -122,88 +122,46 @@ body {
 }
 
 /* ------------------------------------------------------------------ */
-/* Ready state — minimal proof shell before the real layout lands     */
+/* Wall canvas — justified rows, virtualized, gapless                 */
 /* ------------------------------------------------------------------ */
 
-.wall__ready {
-  display: grid;
-  grid-template-rows: auto 1fr auto;
-  min-height: 100dvh;
+.wall-canvas {
+  position: relative;
   width: 100vw;
+  height: 100dvh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: var(--pw-bg);
 }
 
-.wall__ready-header,
-.wall__ready-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0.9rem 1.5rem;
-  font-family: var(--pw-font-mono);
-  font-size: 0.7rem;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
-  color: var(--pw-fg-quiet);
+.wall-canvas__world {
+  position: relative;
+  margin: 0 auto;
 }
 
-.wall__ready-header {
-  border-bottom: 1px solid var(--pw-rule);
+.wall-canvas__row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  will-change: transform;
 }
 
-.wall__ready-footer {
-  border-top: 1px solid var(--pw-rule);
-}
-
-.wall__ready-brand {
-  color: var(--pw-fg);
-  letter-spacing: 0.32em;
-}
-
-.wall__ready-counts code {
-  font-family: var(--pw-font-mono);
-  color: var(--pw-fg-muted);
-}
-
-.wall__ready-stage {
-  display: flex;
-  flex-direction: column;
-  gap: 1.25rem;
-  padding: 1.5rem;
+.wall-canvas__tile {
+  position: absolute;
+  top: 0;
+  left: 0;
   overflow: hidden;
+  background: var(--pw-bg);
+  will-change: transform;
 }
 
-.wall__ready-stage-note {
-  margin: 0;
-  max-width: 64ch;
-  color: var(--pw-fg-muted);
-  font-size: 0.85rem;
-}
-
-.wall__ready-strip {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  align-content: flex-start;
-}
-
-.wall__ready-cell {
-  flex: 0 0 auto;
-  height: 132px;
-  /* Visual-only proxy. The real tile draws derivative imagery; this
-     surface only proves backend metadata is reaching the shell. */
-  background: linear-gradient(
-    180deg,
-    rgba(236, 230, 220, 0.06),
-    rgba(236, 230, 220, 0.02)
-  );
-  border: 1px solid var(--pw-rule);
-  width: calc(132px * var(--ar, 1));
-}
-
-.wall__ready-cell[style*="aspect-ratio"] {
-  width: auto;
+.wall-canvas__img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  user-select: none;
+  -webkit-user-drag: none;
 }
 
 /* ------------------------------------------------------------------ */

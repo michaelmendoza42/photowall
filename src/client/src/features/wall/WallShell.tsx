@@ -1,25 +1,49 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useLibraryFacets, useLibraryStatus } from '../../hooks/useLibrary.js';
-import { usePhotosPage } from '../../hooks/usePhotosPage.js';
+import {
+  flattenPhotoPages,
+  useInfinitePhotos,
+} from '../../hooks/useInfinitePhotos.js';
 import { usePlaylists } from '../../hooks/usePlaylists.js';
 import { EMPTY_FILTERS, toQueryFilters } from '../../state/filters.js';
-import { INITIAL_CAMERA, withViewport } from '../../state/camera.js';
-import { INITIAL_LAYOUT, withLoadedPhotos } from '../../state/layout.js';
+import {
+  INITIAL_CAMERA,
+  withViewport,
+  withWorldBounds,
+} from '../../state/camera.js';
+import { INITIAL_LAYOUT } from '../../state/layout.js';
 import { DebugOverlay } from '../debug/DebugOverlay.js';
 import {
   ConfigErrorState,
   EmptyLibraryState,
   LoadingState,
   NoResultsState,
-  ReadyState,
   ScanningState,
   SnapshotChangedState,
 } from './WallScreens.js';
 import { deriveWallScreenState } from './wallScreenState.js';
+import { WallCanvas, type WallStats } from './WallCanvas.js';
+import {
+  computeWorldWidth,
+  WORLD_WIDTH_MAX,
+} from './worldWidth.js';
+import type { PhotosQueryResponse } from '../../../../shared/api/photos.js';
+
+const DEV_PAGE_SIZE_ENV = import.meta.env.VITE_PHOTOS_PAGE_SIZE as
+  | string
+  | undefined;
+
+function parseDevPageSize(): number | undefined {
+  if (!DEV_PAGE_SIZE_ENV) return undefined;
+  const parsed = Number.parseInt(DEV_PAGE_SIZE_ENV, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+}
 
 export function WallShell(): JSX.Element {
   const [filters] = useState(EMPTY_FILTERS);
   const [camera, setCamera] = useState(INITIAL_CAMERA);
+  const [wallStats, setWallStats] = useState<WallStats | null>(null);
 
   const statusQuery = useLibraryStatus();
   const facetsQuery = useLibraryFacets(
@@ -27,10 +51,12 @@ export function WallShell(): JSX.Element {
   );
   const playlistsQuery = usePlaylists();
   const queryFilters = useMemo(() => toQueryFilters(filters), [filters]);
-  const photoPageQuery = usePhotosPage({
+
+  const devPageSize = parseDevPageSize();
+  const photosQuery = useInfinitePhotos({
     filters: queryFilters,
-    cursor: null,
     enabled: statusQuery.data?.scanState === 'ready',
+    ...(devPageSize !== undefined ? { limit: devPageSize } : {}),
   });
 
   useEffect(() => {
@@ -47,25 +73,106 @@ export function WallShell(): JSX.Element {
     return () => window.removeEventListener('resize', syncViewport);
   }, []);
 
-  // Phase 3 task 1 only owns the *contract* for layout state. The real
-  // packer lands in task 2, so for now the loaded-photos input is the
-  // only field that actually changes when a page arrives.
-  const layout = useMemo(() => {
-    if (photoPageQuery.data && !('error' in photoPageQuery.data)) {
-      return withLoadedPhotos(INITIAL_LAYOUT, photoPageQuery.data.photos);
-    }
-    return INITIAL_LAYOUT;
-  }, [photoPageQuery.data]);
+  const worldWidth = useMemo(
+    () => computeWorldWidth(camera.viewport.width || WORLD_WIDTH_MAX),
+    [camera.viewport.width],
+  );
+
+  // Keep camera world bounds in sync with the laid-out content so the
+  // debug overlay (and future pan task) always reads accurate values.
+  useEffect(() => {
+    if (!wallStats) return;
+    setCamera((prev) =>
+      withWorldBounds(prev, {
+        width: wallStats.worldWidth,
+        height: wallStats.contentHeight,
+      }),
+    );
+  }, [wallStats]);
+
+  // Snapshot-changed coherence: if any page in the loaded set carries
+  // an error response, drop all photo pages and let the query refetch
+  // from the new snapshot. Mixing pre- and post-rotation rows would
+  // render rows whose photoIds no longer exist on the active snapshot.
+  const queryClient = useQueryClient();
+  const pages = photosQuery.data?.pages;
+  const hasSnapshotChanged = useMemo(
+    () => Boolean(pages && pages.some((p) => 'error' in p)),
+    [pages],
+  );
+  useEffect(() => {
+    if (!hasSnapshotChanged) return;
+    queryClient.removeQueries({
+      queryKey: ['photos', 'pages'],
+    });
+    void photosQuery.refetch();
+    // `photosQuery.refetch` identity is stable across renders for the
+    // same query; including it in deps is safe.
+  }, [hasSnapshotChanged, queryClient, photosQuery]);
+
+  const successPages = useMemo(
+    () => flattenPhotoPages(pages),
+    [pages],
+  );
+  const photos = useMemo(
+    () => successPages.flatMap((p) => p.photos),
+    [successPages],
+  );
+  const firstPage = successPages[0];
+
+  const screenInput = useMemo(
+    () => ({
+      statusQuery: {
+        isLoading: statusQuery.isLoading,
+        error: statusQuery.error,
+        data: statusQuery.data,
+      },
+      photoPageQuery: {
+        isLoading: photosQuery.isLoading,
+        error: photosQuery.error,
+        data: derivePhotoPageData(pages),
+      },
+      filters,
+    }),
+    [
+      statusQuery.isLoading,
+      statusQuery.error,
+      statusQuery.data,
+      photosQuery.isLoading,
+      photosQuery.error,
+      pages,
+      filters,
+    ],
+  );
+
+  const screen = deriveWallScreenState(screenInput);
+
+  const handleLoadMore = useCallback(() => {
+    if (!photosQuery.hasNextPage || photosQuery.isFetchingNextPage) return;
+    void photosQuery.fetchNextPage();
+  }, [
+    photosQuery.hasNextPage,
+    photosQuery.isFetchingNextPage,
+    photosQuery.fetchNextPage,
+  ]);
 
   useEffect(() => {
     document.body.dataset['appReady'] = 'true';
   }, []);
 
-  const screen = deriveWallScreenState({
-    statusQuery,
-    photoPageQuery,
-    filters,
-  });
+  const layout = useMemo(() => {
+    if (!wallStats) {
+      return { ...INITIAL_LAYOUT, photos };
+    }
+    return {
+      photos,
+      // The overlay only consumes counts/heights, so a row-count summary
+      // is enough — we do not need to ship the full tile geometry up.
+      rows: new Array(wallStats.totalRows).fill(null),
+      contentHeight: wallStats.contentHeight,
+      overscan: INITIAL_LAYOUT.overscan,
+    };
+  }, [photos, wallStats]);
 
   return (
     <main className="wall" data-testid="wall-shell" data-screen={screen.kind}>
@@ -83,8 +190,15 @@ export function WallShell(): JSX.Element {
       {screen.kind === 'snapshot-changed' && (
         <SnapshotChangedState status={screen.status} />
       )}
-      {screen.kind === 'ready' && (
-        <ReadyState status={screen.status} page={screen.page} />
+      {screen.kind === 'ready' && firstPage && (
+        <WallCanvas
+          photos={photos}
+          worldWidth={worldWidth}
+          hasNextPage={photosQuery.hasNextPage}
+          isFetchingNextPage={photosQuery.isFetchingNextPage}
+          onLoadMore={handleLoadMore}
+          onStatsChange={setWallStats}
+        />
       )}
 
       {import.meta.env.DEV && (
@@ -96,8 +210,25 @@ export function WallShell(): JSX.Element {
           status={statusQuery.data ?? null}
           facets={facetsQuery.data ?? null}
           playlistCount={playlistsQuery.data?.playlists.length ?? null}
+          wallStats={wallStats}
         />
       )}
     </main>
   );
+}
+
+/**
+ * The shell's screen-state derivation only needs a snapshot of the
+ * "first page" — enough to decide loading / no-results / ready /
+ * snapshot-changed. Surface the latest error page if one exists so the
+ * snapshot-changed branch still triggers; otherwise hand back the
+ * first success page.
+ */
+function derivePhotoPageData(
+  pages: readonly PhotosQueryResponse[] | undefined,
+): PhotosQueryResponse | undefined {
+  if (!pages || pages.length === 0) return undefined;
+  const errorPage = pages.find((p) => 'error' in p);
+  if (errorPage) return errorPage;
+  return pages[0];
 }
