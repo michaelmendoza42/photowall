@@ -1,0 +1,47 @@
+# photo-wall — trusted-LAN Docker runtime.
+#
+# Configure host paths via .env (copy .env.example -> .env):
+#   PHOTO_WALL_HOST_LIBRARY_PATH  -> bound to /photos:ro (the source library)
+#   PHOTO_WALL_HOST_DATA_PATH     -> bound to /data       (writable app state)
+#   PHOTO_WALL_PORT               -> host + container port for the app
+#
+# Bring up: docker compose up --build
+# Health:   curl http://localhost:${PHOTO_WALL_PORT:-3001}/healthz
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: photo-wall:dev
+    container_name: photo-wall
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PHOTO_WALL_LIBRARY_ROOT: /photos
+      PHOTO_WALL_DATA_ROOT: /data
+      PHOTO_WALL_BIND_HOST: 0.0.0.0
+      PHOTO_WALL_PORT: ${PHOTO_WALL_PORT:-3001}
+      PHOTO_WALL_LOG_LEVEL: ${PHOTO_WALL_LOG_LEVEL:-info}
+    ports:
+      - "${PHOTO_WALL_PORT:-3001}:${PHOTO_WALL_PORT:-3001}"
+    volumes:
+      # Source library — read-only.
+      - type: bind
+        source: ${PHOTO_WALL_HOST_LIBRARY_PATH:-./fixtures/library-smoke}
+        target: /photos
+        read_only: true
+      # Writable app data — snapshots, derivatives, playlists.
+      - type: bind
+        source: ${PHOTO_WALL_HOST_DATA_PATH:-./.photo-wall-data}
+        target: /data
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:'+process.env.PHOTO_WALL_PORT+'/healthz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

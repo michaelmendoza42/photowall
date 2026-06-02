@@ -1,0 +1,19 @@
+.DS_Store
+.pi/
+scratch/*
+!scratch/README.md
+
+# Node / build artifacts
+node_modules/
+dist/
+.vite/
+*.tsbuildinfo
+
+# Local env and runtime data
+.env
+.env.local
+.photo-wall-data/
+
+# Editor / OS
+.idea/
+.vscode/

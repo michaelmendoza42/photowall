@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "version": 1,
+  "description": "Fixture-library contract for photo-wall scanner and integration tests. The scanner work in a later phase will materialize the photos described here.",
+  "libraries": {
+    "library-smoke": {
+      "path": "library-smoke",
+      "purpose": "Happy-path library used for default integration tests and the docker-compose mount fallback.",
+      "expected": {
+        "photos": [],
+        "folders": [],
+        "years": [],
+        "facets": {
+          "years": [],
+          "topLevelFolders": []
+        }
+      },
+      "notes": [
+        "Populated by phase2-task2 (scanner). Placeholder folder exists today so the bind mount works.",
+        "Shape will follow year/event nesting: e.g. 2024/wedding-anna/IMG_0001.jpg."
+      ]
+    },
+    "library-edge": {
+      "path": "library-edge",
+      "purpose": "Edge-case library used by hardening tests.",
+      "expected": {
+        "photos": [],
+        "skipped": [],
+        "symlinks": [],
+        "corrupt": [],
+        "yearless": []
+      },
+      "notes": [
+        "Will exercise symlink skipping, unsupported file types, corrupt images, missing year prefixes, and deeply nested paths.",
+        "Populated incrementally as scanner edge-case requirements come online."
+      ]
+    }
+  }
+}

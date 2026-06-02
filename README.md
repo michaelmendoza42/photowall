@@ -3,6 +3,39 @@ Last edited: 2026-06-02
 
 Minimal Docker-run web app for browsing a configured photo library on the home LAN as a large, gapless photo wall.
 
+## Quick start
+
+Local dev (Vite + Fastify with hot reload):
+
+```bash
+npm install
+cp .env.example .env   # then edit PHOTO_WALL_HOST_LIBRARY_PATH
+npm run dev            # client on :5173, server on :3001
+```
+
+Docker (production-style single image):
+
+```bash
+cp .env.example .env   # then edit PHOTO_WALL_HOST_LIBRARY_PATH and PHOTO_WALL_HOST_DATA_PATH
+docker compose up --build
+# health: curl http://localhost:3001/healthz
+```
+
+The container expects:
+
+- `/photos` — read-only bind of the host photo-library root
+- `/data` — writable bind for snapshots, derivative cache, and saved-filter playlists
+
+Repo layout (single-app TypeScript workspace):
+
+```text
+src/client/   React + Vite frontend
+src/server/   Fastify backend
+src/shared/   types + API contracts shared across client/server
+fixtures/     scanner fixtures (library-smoke, library-edge, manifest.json)
+playwright/   browser-driven acceptance tests (later phases)
+```
+
 ## Overview
 
 `photo-wall` should:
