@@ -108,6 +108,10 @@ export class LibraryService {
     return this.snapshotPaths.dataRoot;
   }
 
+  getCacheDir(): string {
+    return this.snapshotPaths.cacheDir;
+  }
+
   getActiveSnapshot(): PersistedSnapshot | null {
     return this.snapshot.active;
   }

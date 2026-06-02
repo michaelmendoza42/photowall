@@ -2,9 +2,11 @@ import Fastify from 'fastify';
 import { ConfigValidationError, loadConfig } from './config/env.js';
 import { registerHealthRoute } from './routes/health.js';
 import { registerLibraryRoutes } from './routes/library.js';
+import { registerMediaRoutes } from './routes/media.js';
 import { registerPhotoRoutes } from './routes/photos.js';
 import { registerPlaylistRoutes } from './routes/playlists.js';
 import { registerClientStatic } from './services/static-client.js';
+import { DerivativeService } from './media/derivative-service.js';
 import { PlaylistService } from './playlists/service.js';
 import {
   LibraryRootError,
@@ -75,6 +77,15 @@ async function main(): Promise<void> {
   await registerPhotoRoutes(app, {
     library: libraryService,
     playlists: playlistService,
+  });
+
+  const derivativeService = new DerivativeService({
+    cacheRoot: libraryService.getCacheDir(),
+    logger: app.log,
+  });
+  await registerMediaRoutes(app, {
+    library: libraryService,
+    derivatives: derivativeService,
   });
 
   // Kick off the initial scan in the background. We do not block the
