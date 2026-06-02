@@ -2,7 +2,10 @@ import Fastify from 'fastify';
 import { ConfigValidationError, loadConfig } from './config/env.js';
 import { registerHealthRoute } from './routes/health.js';
 import { registerLibraryRoutes } from './routes/library.js';
+import { registerPhotoRoutes } from './routes/photos.js';
+import { registerPlaylistRoutes } from './routes/playlists.js';
 import { registerClientStatic } from './services/static-client.js';
+import { PlaylistService } from './playlists/service.js';
 import {
   LibraryRootError,
   LibraryService,
@@ -65,6 +68,14 @@ async function main(): Promise<void> {
     throw error;
   }
   await registerLibraryRoutes(app, libraryService);
+
+  const playlistService = new PlaylistService(config.dataRoot);
+  await playlistService.initialize();
+  await registerPlaylistRoutes(app, playlistService);
+  await registerPhotoRoutes(app, {
+    library: libraryService,
+    playlists: playlistService,
+  });
 
   // Kick off the initial scan in the background. We do not block the
   // listen() call so a warm-loaded snapshot can serve traffic immediately
