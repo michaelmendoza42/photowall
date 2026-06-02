@@ -1,13 +1,24 @@
 :root {
-  color-scheme: dark light;
-  --bg: #0b0d10;
-  --fg: #e6e8eb;
-  --fg-muted: #8a8f96;
-  --accent: #4c8bf5;
-  --error: #ff6b6b;
-  --border: rgba(255, 255, 255, 0.08);
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
-    Helvetica, Arial, sans-serif;
+  color-scheme: dark;
+  /* Off-black warm monochrome — not pure #000, not generic SaaS slate. */
+  --pw-bg: #14110f;
+  --pw-fg: #ece6dc;
+  --pw-fg-muted: #8a847b;
+  --pw-fg-quiet: #5a554e;
+  --pw-rule: rgba(236, 230, 220, 0.08);
+  --pw-accent: #d4b483;
+  --pw-error: #d97b5b;
+
+  /* Restrained sans stack — Helvetica Neue / Inter explicitly avoided.
+     Falls back to a tight system stack and adds Pier Sans / Söhne-like
+     defaults where they happen to be available on the host. */
+  --pw-font-sans:
+    "Söhne", "Pier Sans", "Neue Haas Grotesk Text Pro", "Aktiv Grotesk",
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable",
+    "Helvetica Neue", Arial, sans-serif;
+  --pw-font-mono:
+    "JetBrains Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo,
+    Consolas, monospace;
 }
 
 *,
@@ -21,84 +32,252 @@ body,
 #root {
   margin: 0;
   padding: 0;
-  height: 100%;
   width: 100%;
+  min-height: 100dvh;
 }
 
 body {
-  background: var(--bg);
-  color: var(--fg);
+  background: var(--pw-bg);
+  color: var(--pw-fg);
+  font-family: var(--pw-font-sans);
+  font-weight: 400;
+  font-size: 15px;
+  line-height: 1.45;
+  letter-spacing: 0.005em;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overflow: hidden;
 }
 
-.app-shell {
+.wall {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100vw;
+  min-height: 100dvh;
+}
+
+/* ------------------------------------------------------------------ */
+/* Transitional screen states (loading, empty, error, no-results)     */
+/* ------------------------------------------------------------------ */
+
+.wall__state {
+  margin: auto;
+  max-width: 56ch;
+  padding: 3rem 1.75rem;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.wall__state-eyebrow {
+  margin: 0;
+  font-family: var(--pw-font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--pw-fg-quiet);
+}
+
+.wall__state-title {
+  margin: 0;
+  font-size: clamp(1.4rem, 2.4vw, 1.85rem);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--pw-fg);
+}
+
+.wall__state-body {
+  margin: 0;
+  color: var(--pw-fg-muted);
+  max-width: 48ch;
+}
+
+.wall__state-meta {
+  margin: 1.25rem 0 0;
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.4rem 1.25rem;
+  font-family: var(--pw-font-mono);
+  font-size: 0.78rem;
+  text-align: left;
+  color: var(--pw-fg-muted);
+}
+
+.wall__state-meta dt {
+  color: var(--pw-fg-quiet);
+  text-transform: lowercase;
+  letter-spacing: 0.04em;
+}
+
+.wall__state-meta dd {
+  margin: 0;
+  word-break: break-all;
+}
+
+[data-screen="config-error"] .wall__state-title {
+  color: var(--pw-error);
+}
+
+/* ------------------------------------------------------------------ */
+/* Ready state — minimal proof shell before the real layout lands     */
+/* ------------------------------------------------------------------ */
+
+.wall__ready {
   display: grid;
   grid-template-rows: auto 1fr auto;
-  height: 100vh;
+  min-height: 100dvh;
   width: 100vw;
 }
 
-.app-shell__header {
+.wall__ready-header,
+.wall__ready-footer {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 0.75rem 1rem;
-  border-bottom: 1px solid var(--border);
-  font-size: 0.85rem;
-  letter-spacing: 0.04em;
+  justify-content: space-between;
+  padding: 0.9rem 1.5rem;
+  font-family: var(--pw-font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.15em;
   text-transform: uppercase;
+  color: var(--pw-fg-quiet);
 }
 
-.app-shell__brand {
-  font-weight: 600;
+.wall__ready-header {
+  border-bottom: 1px solid var(--pw-rule);
 }
 
-.app-shell__phase {
-  color: var(--fg-muted);
+.wall__ready-footer {
+  border-top: 1px solid var(--pw-rule);
 }
 
-.app-shell__placeholder {
+.wall__ready-brand {
+  color: var(--pw-fg);
+  letter-spacing: 0.32em;
+}
+
+.wall__ready-counts code {
+  font-family: var(--pw-font-mono);
+  color: var(--pw-fg-muted);
+}
+
+.wall__ready-stage {
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  gap: 1.25rem;
+  padding: 1.5rem;
+  overflow: hidden;
+}
+
+.wall__ready-stage-note {
+  margin: 0;
+  max-width: 64ch;
+  color: var(--pw-fg-muted);
+  font-size: 0.85rem;
+}
+
+.wall__ready-strip {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-content: flex-start;
+}
+
+.wall__ready-cell {
+  flex: 0 0 auto;
+  height: 132px;
+  /* Visual-only proxy. The real tile draws derivative imagery; this
+     surface only proves backend metadata is reaching the shell. */
+  background: linear-gradient(
+    180deg,
+    rgba(236, 230, 220, 0.06),
+    rgba(236, 230, 220, 0.02)
+  );
+  border: 1px solid var(--pw-rule);
+  width: calc(132px * var(--ar, 1));
+}
+
+.wall__ready-cell[style*="aspect-ratio"] {
+  width: auto;
+}
+
+/* ------------------------------------------------------------------ */
+/* Dev-only debug overlay                                             */
+/* ------------------------------------------------------------------ */
+
+.debug-overlay {
+  position: fixed;
+  right: 12px;
+  bottom: 12px;
+  min-width: 240px;
+  max-width: 320px;
+  padding: 0.65rem 0.8rem 0.75rem;
+  background: rgba(20, 17, 15, 0.92);
+  border: 1px solid var(--pw-rule);
+  font-family: var(--pw-font-mono);
+  font-size: 11px;
+  color: var(--pw-fg-muted);
+  z-index: 9999;
+  pointer-events: auto;
+}
+
+.debug-overlay--collapsed {
+  min-width: auto;
+  padding: 0.4rem 0.55rem;
+}
+
+.debug-overlay__header {
+  display: flex;
   align-items: center;
-  text-align: center;
-  padding: 2rem;
-  gap: 0.75rem;
-  max-width: 56ch;
-  margin: 0 auto;
+  justify-content: space-between;
+  gap: 1rem;
+  color: var(--pw-fg);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  font-size: 10px;
 }
 
-.app-shell__placeholder h1 {
+.debug-overlay__toggle {
+  appearance: none;
+  background: transparent;
+  border: 1px solid var(--pw-rule);
+  color: var(--pw-fg-muted);
+  font: inherit;
+  font-size: 12px;
+  width: 22px;
+  height: 22px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
+.debug-overlay__toggle:hover,
+.debug-overlay__toggle:focus-visible {
+  color: var(--pw-fg);
+  border-color: var(--pw-fg-muted);
+  outline: none;
+}
+
+.debug-overlay__body {
+  margin: 0.55rem 0 0;
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.25rem 0.85rem;
+}
+
+.debug-overlay__body dt {
+  color: var(--pw-fg-quiet);
+  text-transform: lowercase;
+  letter-spacing: 0.05em;
+}
+
+.debug-overlay__body dd {
   margin: 0;
-  font-size: clamp(1.25rem, 2.5vw, 1.75rem);
-  font-weight: 600;
-}
-
-.app-shell__placeholder p {
-  margin: 0;
-  color: var(--fg-muted);
-  line-height: 1.5;
-}
-
-.app-shell__meta {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
-    "Liberation Mono", "Courier New", monospace;
-  font-size: 0.8rem;
-}
-
-.app-shell__health {
-  padding: 0.5rem 1rem;
-  border-top: 1px solid var(--border);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
-    "Liberation Mono", "Courier New", monospace;
-  font-size: 0.75rem;
-  color: var(--fg-muted);
-  text-align: center;
-}
-
-.app-shell__health--error {
-  color: var(--error);
+  word-break: break-all;
+  color: var(--pw-fg);
 }
