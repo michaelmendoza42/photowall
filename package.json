@@ -17,13 +17,16 @@
     "build:server": "tsc -p tsconfig.server.json",
     "start": "node dist/server/index.js",
     "typecheck": "tsc -b --pretty",
-    "test": "echo \"no unit tests yet — added in later mission tasks\" && exit 0"
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "fixtures:generate": "tsx scripts/generate-fixtures.ts"
   },
   "dependencies": {
     "@fastify/static": "^7.0.4",
     "fastify": "^4.28.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "sharp": "^0.33.5",
     "zod": "^3.23.8"
   },
   "devDependencies": {
@@ -34,6 +37,7 @@
     "concurrently": "^8.2.2",
     "tsx": "^4.16.2",
     "typescript": "^5.5.3",
-    "vite": "^5.3.3"
+    "vite": "^5.3.3",
+    "vitest": "^1.6.1"
   }
 }

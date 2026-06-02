@@ -1,38 +1,106 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "version": 1,
-  "description": "Fixture-library contract for photo-wall scanner and integration tests. The scanner work in a later phase will materialize the photos described here.",
+  "version": 2,
+  "description": "Fixture-library contract for photo-wall scanner and integration tests. Counts and facets in `expected` are asserted directly by automated tests; regenerate the images via `npx tsx scripts/generate-fixtures.ts`.",
   "libraries": {
     "library-smoke": {
       "path": "library-smoke",
-      "purpose": "Happy-path library used for default integration tests and the docker-compose mount fallback.",
+      "purpose": "Happy-path library used for default scanner tests and the docker-compose mount fallback.",
       "expected": {
-        "photos": [],
-        "folders": [],
-        "years": [],
-        "facets": {
-          "years": [],
-          "topLevelFolders": []
-        }
+        "photoCount": 5,
+        "warningCount": 0,
+        "yearFacets": [
+          { "year": 2023, "photoCount": 1 },
+          { "year": 2024, "photoCount": 4 }
+        ],
+        "topLevelFolders": [
+          { "path": "2023", "photoCount": 1, "directPhotoCount": 0 },
+          { "path": "2024", "photoCount": 4, "directPhotoCount": 0 }
+        ],
+        "photos": [
+          {
+            "relativePath": "2023/birthday-leo/img_020.jpg",
+            "width": 80,
+            "height": 120,
+            "year": 2023,
+            "yearSource": "top-level"
+          },
+          {
+            "relativePath": "2024/travel-iceland/img_010.jpg",
+            "width": 120,
+            "height": 80,
+            "year": 2024,
+            "yearSource": "top-level"
+          },
+          {
+            "relativePath": "2024/wedding-anna/img_001.jpg",
+            "width": 160,
+            "height": 90,
+            "year": 2024,
+            "yearSource": "top-level"
+          },
+          {
+            "relativePath": "2024/wedding-anna/img_002.jpg",
+            "width": 90,
+            "height": 160,
+            "year": 2024,
+            "yearSource": "top-level"
+          },
+          {
+            "relativePath": "2024/wedding-anna/img_003.jpg",
+            "width": 100,
+            "height": 100,
+            "year": 2024,
+            "yearSource": "top-level"
+          }
+        ],
+        "silentlySkipped": ["NOTES.txt"]
       },
       "notes": [
-        "Populated by phase2-task2 (scanner). Placeholder folder exists today so the bind mount works.",
-        "Shape will follow year/event nesting: e.g. 2024/wedding-anna/IMG_0001.jpg."
+        "Year+event layout: e.g. 2024/wedding-anna/IMG_0001.jpg.",
+        "NOTES.txt at the root is an unsupported extension and must be skipped without a warning."
       ]
     },
     "library-edge": {
       "path": "library-edge",
-      "purpose": "Edge-case library used by hardening tests.",
+      "purpose": "Edge-case library exercising year-derivation fallbacks, hidden-entry skipping, unsupported files, and corrupt images.",
       "expected": {
-        "photos": [],
-        "skipped": [],
-        "symlinks": [],
-        "corrupt": [],
-        "yearless": []
+        "photoCount": 3,
+        "warningCount": 1,
+        "yearFacets": [
+          { "year": 2021, "photoCount": 1 },
+          { "year": 2022, "photoCount": 1 }
+        ],
+        "photos": [
+          {
+            "relativePath": "2022/events/photo.jpg",
+            "year": 2022,
+            "yearSource": "top-level"
+          },
+          {
+            "relativePath": "nested/2021/deep/photo.jpg",
+            "year": 2021,
+            "yearSource": "rootward"
+          },
+          {
+            "relativePath": "no-year-folder/loose/photo.jpg",
+            "year": null,
+            "yearSource": "none"
+          }
+        ],
+        "silentlySkipped": [
+          ".hidden-folder/photo.jpg",
+          ".hidden-image.jpg",
+          "notes.txt"
+        ],
+        "expectedWarnings": [
+          { "kind": "metadata-failed", "path": "corrupt/broken.jpg" }
+        ]
       },
       "notes": [
-        "Will exercise symlink skipping, unsupported file types, corrupt images, missing year prefixes, and deeply nested paths.",
-        "Populated incrementally as scanner edge-case requirements come online."
+        "Top-level year, rootward-year fallback, and yearless cases are all represented.",
+        "Hidden files and hidden directories must be silently skipped (no warning).",
+        "Symlink-skipping behavior is exercised by an integration test that materializes a symlink in a tmpdir; cross-platform symlinks are not committed."
       ]
     }
   }

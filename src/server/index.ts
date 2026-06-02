@@ -1,7 +1,12 @@
 import Fastify from 'fastify';
 import { ConfigValidationError, loadConfig } from './config/env.js';
 import { registerHealthRoute } from './routes/health.js';
+import { registerLibraryRoutes } from './routes/library.js';
 import { registerClientStatic } from './services/static-client.js';
+import {
+  LibraryRootError,
+  LibraryService,
+} from './snapshots/library-service.js';
 import { SERVICE_VERSION } from './version.js';
 
 async function main(): Promise<void> {
@@ -41,6 +46,34 @@ async function main(): Promise<void> {
   );
 
   await registerHealthRoute(app, { startedAt });
+
+  const libraryService = new LibraryService({
+    libraryRoot: config.libraryRoot,
+    dataRoot: config.dataRoot,
+    logger: app.log,
+  });
+  try {
+    await libraryService.initialize();
+  } catch (error) {
+    if (error instanceof LibraryRootError) {
+      app.log.error(
+        { libraryRoot: error.path, err: error.message },
+        'startup failed: library root invalid',
+      );
+      process.exit(1);
+    }
+    throw error;
+  }
+  await registerLibraryRoutes(app, libraryService);
+
+  // Kick off the initial scan in the background. We do not block the
+  // listen() call so a warm-loaded snapshot can serve traffic immediately
+  // and a cold start still surfaces a working health endpoint while the
+  // scan progresses. Errors are already captured by the service state.
+  libraryService.rescan().catch((err) => {
+    app.log.error({ err }, 'background library scan failed');
+  });
+
   const staticResult = await registerClientStatic(app);
   app.log.info(
     {

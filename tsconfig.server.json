@@ -13,5 +13,6 @@
     "declarationMap": false,
     "tsBuildInfoFile": "dist/.tsbuildinfo-server"
   },
-  "include": ["src/server/**/*.ts", "src/shared/**/*.ts"]
+  "include": ["src/server/**/*.ts", "src/shared/**/*.ts"],
+  "exclude": ["src/**/*.test.ts", "src/**/__tests__/**"]
 }
