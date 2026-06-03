@@ -48,6 +48,7 @@ async function main(): Promise<void> {
       nodeEnv: config.nodeEnv,
       libraryRoot: config.libraryRoot,
       dataRoot: config.dataRoot,
+      scanTopLevelYearsOnly: config.scanTopLevelYearsOnly,
     },
     'photo-wall starting',
   );
@@ -57,6 +58,7 @@ async function main(): Promise<void> {
   const libraryService = new LibraryService({
     libraryRoot: config.libraryRoot,
     dataRoot: config.dataRoot,
+    scanTopLevelYearsOnly: config.scanTopLevelYearsOnly,
     logger: app.log,
   });
   try {
@@ -120,6 +122,7 @@ async function main(): Promise<void> {
       snapshotSchemaVersion: activeSnapshot?.schemaVersion ?? null,
       photoCount: activeSnapshot?.photoCount ?? 0,
       warningCount: activeSnapshot?.warnings.length ?? 0,
+      scanTopLevelYearsOnly: config.scanTopLevelYearsOnly,
     },
     'startup summary',
   );

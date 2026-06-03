@@ -9,6 +9,20 @@ const LogLevelSchema = z.enum([
   'trace',
 ]);
 
+const BooleanFromEnvSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .transform((value, ctx) => {
+    if (['1', 'true', 'yes', 'on'].includes(value)) return true;
+    if (['0', 'false', 'no', 'off'].includes(value)) return false;
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'expected boolean-like value (true/false, 1/0, yes/no, on/off)',
+    });
+    return z.NEVER;
+  });
+
 const EnvSchema = z.object({
   NODE_ENV: z
     .enum(['development', 'production', 'test'])
@@ -18,6 +32,7 @@ const EnvSchema = z.object({
   PHOTO_WALL_BIND_HOST: z.string().min(1).default('0.0.0.0'),
   PHOTO_WALL_PORT: z.coerce.number().int().min(1).max(65535).default(3001),
   PHOTO_WALL_LOG_LEVEL: LogLevelSchema.default('info'),
+  PHOTO_WALL_SCAN_TOP_LEVEL_YEARS_ONLY: BooleanFromEnvSchema.default('false'),
 });
 
 export type AppConfig = {
@@ -27,6 +42,7 @@ export type AppConfig = {
   bindHost: string;
   port: number;
   logLevel: z.infer<typeof LogLevelSchema>;
+  scanTopLevelYearsOnly: boolean;
 };
 
 export class ConfigValidationError extends Error {
@@ -53,5 +69,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     bindHost: data.PHOTO_WALL_BIND_HOST,
     port: data.PHOTO_WALL_PORT,
     logLevel: data.PHOTO_WALL_LOG_LEVEL,
+    scanTopLevelYearsOnly: data.PHOTO_WALL_SCAN_TOP_LEVEL_YEARS_ONLY,
   };
 }

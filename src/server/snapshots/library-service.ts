@@ -23,6 +23,7 @@ export interface LibraryServiceLogger {
 export interface LibraryServiceOptions {
   libraryRoot: string;
   dataRoot: string;
+  scanTopLevelYearsOnly?: boolean;
   logger?: LibraryServiceLogger;
 }
 
@@ -163,6 +164,7 @@ export class LibraryService {
     try {
       const scan = await scanLibrary(this.resolvedLibraryRoot, {
         logger: this.logger,
+        topLevelYearsOnly: this.options.scanTopLevelYearsOnly ?? false,
       });
       const snapshot = buildSnapshot(scan, randomUUID());
       await writeSnapshotAtomically(this.snapshotPaths.snapshotFile, snapshot);

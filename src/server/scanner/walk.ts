@@ -22,6 +22,12 @@ export interface ScanLogger {
 
 export interface ScanOptions {
   logger?: ScanLogger;
+  /**
+   * Dev-machine escape hatch: only recurse into top-level directories
+   * whose names parse as years (YYYY within the accepted year range).
+   * Root-level files and non-year top-level directories are skipped.
+   */
+  topLevelYearsOnly?: boolean;
 }
 
 /**
@@ -47,7 +53,7 @@ export async function scanLibrary(
   const warnings: ScanWarning[] = [];
   const photos: PhotoRecord[] = [];
 
-  await walk(rootRealPath, rootRealPath, photos, warnings, options.logger);
+  await walk(rootRealPath, rootRealPath, photos, warnings, options);
 
   photos.sort((a, b) => (a.relativePath < b.relativePath ? -1 : a.relativePath > b.relativePath ? 1 : 0));
 
@@ -71,7 +77,7 @@ async function walk(
   currentAbsDir: string,
   photos: PhotoRecord[],
   warnings: ScanWarning[],
-  logger: ScanLogger | undefined,
+  options: ScanOptions,
 ): Promise<void> {
   let entries;
   try {
@@ -90,7 +96,7 @@ async function walk(
 
   for (const entry of entries) {
     if (isHiddenName(entry.name)) {
-      logger?.debug?.({ entry: entry.name, dir: currentAbsDir }, 'skipping hidden entry');
+      options.logger?.debug?.({ entry: entry.name, dir: currentAbsDir }, 'skipping hidden entry');
       continue;
     }
 
@@ -105,6 +111,24 @@ async function walk(
       continue;
     }
 
+    const atRoot = currentAbsDir === rootRealPath;
+    if (options.topLevelYearsOnly && atRoot) {
+      if (entry.isFile()) {
+        options.logger?.debug?.(
+          { entry: entryRel },
+          'skipping root-level file in top-level-years-only mode',
+        );
+        continue;
+      }
+      if (entry.isDirectory() && !isAcceptedYearDirName(entry.name)) {
+        options.logger?.debug?.(
+          { entry: entryRel },
+          'skipping non-year top-level directory in top-level-years-only mode',
+        );
+        continue;
+      }
+    }
+
     if (entry.isSymbolicLink()) {
       warnings.push({
         kind: 'symlink-skipped',
@@ -114,7 +138,7 @@ async function walk(
     }
 
     if (entry.isDirectory()) {
-      await walk(rootRealPath, entryAbs, photos, warnings, logger);
+      await walk(rootRealPath, entryAbs, photos, warnings, options);
       continue;
     }
 
@@ -124,7 +148,7 @@ async function walk(
     }
 
     if (!isSupportedImageFilename(entry.name)) {
-      logger?.debug?.({ entry: entryRel }, 'skipping unsupported file');
+      options.logger?.debug?.({ entry: entryRel }, 'skipping unsupported file');
       continue;
     }
 
@@ -214,4 +238,10 @@ function buildYearFacets(photos: PhotoRecord[]): YearFacet[] {
   return [...counts.entries()]
     .map(([year, photoCount]) => ({ year, photoCount }))
     .sort((a, b) => a.year - b.year);
+}
+
+function isAcceptedYearDirName(name: string): boolean {
+  if (!/^\d{4}$/.test(name)) return false;
+  const year = Number.parseInt(name, 10);
+  return year >= 1900 && year <= 2099;
 }

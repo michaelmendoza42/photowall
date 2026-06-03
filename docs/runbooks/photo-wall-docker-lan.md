@@ -30,6 +30,10 @@ Use this runbook when you need to:
    - `PHOTO_WALL_HOST_DATA_PATH` — host path for writable app state
    - `PHOTO_WALL_PORT` — host/container port (default `3001`)
 
+   Optional dev-only key:
+
+   - `PHOTO_WALL_SCAN_TOP_LEVEL_YEARS_ONLY=true` — scan only top-level year folders like `2020/`, `2022/`, `2025/` and ignore loose root files plus non-year top-level folders such as `Lightroom/` or `Screenshots/`
+
 2. Confirm the library path is the **source** library and the data path is a **separate writable** directory.
 
    Expected runtime discipline:
@@ -153,4 +157,5 @@ Check the `startup summary` and `library scan completed` logs first:
 ## Changelog
 
 ### 2026-06-03
+- Added the optional dev-only `PHOTO_WALL_SCAN_TOP_LEVEL_YEARS_ONLY` escape hatch for noisy local libraries.
 - Added the operator runbook for Docker startup, LAN access, restart-driven rescans, and startup-diagnostics interpretation.

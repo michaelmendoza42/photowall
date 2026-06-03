@@ -79,6 +79,7 @@ Month filtering is out of MVP scope.
 - `startup failed: library root invalid` usually means `PHOTO_WALL_HOST_LIBRARY_PATH` points at a missing path, a file instead of a directory, or a mount the container cannot read.
 - `startup failed: data root invalid` usually means `PHOTO_WALL_HOST_DATA_PATH` points at a non-directory path, an unwritable location, or a path that overlaps the photo-library root instead of staying on a separate writable mount.
 - `startup summary` in the server logs reports the resolved library root, data root, cache dir, playlists dir, scan state, warm-load state, snapshot id, and discovered photo count.
+- Dev-only escape hatch: set `PHOTO_WALL_SCAN_TOP_LEVEL_YEARS_ONLY=true` to scan only top-level year folders and ignore loose root files plus non-year top-level folders.
 - A fresh scan is triggered on startup. Today, the operator-facing way to force a rescan is to restart the container after changing the library contents.
 
 ## Follow-up
@@ -90,6 +91,7 @@ Month filtering is out of MVP scope.
 ## Changelog
 
 ### 2026-06-03
+- Added the optional dev-only `PHOTO_WALL_SCAN_TOP_LEVEL_YEARS_ONLY` escape hatch for noisy local libraries.
 - Added operator-facing troubleshooting shortcuts for startup diagnostics, LAN access, and restart-driven rescans.
 - Linked the Docker/LAN operator runbook from the canonical docs list.
 

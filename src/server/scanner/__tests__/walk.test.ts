@@ -158,6 +158,65 @@ describe('scanLibrary — library-edge fixture', () => {
   });
 });
 
+describe('scanLibrary — top-level-years-only mode', () => {
+  let tmpRoot: string;
+
+  beforeAll(async () => {
+    tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'photo-wall-years-only-'));
+    await fs.mkdir(path.join(tmpRoot, '2024', 'trip'), { recursive: true });
+    await fs.mkdir(path.join(tmpRoot, 'Lightroom'), { recursive: true });
+
+    await sharp({
+      create: {
+        width: 24,
+        height: 24,
+        channels: 3,
+        background: { r: 10, g: 20, b: 30 },
+      },
+    })
+      .jpeg({ quality: 60 })
+      .toFile(path.join(tmpRoot, '2024', 'trip', 'inside-year.jpg'));
+
+    await sharp({
+      create: {
+        width: 24,
+        height: 24,
+        channels: 3,
+        background: { r: 40, g: 50, b: 60 },
+      },
+    })
+      .jpeg({ quality: 60 })
+      .toFile(path.join(tmpRoot, 'Lightroom', 'ignore-me.jpg'));
+
+    await sharp({
+      create: {
+        width: 24,
+        height: 24,
+        channels: 3,
+        background: { r: 70, g: 80, b: 90 },
+      },
+    })
+      .jpeg({ quality: 60 })
+      .toFile(path.join(tmpRoot, 'loose-root.jpg'));
+  });
+
+  afterAll(async () => {
+    await fs.rm(tmpRoot, { recursive: true, force: true });
+  });
+
+  it('only scans top-level year directories when enabled', async () => {
+    const result = await scanLibrary(await fs.realpath(tmpRoot), {
+      topLevelYearsOnly: true,
+    });
+
+    expect(result.photos.map((p) => p.relativePath)).toEqual([
+      '2024/trip/inside-year.jpg',
+    ]);
+    expect(result.folders.some((f) => f.path === 'Lightroom')).toBe(false);
+    expect(result.photos.some((p) => p.relativePath === 'loose-root.jpg')).toBe(false);
+  });
+});
+
 describe('scanLibrary — symlink and root-escape handling', () => {
   let tmpRoot: string;
   let outsideDir: string;
