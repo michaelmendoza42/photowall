@@ -129,14 +129,23 @@ body {
   position: relative;
   width: 100vw;
   height: 100dvh;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: hidden;
   background: var(--pw-bg);
+  /* Camera owns panning; suppress browser scroll/zoom/text gestures. */
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  overscroll-behavior: contain;
+  cursor: grab;
+}
+
+.wall-canvas[data-dragging="true"] {
+  cursor: grabbing;
 }
 
 .wall-canvas__world {
   position: relative;
-  margin: 0 auto;
+  will-change: transform;
 }
 
 .wall-canvas__row {

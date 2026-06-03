@@ -7,7 +7,7 @@ import type { CameraState } from '../../state/camera.js';
 import { summarizeFilters, type ActiveFilters } from '../../state/filters.js';
 import type { LayoutState } from '../../state/layout.js';
 import type { WallScreenState } from '../wall/wallScreenState.js';
-import type { WallStats } from '../wall/WallCanvas.js';
+import type { WallDragState, WallStats } from '../wall/WallCanvas.js';
 
 interface DebugOverlayProps {
   screen: WallScreenState;
@@ -18,6 +18,7 @@ interface DebugOverlayProps {
   facets: LibraryFacetsResponse | null;
   playlistCount: number | null;
   wallStats?: WallStats | null;
+  dragState?: WallDragState | null;
 }
 
 /**
@@ -41,6 +42,7 @@ export function DebugOverlay(props: DebugOverlayProps): JSX.Element | null {
     facets,
     playlistCount,
     wallStats,
+    dragState,
   } = props;
 
   const pageInfo =
@@ -130,6 +132,13 @@ export function DebugOverlay(props: DebugOverlayProps): JSX.Element | null {
           <dd data-testid="debug-wall-stats">
             {wallStats
               ? `mounted=${wallStats.mountedRows}/${wallStats.totalRows} · visible=[${wallStats.visibleStart},${wallStats.visibleEnd}) · scrollY=${Math.round(wallStats.scrollTop)} · packed=${wallStats.packedPhotoCount}`
+              : '—'}
+          </dd>
+
+          <dt>drag</dt>
+          <dd data-testid="debug-drag">
+            {dragState
+              ? `active=${String(dragState.active)} · threshold=${String(dragState.crossedThreshold)}`
               : '—'}
           </dd>
         </dl>

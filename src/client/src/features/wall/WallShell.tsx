@@ -23,7 +23,12 @@ import {
   SnapshotChangedState,
 } from './WallScreens.js';
 import { deriveWallScreenState } from './wallScreenState.js';
-import { WallCanvas, type WallStats } from './WallCanvas.js';
+import {
+  INITIAL_DRAG_STATE,
+  WallCanvas,
+  type WallDragState,
+  type WallStats,
+} from './WallCanvas.js';
 import {
   computeWorldWidth,
   WORLD_WIDTH_MAX,
@@ -44,6 +49,7 @@ export function WallShell(): JSX.Element {
   const [filters] = useState(EMPTY_FILTERS);
   const [camera, setCamera] = useState(INITIAL_CAMERA);
   const [wallStats, setWallStats] = useState<WallStats | null>(null);
+  const [dragState, setDragState] = useState<WallDragState>(INITIAL_DRAG_STATE);
 
   const statusQuery = useLibraryStatus();
   const facetsQuery = useLibraryFacets(
@@ -198,6 +204,9 @@ export function WallShell(): JSX.Element {
           isFetchingNextPage={photosQuery.isFetchingNextPage}
           onLoadMore={handleLoadMore}
           onStatsChange={setWallStats}
+          camera={camera}
+          onCameraChange={setCamera}
+          onDragStateChange={setDragState}
         />
       )}
 
@@ -211,6 +220,7 @@ export function WallShell(): JSX.Element {
           facets={facetsQuery.data ?? null}
           playlistCount={playlistsQuery.data?.playlists.length ?? null}
           wallStats={wallStats}
+          dragState={dragState}
         />
       )}
     </main>
