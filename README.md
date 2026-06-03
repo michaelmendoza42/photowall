@@ -1,5 +1,5 @@
 # photo-wall
-Last edited: 2026-06-02
+Last edited: 2026-06-03
 
 Minimal Docker-run web app for browsing a configured photo library on the home LAN as a large, gapless photo wall.
 
@@ -19,6 +19,7 @@ Docker (production-style single image):
 cp .env.example .env   # then edit PHOTO_WALL_HOST_LIBRARY_PATH and PHOTO_WALL_HOST_DATA_PATH
 docker compose up --build
 # health: curl http://localhost:3001/healthz
+# LAN access: http://<your-lan-ip>:3001
 ```
 
 The container expects:
@@ -59,6 +60,7 @@ Month filtering is out of MVP scope.
 
 - `docs/product/photo-wall-experience.md` — approved baseline product behavior
 - `docs/system/photo-library-source-and-runtime.md` — Docker runtime and library-discovery constraints
+- `docs/runbooks/photo-wall-docker-lan.md` — operator setup, startup diagnostics, and troubleshooting flow
 - `docs/glossary.md` — shared project language
 - `docs/standards/documentation-model.md` — authority and documentation rules
 - `AGENTS.md` — repo-wide agent instructions
@@ -72,6 +74,13 @@ Month filtering is out of MVP scope.
 - support 2D trackpad panning and mouse click-drag panning rather than a vertical scroll model
 - treat the MVP as trusted-LAN-only
 
+## Troubleshooting shortcuts
+
+- `startup failed: library root invalid` usually means `PHOTO_WALL_HOST_LIBRARY_PATH` points at a missing path, a file instead of a directory, or a mount the container cannot read.
+- `startup failed: data root invalid` usually means `PHOTO_WALL_HOST_DATA_PATH` points at a non-directory path, an unwritable location, or a path that overlaps the photo-library root instead of staying on a separate writable mount.
+- `startup summary` in the server logs reports the resolved library root, data root, cache dir, playlists dir, scan state, warm-load state, snapshot id, and discovered photo count.
+- A fresh scan is triggered on startup. Today, the operator-facing way to force a rescan is to restart the container after changing the library contents.
+
 ## Follow-up
 
 - choose the ingest, derivative-image, and rendering implementation that satisfies the Docker, LAN, and recursive-library assumptions
@@ -79,6 +88,10 @@ Month filtering is out of MVP scope.
 - refine saved-filter playlist authoring once the minimal menu UI is in place
 
 ## Changelog
+
+### 2026-06-03
+- Added operator-facing troubleshooting shortcuts for startup diagnostics, LAN access, and restart-driven rescans.
+- Linked the Docker/LAN operator runbook from the canonical docs list.
 
 ### 2026-06-02
 - Aligned the repo overview with the approved MVP contract: trusted-LAN-only runtime, year and folder filters only, server-side saved-filter playlists, two-axis trackpad and click-drag panning, slight hover enlarge, and a focused-photo modal with `X` close.

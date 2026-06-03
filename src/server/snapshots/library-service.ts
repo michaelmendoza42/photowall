@@ -1,9 +1,11 @@
+import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import type { ScanState } from '../../shared/api/library.js';
 import { scanLibrary } from '../scanner/walk.js';
 import { buildSnapshot, type PersistedSnapshot } from './schema.js';
 import {
+  DataRootError,
   ensureDataPaths,
   readSnapshotIfPresent,
   resolveSnapshotPaths,
@@ -78,6 +80,10 @@ export class LibraryService {
       this.options.libraryRoot,
     );
     this.snapshotPaths = await ensureDataPaths(this.options.dataRoot);
+    this.assertMountDiscipline(
+      this.resolvedLibraryRoot,
+      this.snapshotPaths.dataRoot,
+    );
 
     const prior = await readSnapshotIfPresent(this.snapshotPaths.snapshotFile);
     if (prior) {
@@ -87,7 +93,11 @@ export class LibraryService {
       this.logger?.info?.(
         {
           snapshotId: prior.snapshotId,
+          schemaVersion: prior.schemaVersion,
           photoCount: prior.photoCount,
+          warningCount: prior.warnings.length,
+          folderCount: prior.folders.length,
+          yearCount: prior.years.length,
           scannedAt: prior.scannedAt,
         },
         'warm-loaded prior snapshot',
@@ -163,8 +173,11 @@ export class LibraryService {
       this.logger?.info?.(
         {
           snapshotId: snapshot.snapshotId,
+          schemaVersion: snapshot.schemaVersion,
           photoCount: snapshot.photoCount,
           warningCount: snapshot.warnings.length,
+          folderCount: snapshot.folders.length,
+          yearCount: snapshot.years.length,
           durationMs: snapshot.scanDurationMs,
         },
         'library scan completed',
@@ -217,6 +230,30 @@ export class LibraryService {
     }
     return real;
   }
+
+  private assertMountDiscipline(
+    libraryRoot: string,
+    dataRoot: string,
+  ): void {
+    if (pathsOverlap(libraryRoot, dataRoot)) {
+      throw new DataRootError(
+        `data root must stay separate from the library root to preserve read-only source and writable app-state discipline: library=${libraryRoot} data=${dataRoot}`,
+        dataRoot,
+      );
+    }
+  }
+}
+
+function pathsOverlap(a: string, b: string): boolean {
+  return isWithin(a, b) || isWithin(b, a);
+}
+
+function isWithin(root: string, candidate: string): boolean {
+  const relative = path.relative(root, candidate);
+  return (
+    relative === '' ||
+    (!relative.startsWith('..') && !path.isAbsolute(relative))
+  );
 }
 
 function errMessage(err: unknown): string {

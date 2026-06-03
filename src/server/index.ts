@@ -1,3 +1,4 @@
+import { promises as fs } from 'node:fs';
 import Fastify from 'fastify';
 import { ConfigValidationError, loadConfig } from './config/env.js';
 import { registerHealthRoute } from './routes/health.js';
@@ -12,6 +13,7 @@ import {
   LibraryRootError,
   LibraryService,
 } from './snapshots/library-service.js';
+import { DataRootError } from './snapshots/storage.js';
 import { SERVICE_VERSION } from './version.js';
 
 async function main(): Promise<void> {
@@ -67,11 +69,18 @@ async function main(): Promise<void> {
       );
       process.exit(1);
     }
+    if (error instanceof DataRootError) {
+      app.log.error(
+        { dataRoot: error.path, err: error.message },
+        'startup failed: data root invalid',
+      );
+      process.exit(1);
+    }
     throw error;
   }
   await registerLibraryRoutes(app, libraryService);
 
-  const playlistService = new PlaylistService(config.dataRoot);
+  const playlistService = new PlaylistService(libraryService.getDataRoot());
   await playlistService.initialize();
   await registerPlaylistRoutes(app, playlistService);
   await registerPhotoRoutes(app, {
@@ -87,6 +96,33 @@ async function main(): Promise<void> {
     library: libraryService,
     derivatives: derivativeService,
   });
+
+  const libraryRootWritable = await isWritable(libraryService.getLibraryRoot());
+  if (config.nodeEnv === 'production' && libraryRootWritable) {
+    app.log.warn(
+      { libraryRoot: libraryService.getLibraryRoot() },
+      'library root is writable — expected a read-only mount for production/trusted-LAN runtime',
+    );
+  }
+
+  const startupState = libraryService.getStateView();
+  const activeSnapshot = libraryService.getActiveSnapshot();
+  app.log.info(
+    {
+      libraryRoot: libraryService.getLibraryRoot(),
+      dataRoot: libraryService.getDataRoot(),
+      cacheDir: libraryService.getCacheDir(),
+      playlistsDir: playlistService.getPaths().playlistsDir,
+      libraryRootWritable,
+      scanState: startupState.state,
+      warmLoaded: startupState.warmLoaded,
+      snapshotId: activeSnapshot?.snapshotId ?? null,
+      snapshotSchemaVersion: activeSnapshot?.schemaVersion ?? null,
+      photoCount: activeSnapshot?.photoCount ?? 0,
+      warningCount: activeSnapshot?.warnings.length ?? 0,
+    },
+    'startup summary',
+  );
 
   // Kick off the initial scan in the background. We do not block the
   // listen() call so a warm-loaded snapshot can serve traffic immediately
@@ -130,6 +166,15 @@ async function main(): Promise<void> {
   };
   process.once('SIGTERM', () => void shutdown('SIGTERM'));
   process.once('SIGINT', () => void shutdown('SIGINT'));
+}
+
+async function isWritable(target: string): Promise<boolean> {
+  try {
+    await fs.access(target, fs.constants.W_OK);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 main().catch((error) => {

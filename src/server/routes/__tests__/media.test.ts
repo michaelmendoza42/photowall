@@ -104,7 +104,7 @@ describe('/api/media route', () => {
     expect(res.statusCode).toBe(200);
 
     const cacheRoot = library.getCacheDir();
-    expect(cacheRoot.startsWith(dataRoot)).toBe(true);
+    expect(cacheRoot.startsWith(await fs.realpath(dataRoot))).toBe(true);
     const files = await collectFiles(cacheRoot);
     expect(files.some((f) => f.endsWith('.webp'))).toBe(true);
     await app.close();

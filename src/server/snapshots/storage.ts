@@ -9,6 +9,13 @@ import {
 export const SNAPSHOT_FILENAME = 'snapshot.json';
 export const CACHE_DIRNAME = 'cache';
 
+export class DataRootError extends Error {
+  constructor(message: string, public readonly path: string) {
+    super(message);
+    this.name = 'DataRootError';
+  }
+}
+
 export interface SnapshotPaths {
   dataRoot: string;
   snapshotFile: string;
@@ -25,23 +32,27 @@ export function resolveSnapshotPaths(dataRoot: string): SnapshotPaths {
 
 /**
  * Ensure the data root + derivative cache directory exist and are
- * writable. Idempotent. Returns the resolved snapshot paths.
+ * writable. Idempotent. Returns resolved real paths so operator-facing
+ * status routes and logs report the exact mounted location in use.
  *
  * Even though derivative generation lands in a later phase, we
  * establish the cache directory now so the path strategy is locked in.
  */
 export async function ensureDataPaths(dataRoot: string): Promise<SnapshotPaths> {
-  const paths = resolveSnapshotPaths(dataRoot);
-  await fs.mkdir(paths.dataRoot, { recursive: true });
-  await fs.mkdir(paths.cacheDir, { recursive: true });
+  const resolvedDataRoot = await ensureDirectory(dataRoot, 'data root');
+  await ensureReadableWritable(resolvedDataRoot, 'data root');
+  await probeWritable(resolvedDataRoot, 'data root');
 
-  // Probe writability with a short-lived sentinel file so misconfigured
-  // mounts surface a clear error at startup rather than mid-scan.
-  const probe = path.join(paths.dataRoot, '.write-probe');
-  await fs.writeFile(probe, '', { flag: 'w' });
-  await fs.unlink(probe);
+  const cacheDirInput = path.join(resolvedDataRoot, CACHE_DIRNAME);
+  const resolvedCacheDir = await ensureDirectory(cacheDirInput, 'cache directory');
+  await ensureReadableWritable(resolvedCacheDir, 'cache directory');
+  await probeWritable(resolvedCacheDir, 'cache directory');
 
-  return paths;
+  return {
+    dataRoot: resolvedDataRoot,
+    snapshotFile: path.join(resolvedDataRoot, SNAPSHOT_FILENAME),
+    cacheDir: resolvedCacheDir,
+  };
 }
 
 export async function readSnapshotIfPresent(
@@ -87,12 +98,78 @@ export async function writeSnapshotAtomically(
   }
 }
 
+async function ensureDirectory(input: string, label: string): Promise<string> {
+  try {
+    await fs.mkdir(input, { recursive: true });
+  } catch (err) {
+    throw new DataRootError(
+      `${label} could not be created: ${input} (${errMessage(err)})`,
+      input,
+    );
+  }
+
+  let real: string;
+  try {
+    real = await fs.realpath(input);
+  } catch (err) {
+    throw new DataRootError(
+      `${label} not found or unreadable: ${input} (${errMessage(err)})`,
+      input,
+    );
+  }
+
+  let stat;
+  try {
+    stat = await fs.stat(real);
+  } catch (err) {
+    throw new DataRootError(
+      `${label} could not be stat'd: ${real} (${errMessage(err)})`,
+      real,
+    );
+  }
+
+  if (!stat.isDirectory()) {
+    throw new DataRootError(`${label} is not a directory: ${real}`, real);
+  }
+
+  return real;
+}
+
+async function ensureReadableWritable(real: string, label: string): Promise<void> {
+  try {
+    await fs.access(real, fs.constants.R_OK | fs.constants.W_OK);
+  } catch (err) {
+    throw new DataRootError(
+      `${label} not readable/writable: ${real} (${errMessage(err)})`,
+      real,
+    );
+  }
+}
+
+async function probeWritable(real: string, label: string): Promise<void> {
+  const probe = path.join(real, `.write-probe-${randomUUID()}`);
+  try {
+    await fs.writeFile(probe, '', { flag: 'w' });
+    await fs.unlink(probe);
+  } catch (err) {
+    await safeUnlink(probe);
+    throw new DataRootError(
+      `${label} failed the write probe: ${real} (${errMessage(err)})`,
+      real,
+    );
+  }
+}
+
 async function safeUnlink(p: string): Promise<void> {
   try {
     await fs.unlink(p);
   } catch {
     // ignore — best-effort cleanup
   }
+}
+
+function errMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
 }
 
 function isNodeNotFound(err: unknown): boolean {

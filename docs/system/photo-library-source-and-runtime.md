@@ -1,5 +1,5 @@
 # Photo Library Source and Runtime
-Last edited: 2026-06-02
+Last edited: 2026-06-03
 Status: Active
 Scope: Docker runtime, configurable photo-library root, trusted-LAN deployment model, and filesystem discovery assumptions
 Related files: `../../README.md`, `../product/photo-wall-experience.md`, `../glossary.md`, `README.md`
@@ -35,6 +35,8 @@ The MVP is explicitly a trusted-LAN-only app: it is intended to run on the opera
 - Scan and filtering logic should stay flexible enough to tolerate real-world variation around the likely year/event layout and ignore hidden, unsupported, symlinked, or otherwise unsafe entries.
 - The source-of-truth assumption is still a configured filesystem root; future system design can add indexing, snapshot warm-loads, or background rescans, but the configured root remains canonical.
 - The trusted-LAN assumption shapes which threats are in scope (e.g. unsafe path access, broken mounts, missing permissions) versus which are out of scope (e.g. hostile internet exposure, multi-user auth).
+- Startup diagnostics should make broken mounts, overlapping source/data paths, and unreadable or unwritable roots obvious in operator logs.
+- The current MVP scan model is restart-driven from the operator perspective: startup may warm-load a prior snapshot, then runs a fresh scan in the background.
 
 ## Related docs
 
@@ -44,6 +46,10 @@ The MVP is explicitly a trusted-LAN-only app: it is intended to run on the opera
 - `README.md`
 
 ## Changelog
+
+### 2026-06-03
+- Added startup-diagnostics and restart-driven rescan expectations to the runtime note.
+- Clarified that source and data roots must stay separate so the writable app-state path does not overlap the photo-library mount.
 
 ### 2026-06-02
 - Recorded the trusted-LAN-only deployment assumption.

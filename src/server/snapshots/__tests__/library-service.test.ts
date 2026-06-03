@@ -7,7 +7,7 @@ import {
   LibraryRootError,
   LibraryService,
 } from '../library-service.js';
-import { resolveSnapshotPaths } from '../storage.js';
+import { DataRootError, resolveSnapshotPaths } from '../storage.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, '..', '..', '..', '..');
@@ -86,6 +86,27 @@ describe('LibraryService', () => {
       dataRoot: path.join(dataRoot, 'sub'),
     });
     await expect(service.initialize()).rejects.toBeInstanceOf(LibraryRootError);
+  });
+
+  it('rejects a data root that is a file rather than a writable directory', async () => {
+    const filePath = path.join(dataRoot, 'not-a-dir.txt');
+    await fs.writeFile(filePath, 'hi');
+    const service = new LibraryService({
+      libraryRoot: smokeRoot,
+      dataRoot: filePath,
+    });
+    await expect(service.initialize()).rejects.toBeInstanceOf(DataRootError);
+  });
+
+  it('rejects a data root that overlaps the library root', async () => {
+    const libraryRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'photo-wall-lib-'));
+    const nestedDataRoot = path.join(libraryRoot, 'app-data');
+    const service = new LibraryService({
+      libraryRoot,
+      dataRoot: nestedDataRoot,
+    });
+    await expect(service.initialize()).rejects.toBeInstanceOf(DataRootError);
+    await fs.rm(libraryRoot, { recursive: true, force: true });
   });
 
   it('ignores a corrupt prior snapshot rather than crashing initialize', async () => {
