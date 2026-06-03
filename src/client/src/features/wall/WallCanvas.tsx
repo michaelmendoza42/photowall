@@ -8,7 +8,7 @@ import {
 } from 'react';
 import {
   DEFAULT_MAX_ROW_HEIGHT,
-  DEFAULT_MOSAIC_ROW_FACTORS,
+  DEFAULT_MOSAIC_COLUMN_FACTORS,
   DEFAULT_TARGET_ROW_HEIGHT,
 } from './worldWidth.js';
 import { computeVisibleRowRange } from './virtualization.js';
@@ -163,7 +163,7 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
         worldWidth,
         targetRowHeight: DEFAULT_TARGET_ROW_HEIGHT,
         maxRowHeight: DEFAULT_MAX_ROW_HEIGHT,
-        rowHeightFactors: DEFAULT_MOSAIC_ROW_FACTORS,
+        columnWidthFactors: DEFAULT_MOSAIC_COLUMN_FACTORS,
       },
       hasNextPage,
     );
@@ -428,7 +428,12 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
                 key={tile.photoId}
                 className="wall-canvas__tile"
                 data-photo-id={tile.photoId}
-                style={tileStyle(tile.x, tile.width, tile.height)}
+                style={tileStyle(
+                  tile.x,
+                  tile.y - row.offsetTop,
+                  tile.width,
+                  tile.height,
+                )}
               >
                 <img
                   className="wall-canvas__img"
@@ -450,16 +455,22 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
 }
 
 /**
- * Build a tile style object that includes the per-tile `--tile-x`
- * custom property. Custom properties are not part of the standard
+ * Build a tile style object that includes the per-tile translate
+ * custom properties. Custom properties are not part of the standard
  * `CSSProperties` type, so the cast goes through `unknown` to keep
  * strict mode happy while still landing a valid style object at
  * runtime.
  */
-function tileStyle(x: number, width: number, height: number): React.CSSProperties {
+function tileStyle(
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+): React.CSSProperties {
   return {
     width,
     height,
     '--tile-x': `${x}px`,
+    '--tile-y': `${y}px`,
   } as unknown as React.CSSProperties;
 }

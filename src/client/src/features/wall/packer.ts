@@ -1,37 +1,34 @@
-// Justified-row layout engine.
+// Column-first mosaic layout engine.
 //
-// Given a flat list of photos and a target row height, greedily pack
-// photos left-to-right at the target height until the accumulated row
-// width crosses the world width, then scale the row down so its tiles
-// fill the world width exactly. The result is a gapless wall whose row
-// geometry is deterministic for a given prefix of photos — meaning
-// rows already laid out never shift as additional pages append.
+// The wall now reads as a staggered vertical mosaic instead of stacked
+// horizontal justified rows. Photos are placed into a fixed set of
+// gapless columns whose widths vary by a deterministic factor list.
+// Each next photo goes into the current shortest column, producing
+// strong vertical seams and irregular horizontal break lines.
 //
-// This is a pure function: it owns no state, performs no IO, and the
-// same inputs always produce the same output. The wall component calls
-// it during render and memoises the result.
+// The layout is still deterministic for any loaded prefix of photos:
+// appending more photos only extends the shortest columns and never
+// reflows already-placed tiles. The exported `rows` are virtualization
+// bands, not visual rows — they bucket tiles by starting Y so the wall
+// can keep the mounted DOM bounded while preserving the column-first
+// composition.
 
 import type { PhotoQueryRecord } from '../../../../shared/api/photos.js';
 
 export interface PackerOptions {
   /** Bounded world width the wall lays out into, in CSS px. */
   worldWidth: number;
-  /** Preferred row height before justification scales it down. */
+  /** Preferred tile span used to derive the minimum tile height. */
   targetRowHeight: number;
-  /**
-   * Hard ceiling on row height. Caps the rare case where a single very
-   * wide photo would otherwise inflate a row past a comfortable height.
-   */
+  /** Hard ceiling on tile height and virtualization band height. */
   maxRowHeight: number;
   /**
-   * Per-row multipliers applied to `targetRowHeight`, cycled by row
-   * index. Drives the mosaic/brick rhythm: tall rows hold fewer, wider
-   * photos; short rows hold more, smaller photos. The cycle is
-   * deterministic in the row index, so already-laid-out rows keep
-   * identical geometry when more photos append. Each factor must be a
-   * positive finite number. Defaults to `[1]` (uniform rows).
+   * Per-column multipliers applied across the bounded world width.
+   * Higher factors create wider columns; lower factors create narrower
+   * ones. The sequence is deterministic, so already-laid-out tiles keep
+   * identical geometry when more photos append.
    */
-  rowHeightFactors?: readonly number[];
+  columnWidthFactors?: readonly number[];
 }
 
 export interface PackedTile {
@@ -48,23 +45,23 @@ export interface PackedTile {
 }
 
 export interface PackedRow {
-  /** Row index from the top of the wall (0-based). */
+  /** Virtualization band index from the top of the wall (0-based). */
   index: number;
-  /** Y offset of the row top relative to the world origin. */
+  /** Y offset of the band's top relative to the world origin. */
   offsetTop: number;
-  /** Row height in CSS px. */
+  /** Band height in CSS px. */
   height: number;
-  /** Effective target height used to pack this row, before justification. */
+  /** Nominal band height used to bucket tiles. */
   targetHeight: number;
-  /** Tiles in left-to-right render order. */
+  /** Tiles whose top edge starts inside this band. */
   tiles: PackedTile[];
 }
 
 export interface PackerResult {
   rows: PackedRow[];
-  /** Sum of row heights — drives the world's vertical extent. */
+  /** Height of the tallest column — drives the world's vertical extent. */
   contentHeight: number;
-  /** Photos consumed into a row. Trailing photos held back are not counted. */
+  /** All currently loaded photos are packed immediately. */
   packedPhotoCount: number;
 }
 
@@ -74,79 +71,74 @@ const EMPTY_RESULT: PackerResult = {
   packedPhotoCount: 0,
 };
 
+const UNIFORM_FACTORS: readonly number[] = [1, 1, 1, 1];
+const MIN_TILE_HEIGHT_FLOOR = 140;
+const MIN_TILE_HEIGHT_RATIO = 0.56;
+
 /**
- * Pack `photos` into justified rows.
- *
- * Rows that already filled `worldWidth` are emitted with stable
- * geometry. The trailing photos that have not yet accumulated enough
- * width to form a complete row are held back when `hasMore === true`,
- * because the next page will likely contribute additional photos that
- * change which tiles share the final row. When `hasMore === false`
- * the trailing photos are flushed as an orphan row at the target
- * height so the wall does not silently truncate the last few photos.
+ * Legacy name retained to minimize churn in the wall code. The current
+ * implementation produces a column-first mosaic and returns tiles
+ * bucketed into virtualization bands.
  */
 export function packJustifiedRows(
   photos: readonly PhotoQueryRecord[],
   options: PackerOptions,
-  hasMore: boolean,
+  _hasMore: boolean,
 ): PackerResult {
-  const { worldWidth, targetRowHeight, maxRowHeight, rowHeightFactors } =
+  const { worldWidth, targetRowHeight, maxRowHeight, columnWidthFactors } =
     options;
   if (worldWidth <= 0 || targetRowHeight <= 0 || photos.length === 0) {
     return EMPTY_RESULT;
   }
 
-  const factors = normalizeFactors(rowHeightFactors);
+  const factors = normalizeFactors(columnWidthFactors);
+  const columns = buildColumns(worldWidth, factors);
+  const minTileHeight = Math.min(
+    maxRowHeight,
+    Math.max(MIN_TILE_HEIGHT_FLOOR, targetRowHeight * MIN_TILE_HEIGHT_RATIO),
+  );
 
-  const rows: PackedRow[] = [];
-  let offsetTop = 0;
-  let cursor = 0;
+  const columnHeights = new Array<number>(columns.length).fill(0);
+  const tiles: PackedTile[] = [];
 
-  while (cursor < photos.length) {
-    const rowIndex = rows.length;
-    const effectiveTarget = effectiveTargetHeight(
-      targetRowHeight,
-      maxRowHeight,
-      factors,
-      rowIndex,
-    );
+  for (const photo of photos) {
+    const columnIndex = shortestColumnIndex(columnHeights);
+    const column = columns[columnIndex]!;
+    const rawHeight = column.width / aspect(photo);
+    const height = clamp(rawHeight, minTileHeight, maxRowHeight);
+    const y = columnHeights[columnIndex]!;
 
-    let sumAtTarget = 0;
-    let end = cursor;
-    while (end < photos.length && sumAtTarget < worldWidth) {
-      sumAtTarget += aspect(photos[end]!) * effectiveTarget;
-      end++;
-    }
-
-    const slice = photos.slice(cursor, end);
-    const sliceComplete = sumAtTarget >= worldWidth;
-
-    if (!sliceComplete && hasMore) {
-      break;
-    }
-
-    const row = buildRow({
-      photos: slice,
-      rowIndex,
-      offsetTop,
-      worldWidth,
-      targetRowHeight: effectiveTarget,
-      maxRowHeight,
-      justified: sliceComplete,
+    tiles.push({
+      photoId: photo.id,
+      x: column.x,
+      y,
+      width: column.width,
+      height,
+      sourceWidth: photo.width,
+      sourceHeight: photo.height,
     });
-    rows.push(row);
-    offsetTop += row.height;
-    cursor = end;
+
+    columnHeights[columnIndex] = y + height;
   }
+
+  const contentHeight = Math.max(...columnHeights, 0);
+  if (tiles.length === 0 || contentHeight <= 0) {
+    return EMPTY_RESULT;
+  }
+
+  const rows = buildBands(tiles, contentHeight, maxRowHeight);
 
   return {
     rows,
-    contentHeight: offsetTop,
-    packedPhotoCount: cursor,
+    contentHeight,
+    packedPhotoCount: tiles.length,
   };
 }
 
-const UNIFORM_FACTORS: readonly number[] = [1];
+interface ColumnGeometry {
+  x: number;
+  width: number;
+}
 
 function normalizeFactors(
   factors: readonly number[] | undefined,
@@ -156,92 +148,65 @@ function normalizeFactors(
   return cleaned.length === 0 ? UNIFORM_FACTORS : cleaned;
 }
 
-function effectiveTargetHeight(
-  base: number,
-  maxRowHeight: number,
+function buildColumns(
+  worldWidth: number,
   factors: readonly number[],
-  rowIndex: number,
-): number {
-  const factor = factors[rowIndex % factors.length] ?? 1;
-  // Cap at maxRowHeight so a tall factor cannot ask the packer to fit
-  // photos at a height the justification step would have to clamp back.
-  return Math.min(maxRowHeight, base * factor);
-}
-
-interface BuildRowInput {
-  photos: PhotoQueryRecord[];
-  rowIndex: number;
-  offsetTop: number;
-  worldWidth: number;
-  targetRowHeight: number;
-  maxRowHeight: number;
-  /** True when the row fills the world width; false for an orphan tail row. */
-  justified: boolean;
-}
-
-function buildRow(input: BuildRowInput): PackedRow {
-  const {
-    photos,
-    rowIndex,
-    offsetTop,
-    worldWidth,
-    targetRowHeight,
-    maxRowHeight,
-    justified,
-  } = input;
-
-  const sumAR = photos.reduce((s, p) => s + aspect(p), 0);
-
-  let rowHeight: number;
-  let rowWidth: number;
-  if (justified && sumAR > 0) {
-    rowHeight = Math.min(maxRowHeight, worldWidth / sumAR);
-    rowWidth = worldWidth;
-  } else {
-    rowHeight = Math.min(maxRowHeight, targetRowHeight);
-    rowWidth = Math.min(worldWidth, sumAR * rowHeight);
-  }
-
-  const tiles: PackedTile[] = [];
+): readonly ColumnGeometry[] {
+  const sum = factors.reduce((total, factor) => total + factor, 0);
   let x = 0;
-  for (let i = 0; i < photos.length; i++) {
-    const p = photos[i]!;
-    let tileWidth: number;
-    if (justified) {
-      // Pin the final tile to the right edge so float drift never
-      // leaves a sub-pixel seam at the world boundary.
-      tileWidth =
-        i === photos.length - 1
-          ? rowWidth - x
-          : (aspect(p) / sumAR) * worldWidth;
-    } else {
-      tileWidth = aspect(p) * rowHeight;
+  return factors.map((factor, index) => {
+    const width =
+      index === factors.length - 1
+        ? worldWidth - x
+        : (factor / sum) * worldWidth;
+    const column = { x, width };
+    x += width;
+    return column;
+  });
+}
+
+function shortestColumnIndex(columnHeights: readonly number[]): number {
+  let index = 0;
+  let min = columnHeights[0] ?? 0;
+  for (let i = 1; i < columnHeights.length; i++) {
+    const value = columnHeights[i] ?? 0;
+    if (value < min) {
+      min = value;
+      index = i;
     }
-    tiles.push({
-      photoId: p.id,
-      x,
-      y: offsetTop,
-      width: tileWidth,
-      height: rowHeight,
-      sourceWidth: p.width,
-      sourceHeight: p.height,
-    });
-    x += tileWidth;
+  }
+  return index;
+}
+
+function buildBands(
+  tiles: readonly PackedTile[],
+  contentHeight: number,
+  bandHeight: number,
+): PackedRow[] {
+  const bandCount = Math.max(1, Math.ceil(contentHeight / bandHeight));
+  const rows: PackedRow[] = Array.from({ length: bandCount }, (_, index) => ({
+    index,
+    offsetTop: index * bandHeight,
+    height:
+      index === bandCount - 1
+        ? contentHeight - index * bandHeight || bandHeight
+        : bandHeight,
+    targetHeight: bandHeight,
+    tiles: [],
+  }));
+
+  for (const tile of tiles) {
+    const bandIndex = Math.min(
+      rows.length - 1,
+      Math.max(0, Math.floor(tile.y / bandHeight)),
+    );
+    rows[bandIndex]!.tiles.push(tile);
   }
 
-  return {
-    index: rowIndex,
-    offsetTop,
-    height: rowHeight,
-    targetHeight: targetRowHeight,
-    tiles,
-  };
+  return rows;
 }
 
 function aspect(photo: PhotoQueryRecord): number {
-  // Snapshot records carry aspectRatio precomputed, but defend against
-  // a malformed record by falling back to width/height. A zero/NaN
-  // here would corrupt every downstream geometry calculation.
   if (Number.isFinite(photo.aspectRatio) && photo.aspectRatio > 0) {
     return photo.aspectRatio;
   }
@@ -249,4 +214,8 @@ function aspect(photo: PhotoQueryRecord): number {
     return photo.width / photo.height;
   }
   return 1;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
 }

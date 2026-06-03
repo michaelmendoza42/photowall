@@ -161,10 +161,10 @@ body {
   left: 0;
   overflow: hidden;
   background: var(--pw-bg);
-  /* The per-tile translate is supplied as a CSS variable (`--tile-x`)
-     from the React layer so the hover rule can compose a `scale(...)`
-     on top without overwriting the layout position. */
-  transform: translate3d(var(--tile-x, 0px), 0, 0);
+  /* The per-tile translate is supplied as CSS variables from the React
+     layer so the hover rule can compose a `scale(...)` on top without
+     overwriting the layout position. */
+  transform: translate3d(var(--tile-x, 0px), var(--tile-y, 0px), 0);
   will-change: transform;
   cursor: pointer;
 }
@@ -182,7 +182,8 @@ body {
   .wall:not([data-modal-open="true"])
     .wall-canvas:not([data-dragging="true"])
     .wall-canvas__tile:hover {
-    transform: translate3d(var(--tile-x, 0px), 0, 0) scale(1.03);
+    transform: translate3d(var(--tile-x, 0px), var(--tile-y, 0px), 0)
+      scale(1.03);
     z-index: 1;
   }
 }

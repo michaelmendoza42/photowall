@@ -19,6 +19,7 @@ The MVP is a trusted-LAN, Docker-run app with no auth boundary and no internet-f
 - The product should discover photos from that root and its subfolders recursively rather than requiring one folder to be configured per event.
 - Photos should be shown large rather than as tiny thumbnail grids.
 - The wall should fit photos together tightly with no intentional gaps between tiles.
+- The wall should read as a column-first mosaic with vertical seams and staggered horizontal breaks rather than as obvious full-width horizontal striping.
 - The wall should support true two-axis panning driven by trackpad wheel deltas, allowing simultaneous horizontal and vertical camera movement.
 - The wall must also support mouse click-drag panning as a fallback for users without a trackpad, with click activation suppressed after the drag threshold is crossed.
 - Additional photos should load dynamically as the user keeps panning the wall, so the experience does not require the entire library to load up front.
@@ -62,6 +63,10 @@ The MVP is a trusted-LAN, Docker-run app with no auth boundary and no internet-f
 - `../standards/testing.md`
 
 ## Changelog
+
+### 2026-06-03
+- Refined the wall composition to read as a vertical, column-first mosaic instead of a horizontal brick field.
+- Made the bounded world deliberately wider than the viewport on normal screens so 2D panning has real horizontal travel as well as vertical travel.
 
 ### 2026-06-02
 - Replaced the diagonal-scroll motion model with true two-axis trackpad panning and mouse click-drag panning per the approved MVP contract.
