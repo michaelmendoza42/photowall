@@ -1,20 +1,31 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useLibraryFacets, useLibraryStatus } from '../../hooks/useLibrary.js';
 import {
   flattenPhotoPages,
   useInfinitePhotos,
 } from '../../hooks/useInfinitePhotos.js';
-import { usePlaylists } from '../../hooks/usePlaylists.js';
-import { EMPTY_FILTERS, toQueryFilters } from '../../state/filters.js';
+import {
+  useCreatePlaylist,
+  useDeletePlaylist,
+  usePlaylists,
+  useUpdatePlaylist,
+} from '../../hooks/usePlaylists.js';
+import {
+  EMPTY_FILTERS,
+  toQueryFilters,
+  type ActiveFilters,
+} from '../../state/filters.js';
 import {
   INITIAL_CAMERA,
+  panTo,
   withViewport,
   withWorldBounds,
 } from '../../state/camera.js';
 import { INITIAL_LAYOUT } from '../../state/layout.js';
 import { DebugOverlay } from '../debug/DebugOverlay.js';
 import { FocusedPhotoModal } from '../modal/FocusedPhotoModal.js';
+import { ControlsPanel } from '../controls/ControlsPanel.js';
 import {
   INITIAL_FOCUSED_PHOTO_STATE,
   closeFocusedPhoto,
@@ -55,7 +66,9 @@ function parseDevPageSize(): number | undefined {
 }
 
 export function WallShell(): JSX.Element {
-  const [filters] = useState(EMPTY_FILTERS);
+  const [filters, setFilters] = useState<ActiveFilters>(EMPTY_FILTERS);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [controlsError, setControlsError] = useState<string | null>(null);
   const [camera, setCamera] = useState(INITIAL_CAMERA);
   const [wallStats, setWallStats] = useState<WallStats | null>(null);
   const [dragState, setDragState] = useState<WallDragState>(INITIAL_DRAG_STATE);
@@ -74,6 +87,9 @@ export function WallShell(): JSX.Element {
     statusQuery.data?.scanState === 'ready',
   );
   const playlistsQuery = usePlaylists();
+  const createPlaylist = useCreatePlaylist();
+  const updatePlaylist = useUpdatePlaylist();
+  const deletePlaylist = useDeletePlaylist();
   const queryFilters = useMemo(() => toQueryFilters(filters), [filters]);
 
   const devPageSize = parseDevPageSize();
@@ -133,6 +149,24 @@ export function WallShell(): JSX.Element {
     // `photosQuery.refetch` identity is stable across renders for the
     // same query; including it in deps is safe.
   }, [hasSnapshotChanged, queryClient, photosQuery]);
+
+  // Filter / playlist reset: when the active filters change, snap the
+  // camera back to the origin so the operator sees the new result set
+  // from its starting frame. TanStack already owns photo-page state
+  // (the queryKey changes when filters change), so a fresh wall builds
+  // automatically — we just need to make sure the camera does not stay
+  // parked at a y-offset that belonged to the previous result set.
+  const lastFiltersKey = useRef<string | null>(null);
+  useEffect(() => {
+    const key = JSON.stringify(filters);
+    if (lastFiltersKey.current === null) {
+      lastFiltersKey.current = key;
+      return;
+    }
+    if (lastFiltersKey.current === key) return;
+    lastFiltersKey.current = key;
+    setCamera((prev) => panTo(prev, { x: 0, y: 0 }));
+  }, [filters]);
 
   const successPages = useMemo(
     () => flattenPhotoPages(pages),
@@ -198,12 +232,94 @@ export function WallShell(): JSX.Element {
     };
   }, [photos, wallStats]);
 
+  const handleFiltersChange = useCallback((next: ActiveFilters) => {
+    setControlsError(null);
+    setFilters(next);
+  }, []);
+
+  const handleCreatePlaylist = useCallback(
+    (name: string) => {
+      setControlsError(null);
+      createPlaylist.mutate(
+        {
+          name,
+          filters: {
+            years: filters.years,
+            folders: filters.folders,
+          },
+        },
+        {
+          onSuccess: (record) => {
+            // Adopt the new playlist as the current selection so the
+            // operator immediately sees their save as "active".
+            setFilters((prev) => ({ ...prev, playlistId: record.id }));
+          },
+          onError: (err) => {
+            setControlsError(`Could not save playlist: ${err.message}`);
+          },
+        },
+      );
+    },
+    [createPlaylist, filters.years, filters.folders],
+  );
+
+  const handleUpdatePlaylist = useCallback(
+    (id: string, patch: { name?: string }) => {
+      setControlsError(null);
+      // A `patch` with only a name is a rename. An empty patch is the
+      // shape used by "Update with current filters" — translate it into
+      // a filters update at this layer so the ControlsPanel does not
+      // need to know the live filter state in two different places.
+      const isRename = patch.name !== undefined;
+      const payload = isRename
+        ? { name: patch.name as string }
+        : {
+            filters: {
+              years: filters.years,
+              folders: filters.folders,
+            },
+          };
+      updatePlaylist.mutate(
+        { id, patch: payload },
+        {
+          onError: (err) => {
+            setControlsError(`Could not update playlist: ${err.message}`);
+          },
+        },
+      );
+    },
+    [updatePlaylist, filters.years, filters.folders],
+  );
+
+  const handleDeletePlaylist = useCallback(
+    (id: string) => {
+      setControlsError(null);
+      deletePlaylist.mutate(id, {
+        onSuccess: () => {
+          // Drop the playlist out of the active selection if it was
+          // selected. Inline year/folder filters survive so the wall
+          // does not blank unexpectedly.
+          setFilters((prev) =>
+            prev.playlistId === id ? { ...prev, playlistId: null } : prev,
+          );
+        },
+        onError: (err) => {
+          setControlsError(`Could not delete playlist: ${err.message}`);
+        },
+      });
+    },
+    [deletePlaylist],
+  );
+
+  const playlists = playlistsQuery.data?.playlists ?? [];
+
   return (
     <main
       className="wall"
       data-testid="wall-shell"
       data-screen={screen.kind}
       data-modal-open={focusedPhoto.photo ? 'true' : 'false'}
+      data-controls-open={menuOpen ? 'true' : 'false'}
     >
       {screen.kind === 'loading' && <LoadingState />}
       {screen.kind === 'config-error' && (
@@ -233,6 +349,22 @@ export function WallShell(): JSX.Element {
           onPhotoOpen={handlePhotoOpen}
         />
       )}
+
+      <ControlsPanel
+        open={menuOpen}
+        onToggleOpen={() => setMenuOpen((v) => !v)}
+        filters={filters}
+        onFiltersChange={handleFiltersChange}
+        facets={facetsQuery.data ?? null}
+        playlists={playlists}
+        onCreatePlaylist={handleCreatePlaylist}
+        onUpdatePlaylist={handleUpdatePlaylist}
+        onDeletePlaylist={handleDeletePlaylist}
+        createPending={createPlaylist.isPending}
+        updatePending={updatePlaylist.isPending}
+        deletePending={deletePlaylist.isPending}
+        errorMessage={controlsError}
+      />
 
       {focusedPhoto.photo && (
         <FocusedPhotoModal

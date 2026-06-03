@@ -255,6 +255,322 @@ body {
 }
 
 /* ------------------------------------------------------------------ */
+/* Minimal controls (menu button + filter/playlist panel)             */
+/* ------------------------------------------------------------------ */
+
+.controls {
+  position: fixed;
+  top: clamp(0.85rem, 1.4vw, 1.2rem);
+  left: clamp(0.85rem, 1.4vw, 1.2rem);
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.75rem;
+  pointer-events: none;
+}
+
+.controls__trigger {
+  pointer-events: auto;
+  appearance: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  background: rgba(20, 17, 15, 0.55);
+  color: var(--pw-fg);
+  border: 1px solid var(--pw-rule);
+  padding: 0;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  font-size: 16px;
+  transition: background 120ms ease-out, border-color 120ms ease-out;
+}
+
+.controls__trigger:hover,
+.controls__trigger:focus-visible {
+  background: rgba(20, 17, 15, 0.85);
+  border-color: var(--pw-fg-muted);
+  outline: none;
+}
+
+.controls__trigger-glyph {
+  display: inline-block;
+  transform: translateY(-1px);
+}
+
+.controls[data-open="true"] .controls__trigger-glyph {
+  transform: none;
+  font-size: 18px;
+}
+
+.controls__panel {
+  pointer-events: auto;
+  width: min(320px, 86vw);
+  max-height: calc(100dvh - 5rem);
+  overflow-y: auto;
+  background: rgba(20, 17, 15, 0.94);
+  border: 1px solid var(--pw-rule);
+  padding: 0.9rem 1rem 1rem;
+  color: var(--pw-fg);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.controls__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.55rem;
+}
+
+.controls__title {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--pw-fg-muted);
+}
+
+.controls__error {
+  margin: 0 0 0.5rem;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--pw-error);
+  color: var(--pw-error);
+  font-size: 12px;
+}
+
+.controls__section {
+  border-top: 1px solid var(--pw-rule);
+  padding: 0.7rem 0;
+}
+
+.controls__section:first-of-type {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.controls__section-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.controls__section-title {
+  margin: 0 0 0.45rem;
+  font-size: 0.68rem;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--pw-fg-quiet);
+}
+
+.controls__hint {
+  margin: 0;
+  color: var(--pw-fg-quiet);
+  font-size: 12px;
+}
+
+.controls__warning {
+  margin: 0 0 0.5rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--pw-rule);
+  color: var(--pw-accent);
+  font-size: 12px;
+}
+
+.controls__chips {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.controls__chips--folders {
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.controls__chip {
+  appearance: none;
+  background: transparent;
+  border: 1px solid var(--pw-rule);
+  color: var(--pw-fg-muted);
+  padding: 0.25rem 0.55rem;
+  font: inherit;
+  font-size: 12px;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  cursor: pointer;
+  max-width: 100%;
+}
+
+.controls__chips--folders .controls__chip {
+  width: 100%;
+  justify-content: space-between;
+}
+
+.controls__chip:hover,
+.controls__chip:focus-visible {
+  color: var(--pw-fg);
+  border-color: var(--pw-fg-muted);
+  outline: none;
+}
+
+.controls__chip[data-selected="true"] {
+  color: var(--pw-bg);
+  background: var(--pw-fg);
+  border-color: var(--pw-fg);
+}
+
+.controls__chip-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.controls__chip-count {
+  color: var(--pw-fg-quiet);
+  font-family: var(--pw-font-mono);
+  font-size: 10px;
+}
+
+.controls__chip[data-selected="true"] .controls__chip-count {
+  color: var(--pw-bg);
+  opacity: 0.65;
+}
+
+.controls__playlists {
+  list-style: none;
+  margin: 0 0 0.55rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.controls__playlist {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0.45rem;
+  border: 1px solid var(--pw-rule);
+}
+
+.controls__playlist[data-selected="true"] {
+  border-color: var(--pw-fg-muted);
+  background: rgba(236, 230, 220, 0.04);
+}
+
+.controls__playlist-name {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: var(--pw-fg);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.controls__playlist-rename {
+  flex: 1 1 auto;
+  appearance: none;
+  background: rgba(20, 17, 15, 0.9);
+  border: 1px solid var(--pw-rule);
+  color: var(--pw-fg);
+  font: inherit;
+  font-size: 13px;
+  padding: 0.25rem 0.4rem;
+}
+
+.controls__create {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 0.3rem;
+}
+
+.controls__create-input {
+  flex: 1 1 auto;
+  appearance: none;
+  background: rgba(20, 17, 15, 0.85);
+  border: 1px solid var(--pw-rule);
+  color: var(--pw-fg);
+  font: inherit;
+  font-size: 13px;
+  padding: 0.3rem 0.5rem;
+}
+
+.controls__create-input::placeholder {
+  color: var(--pw-fg-quiet);
+}
+
+.controls__create-button {
+  appearance: none;
+  background: transparent;
+  color: var(--pw-fg);
+  border: 1px solid var(--pw-rule);
+  padding: 0.3rem 0.7rem;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.controls__create-button:disabled,
+.controls__create-button[aria-disabled="true"] {
+  color: var(--pw-fg-quiet);
+  cursor: not-allowed;
+  border-color: var(--pw-rule);
+}
+
+.controls__link {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  font-size: 12px;
+  color: var(--pw-fg-muted);
+  cursor: pointer;
+  text-decoration: none;
+  letter-spacing: 0.04em;
+}
+
+.controls__link:hover,
+.controls__link:focus-visible {
+  color: var(--pw-fg);
+  outline: none;
+}
+
+.controls__link--quiet {
+  color: var(--pw-fg-quiet);
+}
+
+.controls__link--danger {
+  color: var(--pw-error);
+}
+
+.controls__link:disabled {
+  color: var(--pw-fg-quiet);
+  cursor: not-allowed;
+}
+
+/* ------------------------------------------------------------------ */
 /* Dev-only debug overlay                                             */
 /* ------------------------------------------------------------------ */
 

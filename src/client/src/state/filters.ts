@@ -47,3 +47,71 @@ export function summarizeFilters(active: ActiveFilters): string {
   }
   return parts.length === 0 ? 'none' : parts.join(' · ');
 }
+
+/**
+ * Add or remove a year from the active filter set. Returns the same
+ * object identity when the set is unchanged so downstream `useMemo`
+ * deps stay stable.
+ */
+export function toggleYear(
+  active: ActiveFilters,
+  year: number,
+): ActiveFilters {
+  const has = active.years.includes(year);
+  const nextYears = has
+    ? active.years.filter((y) => y !== year)
+    : [...active.years, year].sort((a, b) => a - b);
+  return { ...active, years: nextYears };
+}
+
+/**
+ * Add or remove a folder path from the active filter set. Folder paths
+ * are forward-slash, root-relative, and match the persisted facet shape.
+ */
+export function toggleFolder(
+  active: ActiveFilters,
+  folder: string,
+): ActiveFilters {
+  const has = active.folders.includes(folder);
+  const nextFolders = has
+    ? active.folders.filter((f) => f !== folder)
+    : [...active.folders, folder].sort();
+  return { ...active, folders: nextFolders };
+}
+
+export function clearFilters(active: ActiveFilters): ActiveFilters {
+  if (!hasAnyFilter(active)) return active;
+  return EMPTY_FILTERS;
+}
+
+/**
+ * Apply a saved playlist's filter set as the active filters and remember
+ * which playlist they came from. The saved filters fully replace the
+ * current inline filters so the wall reads exactly like the saved
+ * preset.
+ */
+export function applyPlaylistFilters(
+  playlistId: string,
+  filters: { years: number[]; folders: string[] },
+): ActiveFilters {
+  return {
+    years: [...filters.years].sort((a, b) => a - b),
+    folders: [...filters.folders].sort(),
+    playlistId,
+  };
+}
+
+/**
+ * Compare a saved playlist's folder list against the current backend
+ * folder facets. Any saved folder not present in `availableFolders` is
+ * "stale" — the source library has changed since the playlist was saved
+ * and that folder will no longer match any photos.
+ */
+export function findStaleFolders(
+  saved: readonly string[],
+  availableFolders: readonly string[],
+): string[] {
+  if (saved.length === 0) return [];
+  const set = new Set(availableFolders);
+  return saved.filter((f) => !set.has(f));
+}
