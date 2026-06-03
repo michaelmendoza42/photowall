@@ -7,7 +7,7 @@ function row(
   offsetTop: number,
   height: number,
 ): PackedRow {
-  return { index, offsetTop, height, tiles: [] };
+  return { index, offsetTop, height, targetHeight: height, tiles: [] };
 }
 
 const ROWS: PackedRow[] = Array.from({ length: 20 }, (_, i) =>

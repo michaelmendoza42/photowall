@@ -23,6 +23,15 @@ export interface PackerOptions {
    * wide photo would otherwise inflate a row past a comfortable height.
    */
   maxRowHeight: number;
+  /**
+   * Per-row multipliers applied to `targetRowHeight`, cycled by row
+   * index. Drives the mosaic/brick rhythm: tall rows hold fewer, wider
+   * photos; short rows hold more, smaller photos. The cycle is
+   * deterministic in the row index, so already-laid-out rows keep
+   * identical geometry when more photos append. Each factor must be a
+   * positive finite number. Defaults to `[1]` (uniform rows).
+   */
+  rowHeightFactors?: readonly number[];
 }
 
 export interface PackedTile {
@@ -45,6 +54,8 @@ export interface PackedRow {
   offsetTop: number;
   /** Row height in CSS px. */
   height: number;
+  /** Effective target height used to pack this row, before justification. */
+  targetHeight: number;
   /** Tiles in left-to-right render order. */
   tiles: PackedTile[];
 }
@@ -79,20 +90,31 @@ export function packJustifiedRows(
   options: PackerOptions,
   hasMore: boolean,
 ): PackerResult {
-  const { worldWidth, targetRowHeight, maxRowHeight } = options;
+  const { worldWidth, targetRowHeight, maxRowHeight, rowHeightFactors } =
+    options;
   if (worldWidth <= 0 || targetRowHeight <= 0 || photos.length === 0) {
     return EMPTY_RESULT;
   }
+
+  const factors = normalizeFactors(rowHeightFactors);
 
   const rows: PackedRow[] = [];
   let offsetTop = 0;
   let cursor = 0;
 
   while (cursor < photos.length) {
+    const rowIndex = rows.length;
+    const effectiveTarget = effectiveTargetHeight(
+      targetRowHeight,
+      maxRowHeight,
+      factors,
+      rowIndex,
+    );
+
     let sumAtTarget = 0;
     let end = cursor;
     while (end < photos.length && sumAtTarget < worldWidth) {
-      sumAtTarget += aspect(photos[end]!) * targetRowHeight;
+      sumAtTarget += aspect(photos[end]!) * effectiveTarget;
       end++;
     }
 
@@ -105,10 +127,10 @@ export function packJustifiedRows(
 
     const row = buildRow({
       photos: slice,
-      rowIndex: rows.length,
+      rowIndex,
       offsetTop,
       worldWidth,
-      targetRowHeight,
+      targetRowHeight: effectiveTarget,
       maxRowHeight,
       justified: sliceComplete,
     });
@@ -122,6 +144,28 @@ export function packJustifiedRows(
     contentHeight: offsetTop,
     packedPhotoCount: cursor,
   };
+}
+
+const UNIFORM_FACTORS: readonly number[] = [1];
+
+function normalizeFactors(
+  factors: readonly number[] | undefined,
+): readonly number[] {
+  if (!factors || factors.length === 0) return UNIFORM_FACTORS;
+  const cleaned = factors.filter((f) => Number.isFinite(f) && f > 0);
+  return cleaned.length === 0 ? UNIFORM_FACTORS : cleaned;
+}
+
+function effectiveTargetHeight(
+  base: number,
+  maxRowHeight: number,
+  factors: readonly number[],
+  rowIndex: number,
+): number {
+  const factor = factors[rowIndex % factors.length] ?? 1;
+  // Cap at maxRowHeight so a tall factor cannot ask the packer to fit
+  // photos at a height the justification step would have to clamp back.
+  return Math.min(maxRowHeight, base * factor);
 }
 
 interface BuildRowInput {
@@ -189,6 +233,7 @@ function buildRow(input: BuildRowInput): PackedRow {
     index: rowIndex,
     offsetTop,
     height: rowHeight,
+    targetHeight: targetRowHeight,
     tiles,
   };
 }

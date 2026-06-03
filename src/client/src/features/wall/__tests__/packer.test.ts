@@ -157,4 +157,134 @@ describe('packJustifiedRows', () => {
     // ar fallback is 200/100 = 2.
     expect(result.rows[0]!.tiles[0]!.width).toBeCloseTo(2 * 300, 6);
   });
+
+  it('records the per-row effective target height', () => {
+    const photos = Array.from({ length: 6 }, (_, i) =>
+      photo(`p${i}`, 150, 100),
+    );
+    const result = packJustifiedRows(photos, OPTS, false);
+    for (const row of result.rows) {
+      expect(row.targetHeight).toBeCloseTo(OPTS.targetRowHeight, 6);
+    }
+  });
+});
+
+describe('packJustifiedRows — rowHeightFactors (mosaic rhythm)', () => {
+  // Photos with the same aspect ratio so any variation in row height
+  // comes from the per-row factor, not the input geometry.
+  const SQUARE_PHOTOS = Array.from({ length: 60 }, (_, i) =>
+    photo(`p${i}`, 100, 100),
+  );
+
+  it('produces visibly varied row heights when factors differ', () => {
+    const factors = [1.0, 0.6, 1.4, 0.8] as const;
+    const result = packJustifiedRows(
+      SQUARE_PHOTOS,
+      { ...OPTS, rowHeightFactors: factors },
+      false,
+    );
+    expect(result.rows.length).toBeGreaterThan(4);
+
+    const heights = result.rows.slice(0, 4).map((r) => r.height);
+    // Factor pattern is tall/short/tall/short → row heights mirror it.
+    expect(heights[0]).toBeGreaterThan(heights[1]!);
+    expect(heights[2]).toBeGreaterThan(heights[3]!);
+
+    const min = Math.min(...heights);
+    const max = Math.max(...heights);
+    // Real variation, not noise from rounding.
+    expect(max / min).toBeGreaterThan(1.5);
+  });
+
+  it('keeps the gapless guarantee for every justified row under variation', () => {
+    const result = packJustifiedRows(
+      SQUARE_PHOTOS,
+      {
+        ...OPTS,
+        rowHeightFactors: [1.0, 0.7, 1.3, 0.85, 1.15],
+      },
+      false,
+    );
+    // All but possibly the trailing tail row should sum exactly to
+    // worldWidth (last tile pinned to the right edge).
+    for (let i = 0; i < result.rows.length - 1; i++) {
+      const row = result.rows[i]!;
+      const sum = row.tiles.reduce((s, t) => s + t.width, 0);
+      expect(sum).toBeCloseTo(OPTS.worldWidth, 6);
+    }
+  });
+
+  it('keeps already-laid-out rows stable when more photos append under variation', () => {
+    const factors = [1.0, 0.65, 1.35, 0.82, 1.2];
+    const initial = SQUARE_PHOTOS.slice(0, 30);
+    const more = SQUARE_PHOTOS;
+
+    const before = packJustifiedRows(
+      initial,
+      { ...OPTS, rowHeightFactors: factors },
+      true,
+    );
+    const after = packJustifiedRows(
+      more,
+      { ...OPTS, rowHeightFactors: factors },
+      true,
+    );
+
+    // All rows present in `before` (which are complete because hasMore
+    // held back any tail) must appear byte-for-byte in `after`.
+    expect(after.rows.length).toBeGreaterThanOrEqual(before.rows.length);
+    for (let i = 0; i < before.rows.length; i++) {
+      expect(after.rows[i]).toEqual(before.rows[i]);
+    }
+  });
+
+  it('cycles factors by row index — row N and row N+factors.length use the same target', () => {
+    const factors = [1.0, 0.7, 1.3];
+    const result = packJustifiedRows(
+      SQUARE_PHOTOS,
+      { ...OPTS, rowHeightFactors: factors },
+      false,
+    );
+    // Need at least two full cycles for the assertion to be meaningful.
+    expect(result.rows.length).toBeGreaterThanOrEqual(factors.length * 2);
+    for (let i = 0; i + factors.length < result.rows.length; i++) {
+      expect(result.rows[i]!.targetHeight).toBeCloseTo(
+        result.rows[i + factors.length]!.targetHeight,
+        6,
+      );
+    }
+  });
+
+  it('treats an empty or all-invalid factors array as uniform rows', () => {
+    const uniform = packJustifiedRows(SQUARE_PHOTOS, OPTS, false);
+    const empty = packJustifiedRows(
+      SQUARE_PHOTOS,
+      { ...OPTS, rowHeightFactors: [] },
+      false,
+    );
+    const invalid = packJustifiedRows(
+      SQUARE_PHOTOS,
+      { ...OPTS, rowHeightFactors: [0, Number.NaN, -1] },
+      false,
+    );
+    expect(empty.rows.map((r) => r.height)).toEqual(
+      uniform.rows.map((r) => r.height),
+    );
+    expect(invalid.rows.map((r) => r.height)).toEqual(
+      uniform.rows.map((r) => r.height),
+    );
+  });
+
+  it('caps the effective target at maxRowHeight when a factor would overshoot it', () => {
+    // factor 5 × target 300 = 1500, well above maxRowHeight=480.
+    const result = packJustifiedRows(
+      SQUARE_PHOTOS,
+      { ...OPTS, rowHeightFactors: [5, 1] },
+      false,
+    );
+    // Every other row uses the capped target.
+    for (let i = 0; i < result.rows.length; i += 2) {
+      expect(result.rows[i]!.targetHeight).toBeCloseTo(OPTS.maxRowHeight, 6);
+    }
+  });
 });

@@ -8,6 +8,7 @@ import {
 } from 'react';
 import {
   DEFAULT_MAX_ROW_HEIGHT,
+  DEFAULT_MOSAIC_ROW_FACTORS,
   DEFAULT_TARGET_ROW_HEIGHT,
 } from './worldWidth.js';
 import { computeVisibleRowRange } from './virtualization.js';
@@ -138,6 +139,7 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
         worldWidth,
         targetRowHeight: DEFAULT_TARGET_ROW_HEIGHT,
         maxRowHeight: DEFAULT_MAX_ROW_HEIGHT,
+        rowHeightFactors: DEFAULT_MOSAIC_ROW_FACTORS,
       },
       hasNextPage,
     );
@@ -358,6 +360,8 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
             key={row.index}
             className="wall-canvas__row"
             data-row-index={row.index}
+            data-row-height={Math.round(row.height)}
+            data-row-target={Math.round(row.targetHeight)}
             style={{
               transform: `translate3d(0, ${row.offsetTop}px, 0)`,
               height: row.height,
