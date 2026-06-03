@@ -65,6 +65,12 @@ export interface WallCanvasProps {
   camera: CameraState;
   onCameraChange: (next: CameraState) => void;
   onDragStateChange?: (state: WallDragState) => void;
+  /**
+   * Fired when a tile receives a non-drag click. Suppressed when the
+   * preceding pointer gesture crossed the drag threshold so a drag-pan
+   * does not also open the modal.
+   */
+  onPhotoOpen?: (photo: PhotoQueryRecord) => void;
   /** Override for unit tests; defaults to {@link DRAG_THRESHOLD_PX}. */
   dragThresholdPx?: number;
 }
@@ -90,11 +96,17 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
     camera,
     onCameraChange,
     onDragStateChange,
+    onPhotoOpen,
     dragThresholdPx = DRAG_THRESHOLD_PX,
   } = props;
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<ActiveDrag | null>(null);
+  // When the most-recent pointer gesture crossed the drag threshold,
+  // the synthetic `click` it produces must not be treated as a tile
+  // activation. Reset on every fresh pointerdown so a stuck `true` from
+  // a missing click event cannot suppress the next real click.
+  const suppressNextClickRef = useRef(false);
   // Mirror the prop into a ref so wheel/pointer handlers always read the
   // latest camera without forcing rebinds on every state tick.
   const cameraRef = useRef(camera);
@@ -111,6 +123,18 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
   useEffect(() => {
     dragStateChangeRef.current = onDragStateChange;
   }, [onDragStateChange]);
+
+  const photoOpenRef = useRef(onPhotoOpen);
+  useEffect(() => {
+    photoOpenRef.current = onPhotoOpen;
+  }, [onPhotoOpen]);
+
+  // O(1) photo lookup by id for the canvas-level click handler.
+  const photosById = useMemo(() => {
+    const m = new Map<string, PhotoQueryRecord>();
+    for (const p of photos) m.set(p.id, p);
+    return m;
+  }, [photos]);
 
   const [viewportHeight, setViewportHeight] = useState(0);
   // Mirror the live drag flag into React state so the `data-dragging`
@@ -239,6 +263,10 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
       if (event.button !== 0 && event.pointerType === 'mouse') return;
       if (dragRef.current) return;
 
+      // Fresh gesture — clear any stale click-suppression flag so the
+      // upcoming click (if no drag occurs) is treated as a tile open.
+      suppressNextClickRef.current = false;
+
       dragRef.current = {
         pointerId: event.pointerId,
         origin: { startX: event.clientX, startY: event.clientY },
@@ -311,6 +339,13 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
       } catch {
         /* ignore */
       }
+      // A gesture that crossed the drag threshold is a pan, not a tap.
+      // Latch the suppress flag so the synthetic click that follows
+      // pointerup does not open the modal. The next pointerdown will
+      // clear it.
+      if (drag.crossedThreshold) {
+        suppressNextClickRef.current = true;
+      }
       dragRef.current = null;
       setDragActive(false);
       dragStateChangeRef.current?.({
@@ -319,6 +354,25 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
       });
     },
     [],
+  );
+
+  const handleClick = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      // A drag-pan just ended — consume the synthetic click and reset.
+      if (suppressNextClickRef.current) {
+        suppressNextClickRef.current = false;
+        return;
+      }
+      const target = event.target as HTMLElement | null;
+      const tile = target?.closest<HTMLElement>('[data-photo-id]');
+      if (!tile) return;
+      const id = tile.dataset['photoId'];
+      if (!id) return;
+      const photo = photosById.get(id);
+      if (!photo) return;
+      photoOpenRef.current?.(photo);
+    },
+    [photosById],
   );
 
   const mountedRows = packed.rows.slice(visible.startIndex, visible.endIndex);
@@ -346,6 +400,7 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
       onPointerUp={endDrag}
       onPointerCancel={endDrag}
       onPointerLeave={endDrag}
+      onClick={handleClick}
     >
       <div
         className="wall-canvas__world"
@@ -372,11 +427,8 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
               <div
                 key={tile.photoId}
                 className="wall-canvas__tile"
-                style={{
-                  transform: `translate3d(${tile.x}px, 0, 0)`,
-                  width: tile.width,
-                  height: tile.height,
-                }}
+                data-photo-id={tile.photoId}
+                style={tileStyle(tile.x, tile.width, tile.height)}
               >
                 <img
                   className="wall-canvas__img"
@@ -395,4 +447,19 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
       </div>
     </div>
   );
+}
+
+/**
+ * Build a tile style object that includes the per-tile `--tile-x`
+ * custom property. Custom properties are not part of the standard
+ * `CSSProperties` type, so the cast goes through `unknown` to keep
+ * strict mode happy while still landing a valid style object at
+ * runtime.
+ */
+function tileStyle(x: number, width: number, height: number): React.CSSProperties {
+  return {
+    width,
+    height,
+    '--tile-x': `${x}px`,
+  } as unknown as React.CSSProperties;
 }

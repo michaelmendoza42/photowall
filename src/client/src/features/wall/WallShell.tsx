@@ -14,6 +14,12 @@ import {
 } from '../../state/camera.js';
 import { INITIAL_LAYOUT } from '../../state/layout.js';
 import { DebugOverlay } from '../debug/DebugOverlay.js';
+import { FocusedPhotoModal } from '../modal/FocusedPhotoModal.js';
+import {
+  INITIAL_FOCUSED_PHOTO_STATE,
+  closeFocusedPhoto,
+  openFocusedPhoto,
+} from '../../state/focusedPhoto.js';
 import {
   ConfigErrorState,
   EmptyLibraryState,
@@ -33,7 +39,10 @@ import {
   computeWorldWidth,
   WORLD_WIDTH_MAX,
 } from './worldWidth.js';
-import type { PhotosQueryResponse } from '../../../../shared/api/photos.js';
+import type {
+  PhotoQueryRecord,
+  PhotosQueryResponse,
+} from '../../../../shared/api/photos.js';
 
 const DEV_PAGE_SIZE_ENV = import.meta.env.VITE_PHOTOS_PAGE_SIZE as
   | string
@@ -50,6 +59,15 @@ export function WallShell(): JSX.Element {
   const [camera, setCamera] = useState(INITIAL_CAMERA);
   const [wallStats, setWallStats] = useState<WallStats | null>(null);
   const [dragState, setDragState] = useState<WallDragState>(INITIAL_DRAG_STATE);
+  const [focusedPhoto, setFocusedPhoto] = useState(INITIAL_FOCUSED_PHOTO_STATE);
+
+  const handlePhotoOpen = useCallback((photo: PhotoQueryRecord) => {
+    setFocusedPhoto((prev) => openFocusedPhoto(prev, photo));
+  }, []);
+
+  const handlePhotoClose = useCallback(() => {
+    setFocusedPhoto((prev) => closeFocusedPhoto(prev));
+  }, []);
 
   const statusQuery = useLibraryStatus();
   const facetsQuery = useLibraryFacets(
@@ -181,7 +199,12 @@ export function WallShell(): JSX.Element {
   }, [photos, wallStats]);
 
   return (
-    <main className="wall" data-testid="wall-shell" data-screen={screen.kind}>
+    <main
+      className="wall"
+      data-testid="wall-shell"
+      data-screen={screen.kind}
+      data-modal-open={focusedPhoto.photo ? 'true' : 'false'}
+    >
       {screen.kind === 'loading' && <LoadingState />}
       {screen.kind === 'config-error' && (
         <ConfigErrorState message={screen.message} status={screen.status} />
@@ -207,6 +230,14 @@ export function WallShell(): JSX.Element {
           camera={camera}
           onCameraChange={setCamera}
           onDragStateChange={setDragState}
+          onPhotoOpen={handlePhotoOpen}
+        />
+      )}
+
+      {focusedPhoto.photo && (
+        <FocusedPhotoModal
+          photo={focusedPhoto.photo}
+          onClose={handlePhotoClose}
         />
       )}
 

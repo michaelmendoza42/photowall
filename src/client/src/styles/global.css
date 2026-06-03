@@ -161,7 +161,30 @@ body {
   left: 0;
   overflow: hidden;
   background: var(--pw-bg);
+  /* The per-tile translate is supplied as a CSS variable (`--tile-x`)
+     from the React layer so the hover rule can compose a `scale(...)`
+     on top without overwriting the layout position. */
+  transform: translate3d(var(--tile-x, 0px), 0, 0);
   will-change: transform;
+  cursor: pointer;
+}
+
+/* Slight hover enlarge for fine-pointer devices only. Coarse pointers
+   (touch) skip this entirely so a tap does not trigger an awkward
+   sticky scale-up. The :not([data-dragging="true"]) guard suppresses
+   hover during pan so a passing pointer does not flash a scale change.
+   The wall's `data-modal-open` flag also suppresses hover so the
+   underneath wall reads as a quiet backdrop while the modal is up. */
+@media (hover: hover) and (pointer: fine) {
+  .wall-canvas__tile {
+    transition: transform 160ms ease-out;
+  }
+  .wall:not([data-modal-open="true"])
+    .wall-canvas:not([data-dragging="true"])
+    .wall-canvas__tile:hover {
+    transform: translate3d(var(--tile-x, 0px), 0, 0) scale(1.03);
+    z-index: 1;
+  }
 }
 
 .wall-canvas__img {
@@ -171,6 +194,64 @@ body {
   object-fit: cover;
   user-select: none;
   -webkit-user-drag: none;
+}
+
+/* ------------------------------------------------------------------ */
+/* Focused-photo modal                                                */
+/* ------------------------------------------------------------------ */
+
+.focused-photo {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(1rem, 3vw, 2.5rem);
+  background: rgba(20, 17, 15, 0.92);
+  /* Block wheel/pointer/scroll on the underlying wall while focused. */
+  touch-action: none;
+  overscroll-behavior: contain;
+  cursor: zoom-out;
+}
+
+.focused-photo__img {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  user-select: none;
+  -webkit-user-drag: none;
+  cursor: default;
+}
+
+.focused-photo__close {
+  position: absolute;
+  top: clamp(0.75rem, 2vw, 1.25rem);
+  right: clamp(0.75rem, 2vw, 1.25rem);
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(20, 17, 15, 0.6);
+  color: var(--pw-fg);
+  border: 1px solid var(--pw-rule);
+  border-radius: 999px;
+  font: inherit;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
+.focused-photo__close:hover,
+.focused-photo__close:focus-visible {
+  color: var(--pw-fg);
+  border-color: var(--pw-fg-muted);
+  outline: none;
 }
 
 /* ------------------------------------------------------------------ */
