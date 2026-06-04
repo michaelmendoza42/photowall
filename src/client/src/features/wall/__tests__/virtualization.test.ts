@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { PackedRow } from '../packer.js';
-import { computeVisibleRowRange } from '../virtualization.js';
+import {
+  computeVisibleRowRange,
+  computeWrappedAxisCopies,
+  computeWrappedVisibleRowSegments,
+} from '../virtualization.js';
 
 function row(
   index: number,
@@ -50,16 +54,13 @@ describe('computeVisibleRowRange', () => {
   });
 
   it('shifts the visible range as scrollTop advances', () => {
-    // viewport [500, 1300) → rows 2..6 (rows 2 starts at 400, ends at 600).
+    // viewport [500, 1300) → rows 2..6 are visible.
     const range = computeVisibleRowRange({
       rows: ROWS,
       scrollTop: 500,
       viewportHeight: 800,
       overscan: NO_OVERSCAN,
     });
-    // rows whose offsetTop+height > 500: row 2 starts at 400 ends at 600.
-    // rows whose offsetTop < 1300: row 6 starts at 1200.
-    // So [2, 7) inclusive of row 6.
     expect(range).toEqual({ startIndex: 2, endIndex: 7 });
   });
 
@@ -70,12 +71,6 @@ describe('computeVisibleRowRange', () => {
       viewportHeight: 800,
       overscan: { rowsAbove: 2, rowsBelow: 3 },
     });
-    // strict visible: rows whose offsetTop+height>1000 and offsetTop<1800.
-    // row 5 starts 1000 (excluded by `<=`), row 5 ends 1200 (>1000) → included.
-    // Actually `offsetTop + height <= top` is the SKIP condition; row 4
-    // ends at 1000 → 1000<=1000 → skipped. So start=5. End: row 8 starts
-    // at 1600 (<1800), row 9 starts at 1800 (not <1800) → end=9.
-    // After overscan: start=max(0,5-2)=3, end=min(20, 9+3)=12.
     expect(range).toEqual({ startIndex: 3, endIndex: 12 });
   });
 
@@ -86,15 +81,11 @@ describe('computeVisibleRowRange', () => {
       viewportHeight: 400,
       overscan: { rowsAbove: 5, rowsBelow: 5 },
     });
-    // Strict [0, 2). Overscan above can't go below 0; below adds 5.
     expect(range.startIndex).toBe(0);
     expect(range.endIndex).toBe(7);
   });
 
   it('mounts the trailing overscan rows when the viewport is beyond all known rows', () => {
-    // World content ends at row index 19 (top 3800 + height 200 = 4000).
-    // Viewport at 5000 is past everything; we still keep a few rows
-    // mounted so the user sees content when the next page arrives.
     const range = computeVisibleRowRange({
       rows: ROWS,
       scrollTop: 5000,
@@ -104,18 +95,133 @@ describe('computeVisibleRowRange', () => {
     expect(range.endIndex).toBe(ROWS.length);
     expect(range.startIndex).toBe(ROWS.length - 3);
   });
+});
 
-  it('keeps the mounted DOM bounded relative to viewport size', () => {
-    const range = computeVisibleRowRange({
+describe('computeWrappedAxisCopies', () => {
+  it('returns one copy when a large world fully covers the viewport away from seams', () => {
+    expect(
+      computeWrappedAxisCopies({
+        period: 2000,
+        viewportSize: 800,
+        wrappedOffset: 200,
+      }),
+    ).toEqual([{ copyIndex: 0, offset: -200 }]);
+  });
+
+  it('returns the seam-crossing copies needed near the wrap boundary', () => {
+    expect(
+      computeWrappedAxisCopies({
+        period: 2000,
+        viewportSize: 800,
+        wrappedOffset: 1700,
+      }),
+    ).toEqual([
+      { copyIndex: 0, offset: -1700 },
+      { copyIndex: 1, offset: 300 },
+    ]);
+  });
+
+  it('repeats enough copies when the world period is smaller than the viewport', () => {
+    expect(
+      computeWrappedAxisCopies({
+        period: 300,
+        viewportSize: 1000,
+        wrappedOffset: 50,
+      }),
+    ).toEqual([
+      { copyIndex: 0, offset: -50 },
+      { copyIndex: 1, offset: 250 },
+      { copyIndex: 2, offset: 550 },
+      { copyIndex: 3, offset: 850 },
+    ]);
+  });
+});
+
+describe('computeWrappedVisibleRowSegments', () => {
+  it('returns one segment when the wrapped viewport stays inside one world copy', () => {
+    const segments = computeWrappedVisibleRowSegments({
       rows: ROWS,
-      scrollTop: 1000,
+      contentHeight: 4000,
+      wrappedScrollTop: 500,
       viewportHeight: 800,
-      overscan: { rowsAbove: 2, rowsBelow: 4 },
+      overscan: NO_OVERSCAN,
     });
-    const mounted = range.endIndex - range.startIndex;
-    // Visible window covers ~4 rows (each 200 tall, viewport 800).
-    // Plus 2 above and 4 below overscan → at most ~10 rows mounted.
-    expect(mounted).toBeGreaterThan(0);
-    expect(mounted).toBeLessThanOrEqual(12);
+    expect(segments).toEqual([
+      {
+        copyIndex: 0,
+        copyOffset: -500,
+        worldTop: 500,
+        viewportHeight: 800,
+        startIndex: 2,
+        endIndex: 7,
+      },
+    ]);
+  });
+
+  it('splits into two segments when the viewport crosses the bottom seam', () => {
+    const segments = computeWrappedVisibleRowSegments({
+      rows: ROWS,
+      contentHeight: 4000,
+      wrappedScrollTop: 3700,
+      viewportHeight: 800,
+      overscan: NO_OVERSCAN,
+    });
+
+    expect(segments).toEqual([
+      {
+        copyIndex: 0,
+        copyOffset: -3700,
+        worldTop: 3700,
+        viewportHeight: 300,
+        startIndex: 18,
+        endIndex: 20,
+      },
+      {
+        copyIndex: 1,
+        copyOffset: 300,
+        worldTop: 0,
+        viewportHeight: 500,
+        startIndex: 0,
+        endIndex: 3,
+      },
+    ]);
+  });
+
+  it('repeats multiple segments when the world is shorter than the viewport', () => {
+    const rows = [row(0, 0, 200), row(1, 200, 200)];
+    const segments = computeWrappedVisibleRowSegments({
+      rows,
+      contentHeight: 400,
+      wrappedScrollTop: 100,
+      viewportHeight: 1000,
+      overscan: NO_OVERSCAN,
+    });
+
+    expect(segments).toEqual([
+      {
+        copyIndex: 0,
+        copyOffset: -100,
+        worldTop: 100,
+        viewportHeight: 300,
+        startIndex: 0,
+        endIndex: 2,
+      },
+      {
+        copyIndex: 1,
+        copyOffset: 300,
+        worldTop: 0,
+        viewportHeight: 400,
+        startIndex: 0,
+        endIndex: 2,
+      },
+      {
+        copyIndex: 2,
+        copyOffset: 700,
+        worldTop: 0,
+        viewportHeight: 300,
+        startIndex: 0,
+        endIndex: 2,
+      },
+    ]);
   });
 });

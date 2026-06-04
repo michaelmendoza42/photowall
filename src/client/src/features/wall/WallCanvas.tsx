@@ -11,8 +11,15 @@ import {
   DEFAULT_MOSAIC_COLUMN_FACTORS,
   DEFAULT_TARGET_ROW_HEIGHT,
 } from './worldWidth.js';
-import { computeVisibleRowRange } from './virtualization.js';
+import {
+  computeWrappedAxisCopies,
+  computeWrappedVisibleRowSegments,
+} from './virtualization.js';
 import { shouldLoadNextPage } from './dynamicLoading.js';
+import {
+  collectFirstAppearancePhotoIds,
+  rememberSeenPhotoIds,
+} from './appearanceTracking.js';
 import { packJustifiedRows, type PackerResult } from './packer.js';
 import {
   DRAG_THRESHOLD_PX,
@@ -24,6 +31,7 @@ import { mediaResourcePath } from '../../../../shared/api/media.js';
 import { DEFAULT_OVERSCAN, type LayoutOverscan } from '../../state/layout.js';
 import {
   panBy,
+  wrapTravelOffset,
   type CameraState,
 } from '../../state/camera.js';
 
@@ -35,7 +43,7 @@ export interface WallStats {
   mountedRows: number;
   visibleStart: number;
   visibleEnd: number;
-  /** Vertical camera offset (replaces legacy DOM scrollTop). */
+  /** Continuous vertical travel offset (legacy debug label). */
   scrollTop: number;
   contentHeight: number;
   worldWidth: number;
@@ -84,6 +92,24 @@ interface ActiveDrag {
   crossedThreshold: boolean;
 }
 
+interface RenderedTileInstance {
+  key: string;
+  photoId: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  shouldFadeOnMount: boolean;
+}
+
+interface RenderedRowInstance {
+  key: string;
+  rowIndex: number;
+  offsetTop: number;
+  height: number;
+  tiles: RenderedTileInstance[];
+}
+
 export function WallCanvas(props: WallCanvasProps): JSX.Element {
   const {
     photos,
@@ -107,8 +133,10 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
   // activation. Reset on every fresh pointerdown so a stuck `true` from
   // a missing click event cannot suppress the next real click.
   const suppressNextClickRef = useRef(false);
-  // Mirror the prop into a ref so wheel/pointer handlers always read the
-  // latest camera without forcing rebinds on every state tick.
+  const seenPhotoIdsRef = useRef<Set<string>>(new Set());
+
+  // Mirror props into refs so wheel/pointer handlers always read the
+  // latest callbacks without forcing rebinds on every state tick.
   const cameraRef = useRef(camera);
   useEffect(() => {
     cameraRef.current = camera;
@@ -136,25 +164,33 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
     return m;
   }, [photos]);
 
-  const [viewportHeight, setViewportHeight] = useState(0);
+  const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
   // Mirror the live drag flag into React state so the `data-dragging`
   // attribute updates on the same tick as the gesture, not on the next
   // unrelated render. The ref above remains the source of truth inside
   // the high-frequency pointer handlers.
   const [dragActive, setDragActive] = useState(false);
 
-  // Track viewport height of the canvas. ResizeObserver fires
+  // Track viewport size of the canvas. ResizeObserver fires
   // synchronously after mount so the first render measures the actual
   // CSS layout size, not a 0 placeholder.
   useLayoutEffect(() => {
     const el = containerRef.current;
     if (!el) return undefined;
-    const apply = (): void => setViewportHeight(el.clientHeight);
+    const apply = (): void => {
+      const next = { width: el.clientWidth, height: el.clientHeight };
+      setViewportSize((prev) =>
+        prev.width === next.width && prev.height === next.height ? prev : next
+      );
+    };
     apply();
     const observer = new ResizeObserver(apply);
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
+
+  const viewportWidth = viewportSize.width;
+  const viewportHeight = viewportSize.height;
 
   const packed: PackerResult = useMemo(() => {
     return packJustifiedRows(
@@ -169,24 +205,101 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
     );
   }, [photos, worldWidth, hasNextPage]);
 
-  const visible = useMemo(
+  const wrappedCameraX = useMemo(
+    () => wrapTravelOffset(camera.x, worldWidth),
+    [camera.x, worldWidth],
+  );
+  const wrappedCameraY = useMemo(
+    () => wrapTravelOffset(camera.y, packed.contentHeight),
+    [camera.y, packed.contentHeight],
+  );
+
+  const horizontalCopies = useMemo(
     () =>
-      computeVisibleRowRange({
+      computeWrappedAxisCopies({
+        period: worldWidth,
+        viewportSize: viewportWidth,
+        wrappedOffset: wrappedCameraX,
+      }),
+    [worldWidth, viewportWidth, wrappedCameraX],
+  );
+
+  const verticalSegments = useMemo(
+    () =>
+      computeWrappedVisibleRowSegments({
         rows: packed.rows,
-        scrollTop: camera.y,
+        contentHeight: packed.contentHeight,
+        wrappedScrollTop: wrappedCameraY,
         viewportHeight,
         overscan,
       }),
-    [packed.rows, camera.y, viewportHeight, overscan],
+    [packed.rows, packed.contentHeight, wrappedCameraY, viewportHeight, overscan],
   );
 
-  // Dynamic loading: fire whenever the geometry says we are within
-  // the frontier threshold. Driven by camera.y now that native scroll
-  // is gone.
+  const renderPlan = useMemo(() => {
+    const firstAppearanceIds: string[] = [];
+    const renderedRows: RenderedRowInstance[] = [];
+    const seenPhotoIds = seenPhotoIdsRef.current;
+
+    for (const segment of verticalSegments) {
+      const rows = packed.rows.slice(segment.startIndex, segment.endIndex);
+      for (const row of rows) {
+        const rowFreshIds = collectFirstAppearancePhotoIds(
+          row.tiles.map((tile) => tile.photoId),
+          seenPhotoIds,
+        );
+        const rowFreshIdSet = new Set(rowFreshIds);
+        firstAppearanceIds.push(...rowFreshIds);
+
+        const rowTiles: RenderedTileInstance[] = [];
+        for (const xCopy of horizontalCopies) {
+          for (const tile of row.tiles) {
+            rowTiles.push({
+              key: `${row.index}:${segment.copyIndex}:${xCopy.copyIndex}:${tile.photoId}`,
+              photoId: tile.photoId,
+              x: tile.x + xCopy.offset,
+              y: tile.y - row.offsetTop,
+              width: tile.width,
+              height: tile.height,
+              shouldFadeOnMount: rowFreshIdSet.has(tile.photoId),
+            });
+          }
+        }
+
+        renderedRows.push({
+          key: `${row.index}:${segment.copyIndex}`,
+          rowIndex: row.index,
+          offsetTop: row.offsetTop + segment.copyOffset,
+          height: row.height,
+          tiles: rowTiles,
+        });
+      }
+    }
+
+    const mountedRowIndices = new Set(renderedRows.map((row) => row.rowIndex));
+
+    return {
+      renderedRows,
+      firstAppearanceIds: collectFirstAppearancePhotoIds(
+        firstAppearanceIds,
+        seenPhotoIds,
+      ),
+      mountedRowCount: mountedRowIndices.size,
+    };
+  }, [verticalSegments, packed.rows, horizontalCopies]);
+
+  useEffect(() => {
+    rememberSeenPhotoIds(seenPhotoIdsRef.current, renderPlan.firstAppearanceIds);
+  }, [renderPlan.firstAppearanceIds]);
+
+  // Dynamic loading: fire whenever the absolute travel position says we
+  // are within the frontier threshold. Wrapped render position is
+  // intentionally ignored so looping around the top does not stall
+  // loading of later pages.
   useEffect(() => {
     if (
       shouldLoadNextPage({
-        scrollTop: camera.y,
+        travelY: camera.y,
         viewportHeight,
         contentHeight: packed.contentHeight,
         thresholdPx: FRONTIER_THRESHOLD_PX,
@@ -209,11 +322,19 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
   // to duplicate the geometry math.
   useEffect(() => {
     if (!onStatsChange) return;
+    const visibleStart =
+      verticalSegments.length > 0
+        ? Math.min(...verticalSegments.map((segment) => segment.startIndex))
+        : 0;
+    const visibleEnd =
+      verticalSegments.length > 0
+        ? Math.max(...verticalSegments.map((segment) => segment.endIndex))
+        : 0;
     onStatsChange({
       totalRows: packed.rows.length,
-      mountedRows: Math.max(0, visible.endIndex - visible.startIndex),
-      visibleStart: visible.startIndex,
-      visibleEnd: visible.endIndex,
+      mountedRows: renderPlan.mountedRowCount,
+      visibleStart,
+      visibleEnd,
       scrollTop: camera.y,
       contentHeight: packed.contentHeight,
       worldWidth,
@@ -224,8 +345,8 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
     packed.rows.length,
     packed.contentHeight,
     packed.packedPhotoCount,
-    visible.startIndex,
-    visible.endIndex,
+    renderPlan.mountedRowCount,
+    verticalSegments,
     camera.y,
     worldWidth,
   ]);
@@ -375,24 +496,18 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
     [photosById],
   );
 
-  const mountedRows = packed.rows.slice(visible.startIndex, visible.endIndex);
-
-  // The world is centered horizontally when it is narrower than the
-  // viewport. When wider, the camera owns the horizontal offset.
-  const worldOffsetX = worldWidth >= camera.viewport.width
-    ? -camera.x
-    : Math.round((camera.viewport.width - worldWidth) / 2);
-
   return (
     <div
       className="wall-canvas"
       data-testid="wall-canvas"
-      data-mounted-rows={mountedRows.length}
+      data-mounted-rows={renderPlan.mountedRowCount}
       data-total-rows={packed.rows.length}
       data-content-height={packed.contentHeight}
       data-world-width={worldWidth}
       data-camera-x={Math.round(camera.x)}
       data-camera-y={Math.round(camera.y)}
+      data-render-x={Math.round(wrappedCameraX)}
+      data-render-y={Math.round(wrappedCameraY)}
       data-dragging={dragActive ? 'true' : 'false'}
       ref={containerRef}
       onPointerDown={handlePointerDown}
@@ -407,16 +522,12 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
         style={{
           height: packed.contentHeight,
           width: worldWidth,
-          transform: `translate3d(${worldOffsetX}px, ${-camera.y}px, 0)`,
         }}
       >
-        {mountedRows.map((row) => (
+        {renderPlan.renderedRows.map((row) => (
           <div
-            key={row.index}
+            key={row.key}
             className="wall-canvas__row"
-            data-row-index={row.index}
-            data-row-height={Math.round(row.height)}
-            data-row-target={Math.round(row.targetHeight)}
             style={{
               transform: `translate3d(0, ${row.offsetTop}px, 0)`,
               height: row.height,
@@ -424,32 +535,40 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
             }}
           >
             {row.tiles.map((tile) => (
-              <div
-                key={tile.photoId}
-                className="wall-canvas__tile"
-                data-photo-id={tile.photoId}
-                style={tileStyle(
-                  tile.x,
-                  tile.y - row.offsetTop,
-                  tile.width,
-                  tile.height,
-                )}
-              >
-                <img
-                  className="wall-canvas__img"
-                  src={mediaResourcePath(tile.photoId, 'wall')}
-                  width={Math.round(tile.width)}
-                  height={Math.round(tile.height)}
-                  loading="lazy"
-                  decoding="async"
-                  alt=""
-                  draggable={false}
-                />
-              </div>
+              <WallCanvasTile key={tile.key} tile={tile} />
             ))}
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+function WallCanvasTile(
+  props: { tile: RenderedTileInstance },
+): JSX.Element {
+  const { tile } = props;
+  // Latch the mount-time appearance decision so unrelated rerenders do
+  // not strip the fade class before the initial opacity animation ends.
+  const shouldFadeOnMountRef = useRef(tile.shouldFadeOnMount);
+
+  return (
+    <div
+      className="wall-canvas__tile"
+      data-photo-id={tile.photoId}
+      data-appearance={shouldFadeOnMountRef.current ? 'fresh' : 'seen'}
+      style={tileStyle(tile.x, tile.y, tile.width, tile.height)}
+    >
+      <img
+        className="wall-canvas__img"
+        src={mediaResourcePath(tile.photoId, 'wall')}
+        width={Math.round(tile.width)}
+        height={Math.round(tile.height)}
+        loading="lazy"
+        decoding="async"
+        alt=""
+        draggable={false}
+      />
     </div>
   );
 }

@@ -30,6 +30,11 @@ describe('computeWorldWidth', () => {
       Math.floor(1366.7 * WORLD_WIDTH_VIEWPORT_MULTIPLIER),
     );
   });
+
+  it('keeps at least one viewport of extra horizontal travel on normal desktop widths', () => {
+    const viewportWidth = 1200;
+    expect(computeWorldWidth(viewportWidth) - viewportWidth).toBeGreaterThanOrEqual(viewportWidth);
+  });
 });
 
 describe('DEFAULT_MOSAIC_COLUMN_FACTORS', () => {

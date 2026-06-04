@@ -6,8 +6,8 @@
 // primarily through vertical seams and staggered tile bottoms.
 
 export const WORLD_WIDTH_MIN = 360;
-export const WORLD_WIDTH_MAX = 2400;
-export const WORLD_WIDTH_VIEWPORT_MULTIPLIER = 1.4;
+export const WORLD_WIDTH_MAX = 3600;
+export const WORLD_WIDTH_VIEWPORT_MULTIPLIER = 2.2;
 
 /** Preferred tile span in CSS px — used as the packer's base size. */
 export const DEFAULT_TARGET_ROW_HEIGHT = 300;
@@ -31,8 +31,9 @@ export const DEFAULT_MOSAIC_COLUMN_FACTORS: readonly number[] = [
 
 /**
  * Map a viewport width onto the wall's world width. The world stays
- * bounded, but deliberately wider than the viewport so the 2D camera
- * always has real horizontal travel on normal desktop/tablet sizes.
+ * bounded, but deliberately much wider than the viewport so the
+ * horizontal wrap seam stays out of view long enough for diagonal pans
+ * to read as continuous movement rather than an early direction flip.
  */
 export function computeWorldWidth(viewportWidth: number): number {
   if (!Number.isFinite(viewportWidth) || viewportWidth <= 0) {

@@ -1,21 +1,15 @@
 // Dynamic loading trigger.
 //
 // Pure decision function for "should the wall fetch the next photo
-// page right now?" Splitting this out of the React component keeps
-// the predicate testable without a DOM and keeps the wall reactive
-// component small.
-//
-// The trigger fires when the loaded vertical frontier is within
-// `thresholdPx` of the bottom of the viewport. It also fires when the
-// loaded content does not yet exceed the viewport at all — the
-// initial mount case — because there is no point waiting for a pan
-// before priming the second page.
+// page right now?" The camera now stores continuous travel offsets, so
+// the loader keys off absolute downward travel rather than the wrapped
+// render position currently on screen.
 
 export interface FrontierLoadInput {
-  /** Current camera/scroll Y offset, in CSS px. */
-  scrollTop: number;
+  /** Continuous vertical camera travel, in CSS px. */
+  travelY: number;
   viewportHeight: number;
-  /** Total laid-out world height. */
+  /** Total laid-out world height for the currently loaded prefix. */
   contentHeight: number;
   /**
    * Pixels of headroom below the viewport bottom that should still be
@@ -34,13 +28,12 @@ export function shouldLoadNextPage(input: FrontierLoadInput): boolean {
     isFetchingNext,
     hasNextPage,
     contentHeight,
-    scrollTop,
+    travelY,
     viewportHeight,
     thresholdPx,
   } = input;
   if (isFetchingNext || !hasNextPage) return false;
   if (viewportHeight <= 0) return false;
-  const remainingBelowViewport =
-    contentHeight - (scrollTop + viewportHeight);
+  const remainingBelowViewport = contentHeight - (travelY + viewportHeight);
   return remainingBelowViewport <= thresholdPx;
 }

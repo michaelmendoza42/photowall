@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { shouldLoadNextPage } from '../dynamicLoading.js';
 
 const BASE = {
-  scrollTop: 0,
+  travelY: 0,
   viewportHeight: 800,
   contentHeight: 3000,
   thresholdPx: 600,
@@ -29,7 +29,7 @@ describe('shouldLoadNextPage', () => {
     expect(
       shouldLoadNextPage({
         ...BASE,
-        scrollTop: 0,
+        travelY: 0,
         viewportHeight: 800,
         contentHeight: 400,
       }),
@@ -37,28 +37,36 @@ describe('shouldLoadNextPage', () => {
   });
 
   it('returns false when there is still plenty of content below the viewport', () => {
-    // scroll=0, viewport=800, content=3000 → remaining = 2200 > 600.
+    // travel=0, viewport=800, content=3000 → remaining = 2200 > 600.
     expect(shouldLoadNextPage(BASE)).toBe(false);
   });
 
-  it('returns true once the viewport approaches the frontier within the threshold', () => {
-    // scroll=1800, viewport=800 → bottom=2600, content=3000.
+  it('returns true once absolute downward travel approaches the frontier within the threshold', () => {
+    // travel=1800, viewport=800 → bottom=2600, content=3000.
     // remaining=400, threshold=600 → load.
     expect(
-      shouldLoadNextPage({ ...BASE, scrollTop: 1800 }),
+      shouldLoadNextPage({ ...BASE, travelY: 1800 }),
     ).toBe(true);
   });
 
   it('returns true exactly at the threshold boundary', () => {
     // remaining = 3000 - (1600 + 800) = 600, threshold = 600 → load.
     expect(
-      shouldLoadNextPage({ ...BASE, scrollTop: 1600 }),
+      shouldLoadNextPage({ ...BASE, travelY: 1600 }),
     ).toBe(true);
   });
 
-  it('returns true when scrolled past the loaded frontier', () => {
+  it('returns true when travel moves past the loaded frontier', () => {
     expect(
-      shouldLoadNextPage({ ...BASE, scrollTop: 5000 }),
+      shouldLoadNextPage({ ...BASE, travelY: 5000 }),
     ).toBe(true);
+  });
+
+  it('does not depend on wrapped render position after upward loops', () => {
+    // Still negative absolute travel even if the wrapped render position
+    // would land near the bottom of the wall.
+    expect(
+      shouldLoadNextPage({ ...BASE, travelY: -1200 }),
+    ).toBe(false);
   });
 });

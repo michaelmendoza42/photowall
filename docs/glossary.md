@@ -1,5 +1,5 @@
 # Glossary
-Last edited: 2026-06-02
+Last edited: 2026-06-03
 Status: Active
 Scope: Shared behavioral and technical terminology for repositories created from this template
 Related files: `README.md`, `product/README.md`, `workshop-ideas/README.md`, `system/README.md`, `standards/documentation-model.md`, `standards/documentation-schema.md`
@@ -146,6 +146,16 @@ The layout rule that photos should pack together tightly with no intentional gap
 - **Used by:** layout logic, rendering validation, and future responsive behavior
 - **Change risk:** high — changing this would materially alter the look of the product
 - **Surfaced to users:** yes — visible in the core interface
+
+### Wrap-around wall
+A finite photo wall that loops seamlessly at its left/right and top/bottom edges within the currently loaded world, without becoming a procedurally infinite surface.
+
+- **Lives in:** `docs/product/photo-wall-experience.md`
+- **Why it exists:** distinguishes the approved looping-browse behavior from both hard edge clamping and a truly infinite world
+- **Used by:** camera math, seam-aware rendering, dynamic loading, and regression validation
+- **Change risk:** high — changing this would alter the core browsing model and loading expectations
+- **Alias:** looping wall
+- **Surfaced to users:** yes — directly experienced during wall navigation
 
 ### Filter menu
 The secondary control surface opened from the small circular menu button. It exposes filtering controls without turning the page into a chrome-heavy application shell.
@@ -461,6 +471,9 @@ Short definition.
 - `standards/documentation-schema.md`
 
 ## Changelog
+
+### 2026-06-03
+- Added `Wrap-around wall` to capture the approved finite looping-navigation model and keep it distinct from a truly infinite world.
 
 ### 2026-06-02
 - Replaced `Diagonal drift` with `Two-axis trackpad panning` and added `Click-drag panning` to match the approved MVP motion model.

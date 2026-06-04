@@ -8,8 +8,11 @@ import {
   maxOffsetY,
   panBy,
   panTo,
+  projectCamera,
+  rebaseWrappedTravel,
   withViewport,
   withWorldBounds,
+  wrapTravelOffset,
 } from '../camera.js';
 
 const READY_CAMERA = {
@@ -43,7 +46,7 @@ describe('camera state contract', () => {
   });
 });
 
-describe('camera bounds math', () => {
+describe('world extent helpers', () => {
   it('reports zero max offsets while world or viewport are unmeasured', () => {
     expect(maxOffsetX(INITIAL_CAMERA)).toBe(0);
     expect(maxOffsetY(INITIAL_CAMERA)).toBe(0);
@@ -64,79 +67,94 @@ describe('camera bounds math', () => {
   });
 });
 
+describe('wrap projection helpers', () => {
+  it('wraps positive travel into the current world period', () => {
+    expect(wrapTravelOffset(2500, 2000)).toBe(500);
+  });
+
+  it('wraps negative travel into the positive render interval', () => {
+    expect(wrapTravelOffset(-250, 2000)).toBe(1750);
+  });
+
+  it('returns zero when the world period is not usable', () => {
+    expect(wrapTravelOffset(123, 0)).toBe(0);
+  });
+
+  it('projects both axes from continuous travel state', () => {
+    const projected = projectCamera({
+      ...READY_CAMERA,
+      x: 1900,
+      y: -250,
+    });
+    expect(projected.x).toBe(300);
+    expect(projected.y).toBe(3750);
+  });
+
+  it('rebases travel across a growing world while preserving the wrapped view', () => {
+    // One completed 2000px cycle + 500px into the world.
+    const rebased = rebaseWrappedTravel(2500, 2000, 3000);
+    expect(rebased).toBe(3500);
+    expect(wrapTravelOffset(rebased, 3000)).toBe(500);
+  });
+});
+
 describe('clampCamera', () => {
-  it('returns the same reference when already in bounds', () => {
+  it('returns the same reference when travel offsets are already finite', () => {
     const base = { ...READY_CAMERA, x: 100, y: 200 };
     expect(clampCamera(base)).toBe(base);
   });
 
-  it('clamps negative offsets to zero', () => {
-    const drifted = { ...READY_CAMERA, x: -50, y: -30 };
+  it('normalizes non-finite travel offsets to zero', () => {
+    const drifted = { ...READY_CAMERA, x: Number.NaN, y: Number.POSITIVE_INFINITY };
     const clamped = clampCamera(drifted);
     expect(clamped.x).toBe(0);
     expect(clamped.y).toBe(0);
   });
+});
 
-  it('clamps offsets past the loaded frontier to the max', () => {
-    const drifted = { ...READY_CAMERA, x: 10_000, y: 50_000 };
-    const clamped = clampCamera(drifted);
-    expect(clamped.x).toBe(maxOffsetX(READY_CAMERA));
-    expect(clamped.y).toBe(maxOffsetY(READY_CAMERA));
-  });
-
-  it('treats unmeasured world height as zero', () => {
-    const stillScanning = {
+describe('withWorldBounds', () => {
+  it('preserves the current wrapped x/y projection when periods grow', () => {
+    const base = {
       ...READY_CAMERA,
-      world: { width: 1600, height: null as number | null },
-      y: 250,
+      x: 2500,
+      y: 4500,
     };
-    const clamped = clampCamera(stillScanning);
-    expect(clamped.y).toBe(0);
+    const before = projectCamera(base);
+    const next = withWorldBounds(base, { width: 2400, height: 5000 });
+    const after = projectCamera(next);
+    expect(after.x).toBe(before.x);
+    expect(after.y).toBe(before.y);
+    expect(next.x).toBe(3300);
+    expect(next.y).toBe(5500);
   });
 
-  it('reclamps after a shrinking viewport changes the max offset', () => {
-    const base = { ...READY_CAMERA, x: 600, y: 3200 };
-    const next = withViewport(base, { width: 1600, height: 4000 });
-    // World now fits entirely in the viewport → both offsets clamp to 0.
-    expect(next.x).toBe(0);
-    expect(next.y).toBe(0);
-  });
-
-  it('reclamps after world shrinks below the current camera position', () => {
-    const base = { ...READY_CAMERA, x: 500, y: 3000 };
-    const next = withWorldBounds(base, { width: 1200, height: 1500 });
-    expect(next.x).toBe(maxOffsetX(next));
-    expect(next.y).toBe(maxOffsetY(next));
+  it('normalizes negative world bounds instead of propagating them', () => {
+    const next = withWorldBounds(READY_CAMERA, { width: -10, height: -20 });
+    expect(next.world.width).toBe(0);
+    expect(next.world.height).toBe(0);
   });
 });
 
 describe('panBy / panTo', () => {
-  it('adds the delta and clamps to world bounds', () => {
-    const next = panBy(READY_CAMERA, { dx: 250, dy: 1000 });
-    expect(next.x).toBe(250);
-    expect(next.y).toBe(1000);
+  it('adds the travel delta without clamping to the world frontier', () => {
+    const next = panBy(READY_CAMERA, { dx: 2500, dy: 5000 });
+    expect(next.x).toBe(2500);
+    expect(next.y).toBe(5000);
   });
 
-  it('panBy never drifts past zero on the left/top edge', () => {
+  it('allows negative travel so the wall can wrap in both directions', () => {
     const next = panBy(READY_CAMERA, { dx: -200, dy: -200 });
-    expect(next.x).toBe(0);
-    expect(next.y).toBe(0);
+    expect(next.x).toBe(-200);
+    expect(next.y).toBe(-200);
   });
 
-  it('panBy never drifts past the loaded frontier', () => {
-    const next = panBy(READY_CAMERA, { dx: 10_000, dy: 10_000 });
-    expect(next.x).toBe(maxOffsetX(READY_CAMERA));
-    expect(next.y).toBe(maxOffsetY(READY_CAMERA));
-  });
-
-  it('panTo jumps to an absolute position then clamps', () => {
+  it('panTo jumps to an absolute travel position without bounded clamping', () => {
     const next = panTo(READY_CAMERA, { x: 100_000, y: -100 });
-    expect(next.x).toBe(maxOffsetX(READY_CAMERA));
-    expect(next.y).toBe(0);
+    expect(next.x).toBe(100_000);
+    expect(next.y).toBe(-100);
   });
 
-  it('panBy preserves identity when delta + clamp yields no change', () => {
-    const atTopLeft = { ...READY_CAMERA, x: 0, y: 0 };
-    expect(panBy(atTopLeft, { dx: -50, dy: -50 })).toBe(atTopLeft);
+  it('panBy preserves identity when the delta yields no change', () => {
+    expect(panBy(READY_CAMERA, { dx: 0, dy: 0 })).toBe(READY_CAMERA);
   });
 });
