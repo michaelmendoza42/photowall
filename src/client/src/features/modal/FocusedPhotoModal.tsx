@@ -1,6 +1,7 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { mediaResourcePath } from '../../../../shared/api/media.js';
 import type { PhotoQueryRecord } from '../../../../shared/api/photos.js';
+import { computeFocusedPhotoRenderSize } from '../wall/hoverPreview.js';
 
 export interface FocusedPhotoModalProps {
   photo: PhotoQueryRecord;
@@ -18,6 +19,10 @@ export interface FocusedPhotoModalProps {
 export function FocusedPhotoModal(props: FocusedPhotoModalProps): JSX.Element {
   const { photo, onClose } = props;
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+  const [viewportSize, setViewportSize] = useState(() => ({
+    width: typeof window === 'undefined' ? 0 : window.innerWidth,
+    height: typeof window === 'undefined' ? 0 : window.innerHeight,
+  }));
 
   // Keep a stable handler reference inside the global keydown listener
   // so reopening the modal on a new photo does not detach/reattach.
@@ -42,6 +47,24 @@ export function FocusedPhotoModal(props: FocusedPhotoModalProps): JSX.Element {
   useEffect(() => {
     closeButtonRef.current?.focus();
   }, [photo.id]);
+
+  useLayoutEffect(() => {
+    function syncViewport(): void {
+      setViewportSize({ width: window.innerWidth, height: window.innerHeight });
+    }
+    syncViewport();
+    window.addEventListener('resize', syncViewport);
+    return () => window.removeEventListener('resize', syncViewport);
+  }, []);
+
+  const renderSize = useMemo(
+    () =>
+      computeFocusedPhotoRenderSize({
+        viewport: viewportSize,
+        photo: { width: photo.width, height: photo.height },
+      }),
+    [photo.height, photo.width, viewportSize],
+  );
 
   const handleBackdropClick = (
     event: React.MouseEvent<HTMLDivElement>,
@@ -71,12 +94,19 @@ export function FocusedPhotoModal(props: FocusedPhotoModalProps): JSX.Element {
       >
         ×
       </button>
-      <img
-        className="focused-photo__img"
-        src={mediaResourcePath(photo.id, 'modal')}
-        alt=""
-        draggable={false}
-      />
+      <div
+        className="focused-photo__frame"
+        style={{ width: renderSize.width, height: renderSize.height }}
+      >
+        <img
+          className="focused-photo__img"
+          data-testid="focused-photo-image"
+          data-media-variant="modal"
+          src={mediaResourcePath(photo.id, 'modal')}
+          alt=""
+          draggable={false}
+        />
+      </div>
     </div>
   );
 }

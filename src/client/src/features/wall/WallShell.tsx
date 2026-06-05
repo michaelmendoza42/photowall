@@ -347,6 +347,7 @@ export function WallShell(): JSX.Element {
           onCameraChange={setCamera}
           onDragStateChange={setDragState}
           onPhotoOpen={handlePhotoOpen}
+          isModalOpen={focusedPhoto.photo !== null}
         />
       )}
 

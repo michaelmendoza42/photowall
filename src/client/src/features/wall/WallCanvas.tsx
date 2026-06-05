@@ -22,6 +22,9 @@ import {
 } from './appearanceTracking.js';
 import { packJustifiedRows, type PackerResult } from './packer.js';
 import {
+  computeAnchoredHoverPreviewRect,
+} from './hoverPreview.js';
+import {
   DRAG_THRESHOLD_PX,
   hasCrossedThreshold,
   type DragOrigin,
@@ -79,6 +82,8 @@ export interface WallCanvasProps {
    * does not also open the modal.
    */
   onPhotoOpen?: (photo: PhotoQueryRecord) => void;
+  /** True while the focused-photo modal is open. */
+  isModalOpen?: boolean;
   /** Override for unit tests; defaults to {@link DRAG_THRESHOLD_PX}. */
   dragThresholdPx?: number;
 }
@@ -86,7 +91,7 @@ export interface WallCanvasProps {
 interface ActiveDrag {
   pointerId: number;
   origin: DragOrigin;
-  /** Pointer coords from the previous move event, for incremental deltas. */
+  /** Last pointer coords that have been applied to camera panning. */
   lastX: number;
   lastY: number;
   crossedThreshold: boolean;
@@ -110,6 +115,14 @@ interface RenderedRowInstance {
   tiles: RenderedTileInstance[];
 }
 
+interface HoverPreviewState {
+  photoId: string;
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
 export function WallCanvas(props: WallCanvasProps): JSX.Element {
   const {
     photos,
@@ -123,16 +136,13 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
     onCameraChange,
     onDragStateChange,
     onPhotoOpen,
+    isModalOpen = false,
     dragThresholdPx = DRAG_THRESHOLD_PX,
   } = props;
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<ActiveDrag | null>(null);
-  // When the most-recent pointer gesture crossed the drag threshold,
-  // the synthetic `click` it produces must not be treated as a tile
-  // activation. Reset on every fresh pointerdown so a stuck `true` from
-  // a missing click event cannot suppress the next real click.
-  const suppressNextClickRef = useRef(false);
+  const pressedPhotoIdRef = useRef<string | null>(null);
   const seenPhotoIdsRef = useRef<Set<string>>(new Set());
 
   // Mirror props into refs so wheel/pointer handlers always read the
@@ -157,7 +167,8 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
     photoOpenRef.current = onPhotoOpen;
   }, [onPhotoOpen]);
 
-  // O(1) photo lookup by id for the canvas-level click handler.
+  // O(1) photo lookup by id for pointer activation and hover-preview
+  // geometry.
   const photosById = useMemo(() => {
     const m = new Map<string, PhotoQueryRecord>();
     for (const p of photos) m.set(p.id, p);
@@ -170,6 +181,7 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
   // unrelated render. The ref above remains the source of truth inside
   // the high-frequency pointer handlers.
   const [dragActive, setDragActive] = useState(false);
+  const [hoverPreview, setHoverPreview] = useState<HoverPreviewState | null>(null);
 
   // Track viewport size of the canvas. ResizeObserver fires
   // synchronously after mount so the first render measures the actual
@@ -292,6 +304,12 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
     rememberSeenPhotoIds(seenPhotoIdsRef.current, renderPlan.firstAppearanceIds);
   }, [renderPlan.firstAppearanceIds]);
 
+  useEffect(() => {
+    if (dragActive || isModalOpen) {
+      setHoverPreview(null);
+    }
+  }, [dragActive, isModalOpen]);
+
   // Dynamic loading: fire whenever the absolute travel position says we
   // are within the frontier threshold. Wrapped render position is
   // intentionally ignored so looping around the top does not stall
@@ -361,6 +379,7 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
       // Honor the event regardless of axis lock — trackpads emit both
       // deltaX and deltaY for 2D gestures.
       event.preventDefault();
+      setHoverPreview(null);
       const next = panBy(cameraRef.current, {
         dx: event.deltaX,
         dy: event.deltaY,
@@ -384,9 +403,12 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
       if (event.button !== 0 && event.pointerType === 'mouse') return;
       if (dragRef.current) return;
 
-      // Fresh gesture — clear any stale click-suppression flag so the
-      // upcoming click (if no drag occurs) is treated as a tile open.
-      suppressNextClickRef.current = false;
+      setHoverPreview(null);
+
+      const target = event.target as HTMLElement | null;
+      pressedPhotoIdRef.current =
+        target?.closest<HTMLElement>('[data-photo-id]')?.dataset['photoId'] ??
+        null;
 
       dragRef.current = {
         pointerId: event.pointerId,
@@ -418,32 +440,37 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
       const drag = dragRef.current;
       if (!drag || drag.pointerId !== event.pointerId) return;
 
+      if (!drag.crossedThreshold) {
+        if (
+          !hasCrossedThreshold(
+            drag.origin,
+            { x: event.clientX, y: event.clientY },
+            dragThresholdPx,
+          )
+        ) {
+          return;
+        }
+
+        drag.crossedThreshold = true;
+        dragStateChangeRef.current?.({
+          active: true,
+          crossedThreshold: true,
+        });
+      }
+
       const dx = event.clientX - drag.lastX;
       const dy = event.clientY - drag.lastY;
       drag.lastX = event.clientX;
       drag.lastY = event.clientY;
 
       // Move the camera opposite the drag delta so the world appears
-      // to follow the pointer.
+      // to follow the pointer. We do not pan before the threshold is
+      // crossed, which keeps minor click jitter from shifting the wall
+      // out from under the click target.
       const next = panBy(cameraRef.current, { dx: -dx, dy: -dy });
       if (next !== cameraRef.current) {
         cameraRef.current = next;
         cameraChangeRef.current(next);
-      }
-
-      if (
-        !drag.crossedThreshold &&
-        hasCrossedThreshold(
-          drag.origin,
-          { x: event.clientX, y: event.clientY },
-          dragThresholdPx,
-        )
-      ) {
-        drag.crossedThreshold = true;
-        dragStateChangeRef.current?.({
-          active: true,
-          crossedThreshold: true,
-        });
       }
     },
     [dragThresholdPx],
@@ -460,41 +487,92 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
       } catch {
         /* ignore */
       }
-      // A gesture that crossed the drag threshold is a pan, not a tap.
-      // Latch the suppress flag so the synthetic click that follows
-      // pointerup does not open the modal. The next pointerdown will
-      // clear it.
-      if (drag.crossedThreshold) {
-        suppressNextClickRef.current = true;
-      }
+      const shouldOpenPhoto =
+        !drag.crossedThreshold && event.type === 'pointerup'
+          ? pressedPhotoIdRef.current
+          : null;
+
       dragRef.current = null;
+      pressedPhotoIdRef.current = null;
       setDragActive(false);
       dragStateChangeRef.current?.({
         active: false,
         crossedThreshold: false,
       });
-    },
-    [],
-  );
 
-  const handleClick = useCallback(
-    (event: React.MouseEvent<HTMLDivElement>) => {
-      // A drag-pan just ended — consume the synthetic click and reset.
-      if (suppressNextClickRef.current) {
-        suppressNextClickRef.current = false;
-        return;
-      }
-      const target = event.target as HTMLElement | null;
-      const tile = target?.closest<HTMLElement>('[data-photo-id]');
-      if (!tile) return;
-      const id = tile.dataset['photoId'];
-      if (!id) return;
-      const photo = photosById.get(id);
+      if (!shouldOpenPhoto) return;
+      const photo = photosById.get(shouldOpenPhoto);
       if (!photo) return;
+      setHoverPreview(null);
       photoOpenRef.current?.(photo);
     },
     [photosById],
   );
+
+  const updateHoverPreview = useCallback(
+    (tileEl: HTMLDivElement, photoId: string) => {
+      if (!supportsFinePointerHover()) return;
+      if (dragRef.current || isModalOpen || viewportWidth <= 0 || viewportHeight <= 0) {
+        return;
+      }
+      const photo = photosById.get(photoId);
+      if (!photo) return;
+
+      const tileRect = tileEl.getBoundingClientRect();
+      // Use the real browser viewport here so hover sizing matches the
+      // focused-photo modal contract exactly. The canvas box can diverge
+      // from window dimensions once overlays/debug surfaces enter the page.
+      const previewViewport =
+        typeof window === 'undefined'
+          ? { width: viewportWidth, height: viewportHeight }
+          : { width: window.innerWidth, height: window.innerHeight };
+      const previewRect = computeAnchoredHoverPreviewRect({
+        viewport: previewViewport,
+        tile: {
+          left: tileRect.left,
+          top: tileRect.top,
+          width: tileRect.width,
+          height: tileRect.height,
+        },
+        photo: { width: photo.width, height: photo.height },
+      });
+
+      if (previewRect.width <= 0 || previewRect.height <= 0) return;
+
+      setHoverPreview({
+        photoId,
+        left: previewRect.left,
+        top: previewRect.top,
+        width: previewRect.width,
+        height: previewRect.height,
+      });
+    },
+    [isModalOpen, photosById, viewportWidth, viewportHeight],
+  );
+
+  const handleTilePointerEnter = useCallback(
+    (
+      event: React.PointerEvent<HTMLDivElement>,
+      photoId: string,
+    ) => {
+      updateHoverPreview(event.currentTarget, photoId);
+    },
+    [updateHoverPreview],
+  );
+
+  const handleTilePointerMove = useCallback(
+    (
+      event: React.PointerEvent<HTMLDivElement>,
+      photoId: string,
+    ) => {
+      updateHoverPreview(event.currentTarget, photoId);
+    },
+    [updateHoverPreview],
+  );
+
+  const handleTilePointerLeave = useCallback((photoId: string) => {
+    setHoverPreview((prev) => (prev?.photoId === photoId ? null : prev));
+  }, []);
 
   return (
     <div
@@ -514,8 +592,6 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
       onPointerMove={handlePointerMove}
       onPointerUp={endDrag}
       onPointerCancel={endDrag}
-      onPointerLeave={endDrag}
-      onClick={handleClick}
     >
       <div
         className="wall-canvas__world"
@@ -535,19 +611,54 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
             }}
           >
             {row.tiles.map((tile) => (
-              <WallCanvasTile key={tile.key} tile={tile} />
+              <WallCanvasTile
+                key={tile.key}
+                tile={tile}
+                onPointerEnter={handleTilePointerEnter}
+                onPointerMove={handleTilePointerMove}
+                onPointerLeave={handleTilePointerLeave}
+              />
             ))}
           </div>
         ))}
       </div>
+
+      {hoverPreview && (
+        <div
+          className="wall-hover-preview"
+          data-testid="wall-hover-preview"
+          data-photo-id={hoverPreview.photoId}
+          style={hoverPreviewStyle(hoverPreview)}
+        >
+          <img
+            className="wall-hover-preview__img"
+            data-testid="wall-hover-preview-image"
+            data-media-variant="modal"
+            src={mediaResourcePath(hoverPreview.photoId, 'modal')}
+            alt=""
+            draggable={false}
+          />
+        </div>
+      )}
     </div>
   );
 }
 
 function WallCanvasTile(
-  props: { tile: RenderedTileInstance },
+  props: {
+    tile: RenderedTileInstance;
+    onPointerEnter?: (
+      event: React.PointerEvent<HTMLDivElement>,
+      photoId: string,
+    ) => void;
+    onPointerMove?: (
+      event: React.PointerEvent<HTMLDivElement>,
+      photoId: string,
+    ) => void;
+    onPointerLeave?: (photoId: string) => void;
+  },
 ): JSX.Element {
-  const { tile } = props;
+  const { tile, onPointerEnter, onPointerMove, onPointerLeave } = props;
   // Latch the mount-time appearance decision so unrelated rerenders do
   // not strip the fade class before the initial opacity animation ends.
   const shouldFadeOnMountRef = useRef(tile.shouldFadeOnMount);
@@ -555,9 +666,13 @@ function WallCanvasTile(
   return (
     <div
       className="wall-canvas__tile"
+      data-testid="wall-photo-tile"
       data-photo-id={tile.photoId}
       data-appearance={shouldFadeOnMountRef.current ? 'fresh' : 'seen'}
       style={tileStyle(tile.x, tile.y, tile.width, tile.height)}
+      onPointerEnter={(event) => onPointerEnter?.(event, tile.photoId)}
+      onPointerMove={(event) => onPointerMove?.(event, tile.photoId)}
+      onPointerLeave={() => onPointerLeave?.(tile.photoId)}
     >
       <img
         className="wall-canvas__img"
@@ -592,4 +707,20 @@ function tileStyle(
     '--tile-x': `${x}px`,
     '--tile-y': `${y}px`,
   } as unknown as React.CSSProperties;
+}
+
+function hoverPreviewStyle(preview: HoverPreviewState): React.CSSProperties {
+  return {
+    width: preview.width,
+    height: preview.height,
+    '--hover-preview-left': `${preview.left}px`,
+    '--hover-preview-top': `${preview.top}px`,
+  } as unknown as React.CSSProperties;
+}
+
+function supportsFinePointerHover(): boolean {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+    return false;
+  }
+  return window.matchMedia('(hover: hover) and (pointer: fine)').matches;
 }

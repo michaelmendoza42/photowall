@@ -1,5 +1,5 @@
 # Glossary
-Last edited: 2026-06-03
+Last edited: 2026-06-04
 Status: Active
 Scope: Shared behavioral and technical terminology for repositories created from this template
 Related files: `README.md`, `product/README.md`, `workshop-ideas/README.md`, `system/README.md`, `standards/documentation-model.md`, `standards/documentation-schema.md`
@@ -119,6 +119,16 @@ The MVP fallback navigation gesture for mice without trackpad wheel input: press
 - **Used by:** camera/interaction subsystem and modal-open logic
 - **Change risk:** medium — affects both panning feel and accidental-modal-open behavior
 - **Surfaced to users:** yes — directly experienced when click-dragging
+
+### Anchored hover preview
+The larger hover-only photo preview shown on desktop fine-pointer devices. It stays anchored to the source tile, targets about the midpoint between that tile’s current rendered size and that photo’s eventual focused-photo modal render size, and disappears during drag or while the modal is open.
+
+- **Lives in:** `docs/product/photo-wall-experience.md`
+- **Why it exists:** distinguishes the approved hover behavior from both a tiny tile-scale effect and a centered lightbox-like hover overlay
+- **Used by:** wall interaction logic, hover-preview sizing, and browser regression coverage
+- **Change risk:** medium — changing it affects hover sizing, layering, and the click-vs-drag interaction contract
+- **Alias:** hover preview
+- **Surfaced to users:** yes — directly experienced while browsing the wall
 
 ### Focused-photo modal
 The simple, viewport-sized overlay opened when a user clicks a non-dragged photo. It has an explicit visible `X` close control and returns the user to the same wall context on close.
@@ -471,6 +481,9 @@ Short definition.
 - `standards/documentation-schema.md`
 
 ## Changelog
+
+### 2026-06-04
+- Added `Anchored hover preview` to capture the approved hover-only enlargement behavior and keep it distinct from the focused-photo modal.
 
 ### 2026-06-03
 - Added `Wrap-around wall` to capture the approved finite looping-navigation model and keep it distinct from a truly infinite world.

@@ -1,9 +1,9 @@
 # Photo Wall Experience
-Last edited: 2026-06-03
+Last edited: 2026-06-04
 Status: Approved
 Decision owner: Michael
 Drafted by: Pi
-Approved by: Michael via mission /plan handoff on 2026-06-02 plus follow-up implementation approval for wrap-around navigation on 2026-06-03
+Approved by: Michael via mission /plan handoff on 2026-06-02, follow-up implementation approval for wrap-around navigation on 2026-06-03, and anchored hover-preview approval plus midpoint sizing clarification on 2026-06-04
 Change policy: Do not change without explicit human approval
 Related files: `../../README.md`, `../glossary.md`, `../system/photo-library-source-and-runtime.md`, `README.md`
 
@@ -24,6 +24,8 @@ The MVP is a trusted-LAN, Docker-run app with no auth boundary and no internet-f
 - The wall must also support mouse click-drag panning as a fallback for users without a trackpad, with click activation suppressed after the drag threshold is crossed.
 - Additional photos should load dynamically as the user keeps panning the wall, so the experience does not require the entire library to load up front.
 - The wall should wrap seamlessly at its left/right and top/bottom edges within the currently loaded finite world instead of stopping at hard camera clamps.
+- On desktop fine-pointer devices, hovering a photo should open an anchored hover preview for that same photo without destabilizing the surrounding wall layout.
+- The anchored hover preview should render at about the midpoint between that tile’s current rendered size and the eventual focused-photo modal render size for the same photo, stay anchored to the source tile instead of centering in the viewport, and remain preview-only.
 - A photo may softly fade in the first time it becomes visible during the current session to suggest progressive loading, but the same photo should not repeatedly re-fade on every later revisit.
 - Clicking a non-dragged photo must open a simple focused-photo modal sized to the browser viewport, with an explicit visible `X` control to close.
 - Closing the focused-photo modal must return the user to the same wall context they came from.
@@ -38,6 +40,8 @@ The MVP is a trusted-LAN, Docker-run app with no auth boundary and no internet-f
 
 - With no filter or playlist active, the wall should show the default broad view of the configured photo library in a deterministic order derived from discovered library structure so browsing follows the expected year/event/path flow.
 - The user should be able to pan in any direction with a trackpad or by click-dragging with a mouse; reversing direction should remain smooth without changing the model from 2D panning to vertical scrolling.
+- Minor pointer jitter that stays below the drag threshold should still resolve as a click on the hovered photo rather than shifting the wall first.
+- The anchored hover preview should be suppressed while the user is actively dragging the wall and while the focused-photo modal is open.
 - Panning past the right edge should immediately continue from the left side of the currently loaded wall, and vice versa; the same wrap rule applies for top/bottom travel.
 - Applying a year or folder filter should narrow the displayed set coherently without leaving stale mixed-result tiles onscreen and without changing the minimal overall framing of the page.
 - A likely initial library shape is top-level year folders containing event folders and then actual photos, but the browsing experience should still be based on discovered folders rather than a hardcoded list.
@@ -65,6 +69,11 @@ The MVP is a trusted-LAN, Docker-run app with no auth boundary and no internet-f
 - `../standards/testing.md`
 
 ## Changelog
+
+### 2026-06-04
+- Replaced the old slight-hover-enlarge rule with an anchored hover preview on desktop fine pointers.
+- Defined the hover preview size target as about the midpoint between the current tile size and the eventual focused-photo modal render size for the same photo.
+- Clarified that sub-threshold pointer jitter must still click-open the photo, while true drag-threshold crossings suppress click activation.
 
 ### 2026-06-03
 - Updated the approved wall behavior to use seamless wrap-around navigation at all four edges within the finite loaded wall instead of hard camera clamping.

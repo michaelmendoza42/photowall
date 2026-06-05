@@ -8,6 +8,8 @@ node_modules/
 dist/
 .vite/
 *.tsbuildinfo
+playwright-report/
+test-results/
 
 # Local env and runtime data
 .env

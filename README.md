@@ -1,5 +1,5 @@
 # photo-wall
-Last edited: 2026-06-03
+Last edited: 2026-06-04
 
 Minimal Docker-run web app for browsing a configured photo library on the home LAN as a large, gapless photo wall.
 
@@ -48,7 +48,7 @@ playwright/   browser-driven acceptance tests (later phases)
 - dynamically load more photos as the user keeps browsing the wall
 - support true two-axis trackpad panning using browser wheel deltas
 - support mouse click-drag panning with click suppression after the drag threshold
-- slightly enlarge a photo on hover without destabilizing layout
+- show an anchored hover preview on desktop fine pointers at about the midpoint between the current tile size and the eventual full-photo modal size without destabilizing layout
 - open a clicked photo in a simple viewport-sized modal with an explicit `X` close control
 - keep the default UI minimal: photos first, with a small circular menu button for filters and playlists
 - support **year** and **folder** filters only for the MVP
