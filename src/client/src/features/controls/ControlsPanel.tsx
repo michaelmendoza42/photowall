@@ -14,6 +14,7 @@ import {
   toggleYear,
   type ActiveFilters,
 } from '../../state/filters.js';
+import { LibraryRootEditor } from '../library/LibraryRootEditor.js';
 
 export interface ControlsPanelProps {
   open: boolean;
@@ -29,6 +30,10 @@ export interface ControlsPanelProps {
   updatePending?: boolean;
   deletePending?: boolean;
   errorMessage?: string | null;
+  libraryRoot: string;
+  onLibraryRootChange: (nextRoot: string) => void;
+  libraryRootPending?: boolean;
+  libraryRootError?: string | null;
 }
 
 /**
@@ -68,6 +73,10 @@ export function ControlsPanel(props: ControlsPanelProps): JSX.Element {
     updatePending,
     deletePending,
     errorMessage,
+    libraryRoot,
+    onLibraryRootChange,
+    libraryRootPending,
+    libraryRootError,
   } = props;
 
   const [name, setName] = useState('');
@@ -192,6 +201,17 @@ export function ControlsPanel(props: ControlsPanelProps): JSX.Element {
               {errorMessage}
             </p>
           )}
+
+          <section className="controls__section">
+            <LibraryRootEditor
+              currentRoot={libraryRoot}
+              onSubmit={onLibraryRootChange}
+              pending={libraryRootPending}
+              errorMessage={libraryRootError}
+              hint="Use the path the server can actually read. The local picker only prefills when the browser exposes a compatible path."
+              submitLabel="Change root"
+            />
+          </section>
 
           <section className="controls__section">
             <h3 className="controls__section-title">Years</h3>

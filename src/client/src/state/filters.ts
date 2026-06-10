@@ -12,6 +12,8 @@ export interface ActiveFilters {
   playlistId: string | null;
 }
 
+export const ACTIVE_FILTERS_STORAGE_KEY = 'photo-wall.active-filters.v1';
+
 export const EMPTY_FILTERS: ActiveFilters = {
   years: [],
   folders: [],
@@ -114,4 +116,23 @@ export function findStaleFolders(
   if (saved.length === 0) return [];
   const set = new Set(availableFolders);
   return saved.filter((f) => !set.has(f));
+}
+
+export function parseActiveFilters(raw: string | null): ActiveFilters {
+  if (!raw) return EMPTY_FILTERS;
+
+  try {
+    const parsed = JSON.parse(raw) as Partial<ActiveFilters>;
+    return {
+      years: Array.isArray(parsed.years)
+        ? parsed.years.filter((year): year is number => Number.isInteger(year)).sort((a, b) => a - b)
+        : [],
+      folders: Array.isArray(parsed.folders)
+        ? parsed.folders.filter((folder): folder is string => typeof folder === 'string').sort()
+        : [],
+      playlistId: typeof parsed.playlistId === 'string' ? parsed.playlistId : null,
+    };
+  } catch {
+    return EMPTY_FILTERS;
+  }
 }

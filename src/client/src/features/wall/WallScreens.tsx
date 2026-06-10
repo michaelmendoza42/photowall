@@ -1,4 +1,5 @@
 import type { LibraryStatusResponse } from '../../../../shared/api/library.js';
+import { LibraryRootEditor } from '../library/LibraryRootEditor.js';
 import { summarizeFilters, type ActiveFilters } from '../../state/filters.js';
 
 function StateFrame({
@@ -39,9 +40,15 @@ export function LoadingState(): JSX.Element {
 export function ConfigErrorState({
   message,
   status,
+  rootChangePending,
+  rootChangeError,
+  onRootChange,
 }: {
   message: string;
   status: LibraryStatusResponse | null;
+  rootChangePending?: boolean;
+  rootChangeError?: string | null;
+  onRootChange: (nextRoot: string) => void;
 }): JSX.Element {
   return (
     <StateFrame
@@ -60,6 +67,15 @@ export function ConfigErrorState({
           <dd>{status.scanState}</dd>
         </dl>
       )}
+      <LibraryRootEditor
+        currentRoot={status?.libraryRoot ?? ''}
+        onSubmit={onRootChange}
+        pending={rootChangePending}
+        errorMessage={rootChangeError}
+        title="Choose a readable library root"
+        hint="Set the server-visible root path. The local picker can prefill it only when the browser exposes a compatible path."
+        submitLabel="Open this root"
+      />
     </StateFrame>
   );
 }

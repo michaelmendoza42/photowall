@@ -16,7 +16,7 @@ import type { LibraryService } from '../snapshots/library-service.js';
 import type { DerivativeService } from '../media/derivative-service.js';
 
 const QuerySchema = z.object({
-  variant: z.enum(['wall', 'modal']).default('wall'),
+  variant: z.enum(['thumb', 'wall', 'modal']).default('wall'),
   format: z.enum(['webp', 'jpeg']).default(DEFAULT_MEDIA_FORMAT),
 });
 

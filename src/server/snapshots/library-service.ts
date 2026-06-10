@@ -12,6 +12,10 @@ import {
   writeSnapshotAtomically,
   type SnapshotPaths,
 } from './storage.js';
+import {
+  readLibraryRootOverride,
+  writeLibraryRootOverride,
+} from '../config/library-root-override.js';
 
 export interface LibraryServiceLogger {
   debug?: (obj: unknown, msg?: string) => void;
@@ -55,6 +59,7 @@ interface ServiceState {
  */
 export class LibraryService {
   private readonly logger?: LibraryServiceLogger;
+  private configuredLibraryRoot: string;
   private resolvedLibraryRoot: string | null = null;
   private snapshotPaths: SnapshotPaths;
   private inflight: Promise<PersistedSnapshot> | null = null;
@@ -69,6 +74,7 @@ export class LibraryService {
 
   constructor(private readonly options: LibraryServiceOptions) {
     this.logger = options.logger;
+    this.configuredLibraryRoot = options.libraryRoot;
     this.snapshotPaths = resolveSnapshotPaths(options.dataRoot);
   }
 
@@ -77,17 +83,21 @@ export class LibraryService {
    * existing snapshot from disk.
    */
   async initialize(): Promise<void> {
-    this.resolvedLibraryRoot = await this.validateLibraryRoot(
-      this.options.libraryRoot,
-    );
     this.snapshotPaths = await ensureDataPaths(this.options.dataRoot);
+    const overrideLibraryRoot = await readLibraryRootOverride(
+      this.snapshotPaths.dataRoot,
+    );
+    this.configuredLibraryRoot = overrideLibraryRoot ?? this.options.libraryRoot;
+    this.resolvedLibraryRoot = await this.validateLibraryRoot(
+      this.configuredLibraryRoot,
+    );
     this.assertMountDiscipline(
       this.resolvedLibraryRoot,
       this.snapshotPaths.dataRoot,
     );
 
     const prior = await readSnapshotIfPresent(this.snapshotPaths.snapshotFile);
-    if (prior) {
+    if (prior && prior.libraryRoot === this.resolvedLibraryRoot) {
       this.snapshot.active = prior;
       this.snapshot.warmLoaded = true;
       this.snapshot.state = 'ready';
@@ -104,7 +114,10 @@ export class LibraryService {
         'warm-loaded prior snapshot',
       );
     } else {
-      this.logger?.debug?.({}, 'no prior snapshot on disk — will scan from cold');
+      this.logger?.debug?.(
+        { hasPriorSnapshot: Boolean(prior) },
+        'no compatible prior snapshot on disk — will scan from cold',
+      );
     }
   }
 
@@ -113,6 +126,10 @@ export class LibraryService {
       throw new Error('LibraryService.initialize must be called before getLibraryRoot');
     }
     return this.resolvedLibraryRoot;
+  }
+
+  getConfiguredLibraryRoot(): string {
+    return this.configuredLibraryRoot;
   }
 
   getDataRoot(): string {
@@ -129,6 +146,20 @@ export class LibraryService {
 
   getStateView(): ServiceState {
     return { ...this.snapshot };
+  }
+
+  async updateLibraryRoot(input: string): Promise<PersistedSnapshot> {
+    const nextConfiguredRoot = input.trim();
+    const nextResolvedRoot = await this.validateLibraryRoot(nextConfiguredRoot);
+    this.assertMountDiscipline(nextResolvedRoot, this.snapshotPaths.dataRoot);
+    await writeLibraryRootOverride(this.snapshotPaths.dataRoot, nextResolvedRoot);
+    this.configuredLibraryRoot = nextResolvedRoot;
+    this.resolvedLibraryRoot = nextResolvedRoot;
+    this.snapshot.active = null;
+    this.snapshot.state = 'idle';
+    this.snapshot.warmLoaded = false;
+    this.snapshot.lastError = null;
+    return this.rescan();
   }
 
   /**

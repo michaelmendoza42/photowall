@@ -1,5 +1,5 @@
 # Photo Wall Docker/LAN Operator Runbook
-Last edited: 2026-06-03
+Last edited: 2026-06-10
 Status: Active
 Owner: Michael
 Related files: `../../README.md`, `../system/photo-library-source-and-runtime.md`, `../product/photo-wall-experience.md`, `../../docker-compose.yml`, `../../.env.example`
@@ -68,7 +68,15 @@ Use this runbook when you need to:
    http://<host-lan-ip>:<PHOTO_WALL_PORT>
    ```
 
-7. If the library contents changed and you need a fresh scan, restart the app:
+7. If the app opens with the wrong or missing root, use the in-app root editor:
+
+   - open the wall UI
+   - if the library is unavailable, use the root form shown on that state screen
+   - otherwise open the circular controls menu and use the `Library root` form there
+   - prefer entering the server-visible/container-visible path explicitly
+   - use `Use local picker` only as a convenience prefill when the browser can reveal a compatible path
+
+8. If the library contents changed and you need a fresh scan, restart the app:
 
    ```bash
    docker compose restart app
@@ -145,6 +153,7 @@ Check the `startup summary` and `library scan completed` logs first:
 - `photoCount: 0` means the configured source root did not yield supported photos
 - non-zero `warningCount` means the scan completed but skipped some entries
 - `warmLoaded: true` means the app initially served a prior snapshot before the new scan finished
+- if the root shown in the UI is wrong, change it from the in-app `Library root` form before rebuilding containers or editing hidden state
 
 ## Related docs
 
@@ -155,6 +164,9 @@ Check the `startup summary` and `library scan completed` logs first:
 - `../../.env.example`
 
 ## Changelog
+
+### 2026-06-10
+- Added the operator-facing in-app library-root recovery step and clarified when the local picker is only a best-effort prefill helper.
 
 ### 2026-06-03
 - Added the optional dev-only `PHOTO_WALL_SCAN_TOP_LEVEL_YEARS_ONLY` escape hatch for noisy local libraries.

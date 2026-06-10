@@ -1,12 +1,14 @@
 # `src/server/`
 
-Fastify + TypeScript backend. Scope of this directory:
+Current Fastify + TypeScript backend.
 
-- `config/` — env loading and validation
-- `routes/` — HTTP route registration (`/healthz` today, query/playlist/media in later phases)
-- `services/` — cross-cutting service wiring (static client mounting today)
-- `index.ts` — entrypoint: configure logger, register routes, bind on the
-  configured host/port, serve the built client in production
-
-Later phases will add `scanner/`, `snapshots/`, `playlists/`, `media/`, and
-`utils/` as outlined in `01-architecture.md`.
+- `index.ts` — server bootstrap, startup logging, service wiring, and bind/listen lifecycle
+- `config/` — environment loading and validation
+- `scanner/` — recursive library walk, supported-file filtering, metadata extraction, and year inference helpers
+- `snapshots/` — library snapshot lifecycle and persisted scan state
+- `query/` — paginated photo-query filtering and cursor helpers
+- `playlists/` — saved-filter playlist schema, storage, and service layer
+- `media/` — media source resolution and derivative-image generation/cache helpers
+- `routes/` — HTTP routes for health, library status/facets, photos, playlists, and media
+- `services/` — production static-client mounting
+- `version.ts` — service version metadata

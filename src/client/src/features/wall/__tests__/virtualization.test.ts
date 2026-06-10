@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { PackedRow } from '../packer.js';
+import type { PhotoQueryRecord } from '../../../../../shared/api/photos.js';
+import { packJustifiedRows, type PackedRow } from '../packer.js';
 import {
   computeVisibleRowRange,
   computeWrappedAxisCopies,
@@ -12,6 +13,22 @@ function row(
   height: number,
 ): PackedRow {
   return { index, offsetTop, height, targetHeight: height, tiles: [] };
+}
+
+function photo(id: string, width: number, height: number): PhotoQueryRecord {
+  return {
+    id,
+    relativePath: `2024/event/${id}.jpg`,
+    directoryPath: '2024/event',
+    filename: `${id}.jpg`,
+    width,
+    height,
+    aspectRatio: width / height,
+    fileSize: 1000,
+    mtimeMs: 0,
+    year: 2024,
+    yearSource: 'top-level',
+  };
 }
 
 const ROWS: PackedRow[] = Array.from({ length: 20 }, (_, i) =>
@@ -43,7 +60,7 @@ describe('computeVisibleRowRange', () => {
   });
 
   it('mounts only the rows overlapping the viewport when overscan is zero', () => {
-    // viewport [0, 800) → rows 0..3 are visible (each 200 tall).
+    // viewport [0, 800) -> rows 0..3 are visible (each 200 tall).
     const range = computeVisibleRowRange({
       rows: ROWS,
       scrollTop: 0,
@@ -54,7 +71,7 @@ describe('computeVisibleRowRange', () => {
   });
 
   it('shifts the visible range as scrollTop advances', () => {
-    // viewport [500, 1300) → rows 2..6 are visible.
+    // viewport [500, 1300) -> rows 2..6 are visible.
     const range = computeVisibleRowRange({
       rows: ROWS,
       scrollTop: 500,
@@ -94,6 +111,28 @@ describe('computeVisibleRowRange', () => {
     });
     expect(range.endIndex).toBe(ROWS.length);
     expect(range.startIndex).toBe(ROWS.length - 3);
+  });
+
+  it('keeps a bounded portrait band mounted while any visible portion remains onscreen', () => {
+    const packed = packJustifiedRows(
+      [photo('portrait', 100, 400)],
+      {
+        worldWidth: 1200,
+        maxRowHeight: 480,
+        columnWidthFactors: [1],
+        tileScale: 1,
+      },
+      false,
+    );
+
+    const visible = computeVisibleRowRange({
+      rows: packed.rows,
+      scrollTop: 1000,
+      viewportHeight: 200,
+      overscan: NO_OVERSCAN,
+    });
+
+    expect(visible).toEqual({ startIndex: 0, endIndex: 1 });
   });
 });
 

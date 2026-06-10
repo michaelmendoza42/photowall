@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import Fastify from 'fastify';
 import {
   LIBRARY_FACETS_PATH,
+  LIBRARY_ROOT_PATH,
   LIBRARY_STATUS_PATH,
   SNAPSHOT_SCHEMA_VERSION,
   type LibraryFacetsResponse,
@@ -17,6 +18,7 @@ import { registerLibraryRoutes } from '../library.js';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, '..', '..', '..', '..');
 const smokeRoot = path.join(repoRoot, 'fixtures', 'library-smoke');
+const edgeRoot = path.join(repoRoot, 'fixtures', 'library-edge');
 
 describe('library routes', () => {
   let dataRoot: string;
@@ -58,6 +60,35 @@ describe('library routes', () => {
     expect(facets.folders.length).toBeGreaterThanOrEqual(6);
     const root = facets.folders.find((f) => f.path === '');
     expect(root?.photoCount).toBe(5);
+
+    await app.close();
+  });
+
+  it('updates the configured library root and returns refreshed status', async () => {
+    const app = Fastify({ logger: false });
+    const service = new LibraryService({ libraryRoot: smokeRoot, dataRoot });
+    await service.initialize();
+    await service.rescan();
+    await registerLibraryRoutes(app, service);
+
+    const updateRes = await app.inject({
+      method: 'PUT',
+      url: LIBRARY_ROOT_PATH,
+      payload: { libraryRoot: edgeRoot },
+    });
+    expect(updateRes.statusCode).toBe(200);
+    const status = updateRes.json() as LibraryStatusResponse;
+    expect(status.libraryRoot).toBe(await fs.realpath(edgeRoot));
+    expect(status.scanState).toBe('ready');
+    expect(status.snapshotId).not.toBeNull();
+
+    const invalidRes = await app.inject({
+      method: 'PUT',
+      url: LIBRARY_ROOT_PATH,
+      payload: { libraryRoot: '' },
+    });
+    expect(invalidRes.statusCode).toBe(400);
+    expect(invalidRes.json()).toEqual({ error: 'library_root_required' });
 
     await app.close();
   });

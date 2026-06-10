@@ -20,9 +20,9 @@ export function mediaResourcePath(
 }
 
 /** Variants the MVP exposes. Keep narrow — broader variants are deferred. */
-export type MediaVariant = 'wall' | 'modal';
+export type MediaVariant = 'thumb' | 'wall' | 'modal';
 
-export const MEDIA_VARIANT_VALUES: readonly MediaVariant[] = ['wall', 'modal'];
+export const MEDIA_VARIANT_VALUES: readonly MediaVariant[] = ['thumb', 'wall', 'modal'];
 
 /** Output formats. webp is the default; jpeg is the universal fallback. */
 export type MediaFormat = 'webp' | 'jpeg';
@@ -52,6 +52,7 @@ export interface MediaVariantSpec {
  * because the modal frame itself caps usable area on common displays.
  */
 export const MEDIA_VARIANT_SPECS: Record<MediaVariant, MediaVariantSpec> = {
+  thumb: { variant: 'thumb', longEdge: 256, quality: 72 },
   wall: { variant: 'wall', longEdge: 640, quality: 80 },
   modal: { variant: 'modal', longEdge: 1800, quality: 85 },
 };

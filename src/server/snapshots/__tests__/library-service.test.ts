@@ -12,6 +12,7 @@ import { DataRootError, resolveSnapshotPaths } from '../storage.js';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, '..', '..', '..', '..');
 const smokeRoot = path.join(repoRoot, 'fixtures', 'library-smoke');
+const edgeRoot = path.join(repoRoot, 'fixtures', 'library-edge');
 
 describe('LibraryService', () => {
   let dataRoot: string;
@@ -117,6 +118,25 @@ describe('LibraryService', () => {
     await service.initialize();
     expect(service.getStateView().warmLoaded).toBe(false);
     expect(service.getActiveSnapshot()).toBeNull();
+  });
+
+  it('updates the configured library root, rescans, and persists the override across restart', async () => {
+    const service = new LibraryService({ libraryRoot: smokeRoot, dataRoot });
+    await service.initialize();
+    await service.rescan();
+
+    await service.updateLibraryRoot(edgeRoot);
+
+    expect(service.getLibraryRoot()).toBe(await fs.realpath(edgeRoot));
+    expect(service.getConfiguredLibraryRoot()).toBe(await fs.realpath(edgeRoot));
+    expect(service.getStateView().state).toBe('ready');
+    expect(service.getActiveSnapshot()?.libraryRoot).toBe(await fs.realpath(edgeRoot));
+
+    const second = new LibraryService({ libraryRoot: smokeRoot, dataRoot });
+    await second.initialize();
+    expect(second.getLibraryRoot()).toBe(await fs.realpath(edgeRoot));
+    expect(second.getStateView().warmLoaded).toBe(true);
+    expect(second.getActiveSnapshot()?.libraryRoot).toBe(await fs.realpath(edgeRoot));
   });
 
   it('ignores a prior snapshot with the wrong schemaVersion', async () => {

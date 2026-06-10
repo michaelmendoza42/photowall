@@ -1,25 +1,31 @@
-// World-width strategy.
+// Wall-width and tile-density strategy.
 //
-// The wall remains a bounded-width, vertically growing world. The
-// visual rhythm is now driven by a fixed set of irregular column-width
-// factors rather than by full-width horizontal rows, so the mosaic reads
-// primarily through vertical seams and staggered tile bottoms.
+// The wall remains a bounded-width, vertically growing world. World
+// width controls how much horizontal travel/panning space exists.
+// Tile density is a separate concern controlled by `WALL_TILE_SCALE`,
+// where `1` means the previous base column width and smaller values
+// make tiles smaller by increasing effective column count.
 
 export const WORLD_WIDTH_MIN = 360;
 export const WORLD_WIDTH_MAX = 3600;
 export const WORLD_WIDTH_VIEWPORT_MULTIPLIER = 2.2;
 
-/** Preferred tile span in CSS px — used as the packer's base size. */
-export const DEFAULT_TARGET_ROW_HEIGHT = 300;
+/**
+ * Global wall-tile width multiplier. `1` means the previous base width;
+ * `0.75` makes tiles 25% smaller than that baseline.
+ */
+export const WALL_TILE_SCALE = 0.75;
 
-/** Hard ceiling on rendered tile height and virtualization band height. */
+/**
+ * Compatibility name retained: this now acts as the nominal virtualization
+ * band height, not a visual cap on tile height.
+ */
 export const DEFAULT_MAX_ROW_HEIGHT = 460;
 
 /**
  * Per-column multipliers applied across the wall width. The sequence is
  * deliberately irregular so the wall reads as a vertical mosaic rather
- * than as equally spaced strips. Average ≈ 1.0, so overall density
- * stays near the previous baseline.
+ * than as equally spaced strips.
  */
 export const DEFAULT_MOSAIC_COLUMN_FACTORS: readonly number[] = [
   1.22,
@@ -32,8 +38,8 @@ export const DEFAULT_MOSAIC_COLUMN_FACTORS: readonly number[] = [
 /**
  * Map a viewport width onto the wall's world width. The world stays
  * bounded, but deliberately much wider than the viewport so the
- * horizontal wrap seam stays out of view long enough for diagonal pans
- * to read as continuous movement rather than an early direction flip.
+ * horizontal wrap seam stays out of view long enough for 2D pans to
+ * read as continuous movement rather than an early direction flip.
  */
 export function computeWorldWidth(viewportWidth: number): number {
   if (!Number.isFinite(viewportWidth) || viewportWidth <= 0) {

@@ -9,7 +9,6 @@ import {
 import {
   DEFAULT_MAX_ROW_HEIGHT,
   DEFAULT_MOSAIC_COLUMN_FACTORS,
-  DEFAULT_TARGET_ROW_HEIGHT,
 } from './worldWidth.js';
 import {
   computeWrappedAxisCopies,
@@ -20,10 +19,19 @@ import {
   collectFirstAppearancePhotoIds,
   rememberSeenPhotoIds,
 } from './appearanceTracking.js';
-import { packJustifiedRows, type PackerResult } from './packer.js';
+import type { PackerResult } from './packer.js';
+import { buildWallLayout, type GroupedWallFoundation } from './groupedWall.js';
 import {
   computeAnchoredHoverPreviewRect,
 } from './hoverPreview.js';
+import { PixiWallSurface } from './PixiWallSurface.js';
+import { computeWrapAwareCameraTarget, easeOutCubic } from './signpostNavigation.js';
+import {
+  detectEdgeIntent,
+  findDominantVisibleAlbumKey,
+  selectVisibleSignposts,
+  type VisibleSignpost,
+} from './signposts.js';
 import {
   DRAG_THRESHOLD_PX,
   hasCrossedThreshold,
@@ -34,19 +42,25 @@ import { mediaResourcePath } from '../../../../shared/api/media.js';
 import { DEFAULT_OVERSCAN, type LayoutOverscan } from '../../state/layout.js';
 import {
   panBy,
+  panTo,
   wrapTravelOffset,
   type CameraState,
 } from '../../state/camera.js';
 
 /** How close the bottom edge must get to the frontier before we fetch. */
 const FRONTIER_THRESHOLD_PX = 800;
+const SIGNPOST_LINGER_MS = 900;
+const SIGNPOST_GLIDE_MS = 240;
+const MIN_WALL_ZOOM = 0.55;
+const MAX_WALL_ZOOM = 2.4;
+const ZOOM_SENSITIVITY = 0.0036;
 
 export interface WallStats {
   totalRows: number;
   mountedRows: number;
   visibleStart: number;
   visibleEnd: number;
-  /** Continuous vertical travel offset (legacy debug label). */
+  /** Continuous vertical travel offset used by the debug overlay. */
   scrollTop: number;
   contentHeight: number;
   worldWidth: number;
@@ -71,11 +85,19 @@ export interface WallCanvasProps {
   hasNextPage: boolean;
   isFetchingNextPage: boolean;
   onLoadMore: () => void;
+  groupedFoundation?: GroupedWallFoundation | null;
   overscan?: LayoutOverscan;
   onStatsChange?: (stats: WallStats) => void;
   camera: CameraState;
   onCameraChange: (next: CameraState) => void;
   onDragStateChange?: (state: WallDragState) => void;
+  activeAlbumAreaCount?: number;
+  /**
+   * Enable grouped signpost reveal + glide behavior for grouped views.
+   * Callers may still disable these controls for tightly scoped grouped
+   * experiments, but the active grouped wall keeps them enabled.
+   */
+  signpostsEnabled?: boolean;
   /**
    * Fired when a tile receives a non-drag click. Suppressed when the
    * preceding pointer gesture crossed the drag threshold so a drag-pan
@@ -100,10 +122,13 @@ interface ActiveDrag {
 interface RenderedTileInstance {
   key: string;
   photoId: string;
+  albumKey: string | null;
   x: number;
   y: number;
   width: number;
   height: number;
+  sourceWidth: number;
+  sourceHeight: number;
   shouldFadeOnMount: boolean;
 }
 
@@ -130,11 +155,14 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
     hasNextPage,
     isFetchingNextPage,
     onLoadMore,
+    groupedFoundation = null,
     overscan = DEFAULT_OVERSCAN,
     onStatsChange,
     camera,
     onCameraChange,
     onDragStateChange,
+    activeAlbumAreaCount = 1,
+    signpostsEnabled = true,
     onPhotoOpen,
     isModalOpen = false,
     dragThresholdPx = DRAG_THRESHOLD_PX,
@@ -144,6 +172,8 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
   const dragRef = useRef<ActiveDrag | null>(null);
   const pressedPhotoIdRef = useRef<string | null>(null);
   const seenPhotoIdsRef = useRef<Set<string>>(new Set());
+  const signpostHideTimeoutRef = useRef<number | null>(null);
+  const glideFrameRef = useRef<number | null>(null);
 
   // Mirror props into refs so wheel/pointer handlers always read the
   // latest callbacks without forcing rebinds on every state tick.
@@ -156,6 +186,21 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
   useEffect(() => {
     cameraChangeRef.current = onCameraChange;
   }, [onCameraChange]);
+
+  const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
+  // Mirror the live drag flag into React state so the `data-dragging`
+  // attribute updates on the same tick as the gesture, not on the next
+  // unrelated render. The ref above remains the source of truth inside
+  // the high-frequency pointer handlers.
+  const [dragActive, setDragActive] = useState(false);
+  const [hoverPreview, setHoverPreview] = useState<HoverPreviewState | null>(null);
+  const [zoom, setZoom] = useState(1);
+  const [signpostsVisible, setSignpostsVisible] = useState(false);
+
+  const zoomRef = useRef(zoom);
+  useEffect(() => {
+    zoomRef.current = zoom;
+  }, [zoom]);
 
   const dragStateChangeRef = useRef(onDragStateChange);
   useEffect(() => {
@@ -174,14 +219,6 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
     for (const p of photos) m.set(p.id, p);
     return m;
   }, [photos]);
-
-  const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
-  // Mirror the live drag flag into React state so the `data-dragging`
-  // attribute updates on the same tick as the gesture, not on the next
-  // unrelated render. The ref above remains the source of truth inside
-  // the high-frequency pointer handlers.
-  const [dragActive, setDragActive] = useState(false);
-  const [hoverPreview, setHoverPreview] = useState<HoverPreviewState | null>(null);
 
   // Track viewport size of the canvas. ResizeObserver fires
   // synchronously after mount so the first render measures the actual
@@ -203,19 +240,48 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
 
   const viewportWidth = viewportSize.width;
   const viewportHeight = viewportSize.height;
+  const effectiveViewportWidth = viewportWidth / zoom;
+  const effectiveViewportHeight = viewportHeight / zoom;
+
+  const cancelActiveGlide = useCallback(() => {
+    if (glideFrameRef.current !== null) {
+      cancelAnimationFrame(glideFrameRef.current);
+      glideFrameRef.current = null;
+    }
+  }, []);
+
+  const revealSignposts = useCallback((lingerMs = SIGNPOST_LINGER_MS) => {
+    setSignpostsVisible(true);
+    if (signpostHideTimeoutRef.current !== null) {
+      window.clearTimeout(signpostHideTimeoutRef.current);
+    }
+    signpostHideTimeoutRef.current = window.setTimeout(() => {
+      setSignpostsVisible(false);
+      signpostHideTimeoutRef.current = null;
+    }, lingerMs);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      cancelActiveGlide();
+      if (signpostHideTimeoutRef.current !== null) {
+        window.clearTimeout(signpostHideTimeoutRef.current);
+      }
+    };
+  }, [cancelActiveGlide]);
 
   const packed: PackerResult = useMemo(() => {
-    return packJustifiedRows(
+    return buildWallLayout({
       photos,
-      {
+      hasMore: hasNextPage,
+      foundation: groupedFoundation,
+      options: {
         worldWidth,
-        targetRowHeight: DEFAULT_TARGET_ROW_HEIGHT,
         maxRowHeight: DEFAULT_MAX_ROW_HEIGHT,
         columnWidthFactors: DEFAULT_MOSAIC_COLUMN_FACTORS,
       },
-      hasNextPage,
-    );
-  }, [photos, worldWidth, hasNextPage]);
+    });
+  }, [photos, worldWidth, hasNextPage, groupedFoundation]);
 
   const wrappedCameraX = useMemo(
     () => wrapTravelOffset(camera.x, worldWidth),
@@ -230,10 +296,10 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
     () =>
       computeWrappedAxisCopies({
         period: worldWidth,
-        viewportSize: viewportWidth,
+        viewportSize: effectiveViewportWidth,
         wrappedOffset: wrappedCameraX,
       }),
-    [worldWidth, viewportWidth, wrappedCameraX],
+    [worldWidth, effectiveViewportWidth, wrappedCameraX],
   );
 
   const verticalSegments = useMemo(
@@ -242,11 +308,22 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
         rows: packed.rows,
         contentHeight: packed.contentHeight,
         wrappedScrollTop: wrappedCameraY,
-        viewportHeight,
+        viewportHeight: effectiveViewportHeight,
         overscan,
       }),
-    [packed.rows, packed.contentHeight, wrappedCameraY, viewportHeight, overscan],
+    [packed.rows, packed.contentHeight, wrappedCameraY, effectiveViewportHeight, overscan],
   );
+
+  const photoAlbumKeys = useMemo(() => {
+    const map = new Map<string, string>();
+    if (groupedFoundation?.mode !== 'grouped') return map;
+    for (const album of groupedFoundation.albums) {
+      for (const photo of album.photos) {
+        map.set(photo.id, album.area.albumKey);
+      }
+    }
+    return map;
+  }, [groupedFoundation]);
 
   const renderPlan = useMemo(() => {
     const firstAppearanceIds: string[] = [];
@@ -273,6 +350,9 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
               y: tile.y - row.offsetTop,
               width: tile.width,
               height: tile.height,
+              sourceWidth: tile.sourceWidth,
+              sourceHeight: tile.sourceHeight,
+              albumKey: photoAlbumKeys.get(tile.photoId) ?? null,
               shouldFadeOnMount: rowFreshIdSet.has(tile.photoId),
             });
           }
@@ -298,7 +378,44 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
       ),
       mountedRowCount: mountedRowIndices.size,
     };
-  }, [verticalSegments, packed.rows, horizontalCopies]);
+  }, [verticalSegments, packed.rows, horizontalCopies, photoAlbumKeys]);
+
+  const dominantVisibleAlbumKey = useMemo(() => {
+    if (!signpostsEnabled || groupedFoundation?.mode !== 'grouped') return null;
+    return findDominantVisibleAlbumKey({
+      tiles: renderPlan.renderedRows.flatMap((row) =>
+        row.tiles.map((tile) => ({
+          albumKey: tile.albumKey,
+          left: tile.x,
+          top: row.offsetTop + tile.y,
+          width: tile.width,
+          height: tile.height,
+        })),
+      ),
+      viewportWidth: effectiveViewportWidth,
+      viewportHeight: effectiveViewportHeight,
+    });
+  }, [signpostsEnabled, groupedFoundation, renderPlan.renderedRows, effectiveViewportWidth, effectiveViewportHeight]);
+
+  const dominantVisibleAlbumLabel = useMemo(() => {
+    if (!signpostsEnabled || !dominantVisibleAlbumKey || groupedFoundation?.mode !== 'grouped') {
+      return null;
+    }
+    return (
+      groupedFoundation.albums.find((album) => album.area.albumKey === dominantVisibleAlbumKey)
+        ?.area.label ?? null
+    );
+  }, [signpostsEnabled, dominantVisibleAlbumKey, groupedFoundation]);
+
+  const visibleSignposts = useMemo(() => {
+    if (!signpostsEnabled || !signpostsVisible || isModalOpen) return [];
+    return selectVisibleSignposts({
+      foundation: groupedFoundation,
+      camera,
+      contentHeight: packed.contentHeight,
+      suppressedAlbumKeys: dominantVisibleAlbumKey ? [dominantVisibleAlbumKey] : [],
+    });
+  }, [signpostsEnabled, signpostsVisible, isModalOpen, groupedFoundation, camera, packed.contentHeight, dominantVisibleAlbumKey]);
 
   useEffect(() => {
     rememberSeenPhotoIds(seenPhotoIdsRef.current, renderPlan.firstAppearanceIds);
@@ -308,7 +425,15 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
     if (dragActive || isModalOpen) {
       setHoverPreview(null);
     }
-  }, [dragActive, isModalOpen]);
+    if (isModalOpen) {
+      setSignpostsVisible(false);
+      if (signpostHideTimeoutRef.current !== null) {
+        window.clearTimeout(signpostHideTimeoutRef.current);
+        signpostHideTimeoutRef.current = null;
+      }
+      cancelActiveGlide();
+    }
+  }, [dragActive, isModalOpen, cancelActiveGlide]);
 
   // Dynamic loading: fire whenever the absolute travel position says we
   // are within the frontier threshold. Wrapped render position is
@@ -318,7 +443,7 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
     if (
       shouldLoadNextPage({
         travelY: camera.y,
-        viewportHeight,
+        viewportHeight: effectiveViewportHeight,
         contentHeight: packed.contentHeight,
         thresholdPx: FRONTIER_THRESHOLD_PX,
         isFetchingNext: isFetchingNextPage,
@@ -329,7 +454,7 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
     }
   }, [
     camera.y,
-    viewportHeight,
+    effectiveViewportHeight,
     packed.contentHeight,
     isFetchingNextPage,
     hasNextPage,
@@ -379,10 +504,28 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
       // Honor the event regardless of axis lock — trackpads emit both
       // deltaX and deltaY for 2D gestures.
       event.preventDefault();
+      cancelActiveGlide();
+      if (signpostsEnabled) {
+        revealSignposts();
+      }
       setHoverPreview(null);
+
+      if (event.ctrlKey || event.metaKey) {
+        const nextZoom = clamp(
+          zoomRef.current * Math.exp(-event.deltaY * ZOOM_SENSITIVITY),
+          MIN_WALL_ZOOM,
+          MAX_WALL_ZOOM,
+        );
+        if (nextZoom !== zoomRef.current) {
+          zoomRef.current = nextZoom;
+          setZoom(nextZoom);
+        }
+        return;
+      }
+
       const next = panBy(cameraRef.current, {
-        dx: event.deltaX,
-        dy: event.deltaY,
+        dx: event.deltaX / zoomRef.current,
+        dy: event.deltaY / zoomRef.current,
       });
       if (next !== cameraRef.current) {
         // Update the ref optimistically so a burst of wheel events
@@ -394,7 +537,7 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
     };
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
-  }, []);
+  }, [cancelActiveGlide, revealSignposts, signpostsEnabled]);
 
   const handlePointerDown = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
@@ -403,6 +546,7 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
       if (event.button !== 0 && event.pointerType === 'mouse') return;
       if (dragRef.current) return;
 
+      cancelActiveGlide();
       setHoverPreview(null);
 
       const target = event.target as HTMLElement | null;
@@ -432,13 +576,34 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
         crossedThreshold: false,
       });
     },
-    [],
+    [cancelActiveGlide],
   );
 
   const handlePointerMove = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
       const drag = dragRef.current;
-      if (!drag || drag.pointerId !== event.pointerId) return;
+      if (!drag || drag.pointerId !== event.pointerId) {
+        if (
+          signpostsEnabled &&
+          !drag &&
+          !isModalOpen &&
+          groupedFoundation?.mode === 'grouped'
+        ) {
+          const rect = containerRef.current?.getBoundingClientRect();
+          if (rect) {
+            const edge = detectEdgeIntent({
+              x: event.clientX - rect.left,
+              y: event.clientY - rect.top,
+              viewportWidth: rect.width,
+              viewportHeight: rect.height,
+            });
+            if (edge) {
+              revealSignposts();
+            }
+          }
+        }
+        return;
+      }
 
       if (!drag.crossedThreshold) {
         if (
@@ -458,6 +623,9 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
         });
       }
 
+      if (signpostsEnabled) {
+        revealSignposts();
+      }
       const dx = event.clientX - drag.lastX;
       const dy = event.clientY - drag.lastY;
       drag.lastX = event.clientX;
@@ -466,14 +634,18 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
       // Move the camera opposite the drag delta so the world appears
       // to follow the pointer. We do not pan before the threshold is
       // crossed, which keeps minor click jitter from shifting the wall
-      // out from under the click target.
-      const next = panBy(cameraRef.current, { dx: -dx, dy: -dy });
+      // out from under the click target. At higher zoom levels, a given
+      // screen-space drag should cover less world distance.
+      const next = panBy(cameraRef.current, {
+        dx: -dx / zoomRef.current,
+        dy: -dy / zoomRef.current,
+      });
       if (next !== cameraRef.current) {
         cameraRef.current = next;
         cameraChangeRef.current(next);
       }
     },
-    [dragThresholdPx],
+    [dragThresholdPx, groupedFoundation, isModalOpen, revealSignposts, signpostsEnabled],
   );
 
   const endDrag = useCallback(
@@ -574,6 +746,55 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
     setHoverPreview((prev) => (prev?.photoId === photoId ? null : prev));
   }, []);
 
+  const handleSignpostActivate = useCallback((targetX: number, targetY: number) => {
+    if (isModalOpen) return;
+    cancelActiveGlide();
+    revealSignposts();
+    const startCamera = cameraRef.current;
+    const target = computeWrapAwareCameraTarget({
+      camera: startCamera,
+      targetX,
+      targetY,
+    });
+    const startedAt = performance.now();
+
+    const tick = (now: number): void => {
+      const progress = Math.min(1, (now - startedAt) / SIGNPOST_GLIDE_MS);
+      const eased = easeOutCubic(progress);
+      const next = panTo(startCamera, {
+        x: startCamera.x + (target.x - startCamera.x) * eased,
+        y: startCamera.y + (target.y - startCamera.y) * eased,
+      });
+      cameraRef.current = next;
+      cameraChangeRef.current(next);
+      if (progress < 1) {
+        glideFrameRef.current = requestAnimationFrame(tick);
+      } else {
+        glideFrameRef.current = null;
+      }
+    };
+
+    glideFrameRef.current = requestAnimationFrame(tick);
+  }, [cancelActiveGlide, isModalOpen, revealSignposts]);
+
+  const pixiTiles = useMemo(
+    () =>
+      renderPlan.renderedRows.flatMap((row) =>
+        row.tiles.map((tile) => ({
+          key: tile.key,
+          rowOffsetTop: row.offsetTop,
+          x: tile.x,
+          y: tile.y,
+          width: tile.width,
+          height: tile.height,
+          photoId: tile.photoId,
+          sourceWidth: tile.sourceWidth,
+          sourceHeight: tile.sourceHeight,
+        })),
+      ),
+    [renderPlan.renderedRows],
+  );
+
   return (
     <div
       className="wall-canvas"
@@ -587,17 +808,39 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
       data-render-x={Math.round(wrappedCameraX)}
       data-render-y={Math.round(wrappedCameraY)}
       data-dragging={dragActive ? 'true' : 'false'}
+      data-layout-mode={groupedFoundation?.mode ?? 'single'}
+      data-active-album-area-count={activeAlbumAreaCount}
+      data-dominant-album-key={dominantVisibleAlbumKey ?? ''}
+      data-dominant-album-label={dominantVisibleAlbumLabel ?? ''}
+      data-zoom={zoom.toFixed(2)}
       ref={containerRef}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={endDrag}
       onPointerCancel={endDrag}
     >
+      <PixiWallSurface
+        tiles={pixiTiles}
+        viewportWidth={viewportWidth}
+        viewportHeight={viewportHeight}
+        worldWidth={worldWidth}
+        worldHeight={packed.contentHeight}
+        zoom={zoom}
+      />
+
+      {/*
+        Interaction bridge: Pixi owns the visible wall, while a
+        transparent, zoom-synchronized DOM hit-target layer preserves
+        stable hover/click semantics, focused-photo behavior, and
+        browser-test hooks.
+      */}
       <div
-        className="wall-canvas__world"
+        className="wall-canvas__world wall-canvas__world--hit-targets"
         style={{
           height: packed.contentHeight,
           width: worldWidth,
+          transform: `scale(${zoom})`,
+          transformOrigin: 'top left',
         }}
       >
         {renderPlan.renderedRows.map((row) => (
@@ -622,6 +865,23 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
           </div>
         ))}
       </div>
+
+      {visibleSignposts.map((signpost) => (
+        <button
+          key={signpost.albumKey}
+          type="button"
+          className="wall-signpost"
+          data-testid={`wall-signpost-${signpost.albumKey}`}
+          data-edge={signpost.edge}
+          style={signpostStyle(signpost)}
+          onClick={() => handleSignpostActivate(signpost.targetX, signpost.targetY)}
+        >
+          <span className="wall-signpost__arrow" aria-hidden="true">
+            {signpost.arrow}
+          </span>
+          <span className="wall-signpost__label">{signpost.label}</span>
+        </button>
+      ))}
 
       {hoverPreview && (
         <div
@@ -668,23 +928,13 @@ function WallCanvasTile(
       className="wall-canvas__tile"
       data-testid="wall-photo-tile"
       data-photo-id={tile.photoId}
+      data-album-key={tile.albumKey ?? undefined}
       data-appearance={shouldFadeOnMountRef.current ? 'fresh' : 'seen'}
       style={tileStyle(tile.x, tile.y, tile.width, tile.height)}
       onPointerEnter={(event) => onPointerEnter?.(event, tile.photoId)}
       onPointerMove={(event) => onPointerMove?.(event, tile.photoId)}
       onPointerLeave={() => onPointerLeave?.(tile.photoId)}
-    >
-      <img
-        className="wall-canvas__img"
-        src={mediaResourcePath(tile.photoId, 'wall')}
-        width={Math.round(tile.width)}
-        height={Math.round(tile.height)}
-        loading="lazy"
-        decoding="async"
-        alt=""
-        draggable={false}
-      />
-    </div>
+    />
   );
 }
 
@@ -709,6 +959,24 @@ function tileStyle(
   } as unknown as React.CSSProperties;
 }
 
+function signpostStyle(signpost: VisibleSignpost): React.CSSProperties {
+  const style: Record<string, string | number> = {};
+  if (signpost.edge === 'left') {
+    style.left = 16;
+    style.top = signpost.top ?? 16;
+  } else if (signpost.edge === 'right') {
+    style.right = 16;
+    style.top = signpost.top ?? 16;
+  } else if (signpost.edge === 'top') {
+    style.top = 16;
+    style.left = signpost.left ?? 16;
+  } else {
+    style.bottom = 16;
+    style.left = signpost.left ?? 16;
+  }
+  return style as React.CSSProperties;
+}
+
 function hoverPreviewStyle(preview: HoverPreviewState): React.CSSProperties {
   return {
     width: preview.width,
@@ -723,4 +991,8 @@ function supportsFinePointerHover(): boolean {
     return false;
   }
   return window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
 }

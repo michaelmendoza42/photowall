@@ -1,5 +1,5 @@
 # Glossary
-Last edited: 2026-06-04
+Last edited: 2026-06-10
 Status: Active
 Scope: Shared behavioral and technical terminology for repositories created from this template
 Related files: `README.md`, `product/README.md`, `workshop-ideas/README.md`, `system/README.md`, `standards/documentation-model.md`, `standards/documentation-schema.md`
@@ -176,6 +176,26 @@ The secondary control surface opened from the small circular menu button. It exp
 - **Change risk:** medium — changing this impacts the balance between minimalism and control
 - **Surfaced to users:** yes — it is the main visible control entry point
 
+### Album area
+The loose wall region that belongs to exactly one album when the active view resolves to multiple albums.
+
+- **Lives in:** `docs/product/photo-wall-experience.md`
+- **Why it exists:** gives grouped browsing a stable unit of orientation without turning the wall into hard-boxed sections
+- **Used by:** grouped wall layout, per-album shuffle, signpost targeting, and grouped-browser validation
+- **Change risk:** high — changing it alters how multi-album browsing is spatially understood
+- **Surfaced to users:** yes — users experience the regions directly even if the term stays mostly internal
+- **Notes:** album areas should feel organic/scattered rather than grid-arranged, and a year-wide grouped view still resolves to one album area per child album
+
+### Signpost label
+The contextual directional label that appears only on navigational intent in grouped mode and points toward an album area.
+
+- **Lives in:** `docs/product/photo-wall-experience.md`
+- **Why it exists:** preserves the minimal default wall while still helping users relocate offscreen album areas when grouped browsing is active
+- **Used by:** grouped wall interaction logic, edge-intent reveal behavior, and snap-fast glide navigation
+- **Change risk:** medium to high — changing it affects navigation discoverability, chrome density, and grouped-view feel
+- **Surfaced to users:** yes — directly visible during grouped navigation
+- **Notes:** signpost labels stay hidden by default, remain suppressed while the focused-photo modal is open, use the motion itself as the destination cue after click/tap glide, and omit the album that already dominates most of the current viewport so the user is not told to navigate toward what they are clearly already viewing
+
 ### Workshop idea
 A durable idea packet stored in `docs/workshop-ideas/` for a concept, problem statement, or discussion outcome that is worth preserving even though it is not approved product behavior or active execution work yet.
 
@@ -343,6 +363,38 @@ The agreed timing, easing, trigger, and visibility rules for UI movement and tra
 #### Rendering path
 The path by which a screen or component reaches its final rendered form, including data preparation and conditional branches.
 
+#### Derivative tier
+A named media-detail band used by the wall renderer to trade image fidelity against overview speed as zoom changes.
+
+- **Lives in:** `src/shared/api/media.ts`, `src/server/routes/media.ts`, `src/client/src/features/wall/pixiScene.ts`
+- **Why it exists:** gives the wall a pragmatic far/mid/near image strategy without requiring a full deep-zoom tile pyramid
+- **Used by:** media route selection, Pixi scene sprite building, and zoom validation
+- **Change risk:** high — changing tier meaning affects cache behavior, visual sharpness, and renderer proof
+- **Alias:** media variant tier
+- **Surfaced to users:** indirectly — users feel the detail shift as they zoom even if the labels stay internal
+
+#### Wall layout mode
+The wall's browsing mode: `single` when the current view resolves to one album area, `grouped` when it resolves to multiple album areas.
+
+- **Lives in:** `docs/product/photo-wall-experience.md`, `src/client/src/features/wall/WallShell.tsx`, `src/client/src/features/wall/activeAlbumAreaCount.ts`, `playwright/wall-layout-modes.spec.ts`
+- **Why it exists:** names the approved distinction between single-album and grouped multi-album browsing without reviving the old renderer-selection mental model
+- **Used by:** wall-shell orchestration, grouped-wall behavior, and browser regression coverage
+- **Change risk:** high — changing its meaning can collapse grouped behavior, signpost rules, and album-area handling back into the wrong model
+- **Alias:** single-stream mode, grouped mode
+- **Surfaced to users:** indirectly — users experience the mode shift even though the label stays internal
+- **Notes:** both modes run through the same Pixi-first wall path; do not represent this distinction as a renderer toggle or fallback seam
+
+#### Hit-target layer
+The transparent DOM interaction layer that stays aligned with the Pixi wall so hover, click, drag-threshold, and focused-view semantics remain stable while Pixi owns the visible wall rendering.
+
+- **Lives in:** `src/client/src/features/wall/WallCanvas.tsx`, `src/client/src/styles/global.css`
+- **Why it exists:** preserves proven interaction behavior and stable browser-test hooks without turning DOM tiles back into the visible renderer
+- **Used by:** anchored hover preview, click-to-open focused view behavior, and drag-vs-click interaction proof
+- **Change risk:** medium to high — changing it carelessly can break interaction parity even when the Pixi scene still looks correct
+- **Alias:** DOM hit-target bridge
+- **Surfaced to users:** no — it is an implementation detail behind the wall
+- **Notes:** this layer stays minimal and image-free; the visible pixels belong to Pixi, while the bridge preserves stable hover/click semantics and browser-test hooks
+
 ### Code organization terms
 
 #### Module boundary
@@ -481,6 +533,21 @@ Short definition.
 - `standards/documentation-schema.md`
 
 ## Changelog
+
+### 2026-06-10
+- Added `Wall layout mode` so future maintainers can find the single-stream versus grouped distinction without reviving renderer-selection terminology.
+- Updated `Hit-target layer` to describe the post-migration Pixi-owned wall path while preserving the DOM interaction bridge's ongoing role.
+
+### 2026-06-08
+- Added `Derivative tier` for the zoom-aware Pixi media-detail bands.
+- Added `Hit-target layer` for the transitional DOM interaction bridge over the Pixi wall.
+
+### 2026-06-07
+- Updated `Signpost label` to record the dominant-album suppression rule for grouped browsing.
+
+### 2026-06-06
+- Added `Album area` for the new grouped multi-album browsing regions.
+- Added `Signpost label` for the contextual grouped-navigation labels and their intent-revealed behavior.
 
 ### 2026-06-04
 - Added `Anchored hover preview` to capture the approved hover-only enlargement behavior and keep it distinct from the focused-photo modal.

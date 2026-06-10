@@ -64,6 +64,20 @@ describe('/api/media route', () => {
     await app.close();
   });
 
+  it('serves a thumb variant when requested', async () => {
+    const app = await newApp();
+    const res = await app.inject({
+      method: 'GET',
+      url: `${MEDIA_BASE_PATH}/${photoId}?variant=thumb&format=webp`,
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['x-photo-wall-variant']).toBe('thumb');
+    const meta = await sharp(res.rawPayload).metadata();
+    expect(meta.format).toBe('webp');
+    expect(Math.max(meta.width ?? 0, meta.height ?? 0)).toBeLessThanOrEqual(256);
+    await app.close();
+  });
+
   it('serves a modal variant when requested', async () => {
     const app = await newApp();
     const res = await app.inject({

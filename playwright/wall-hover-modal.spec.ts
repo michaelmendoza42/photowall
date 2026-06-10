@@ -1,4 +1,4 @@
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page, type TestInfo } from '@playwright/test';
 
 test.describe('photo wall hover / click / modal contract', () => {
   let consoleErrors: string[];
@@ -24,9 +24,13 @@ test.describe('photo wall hover / click / modal contract', () => {
 
   test('hover shows an anchored preview halfway between the current tile and focused modal sizes', async ({
     page,
-  }) => {
+  }, testInfo: TestInfo) => {
+    const shell = page.getByTestId('wall-shell');
+    const wall = page.getByTestId('wall-canvas');
     const tile = await pickCenteredTile(page);
     const photoId = await requiredAttr(tile, 'data-photo-id');
+
+    await expect(shell).toHaveAttribute('data-active-album-area-count', '1');
 
     await tile.hover();
 
@@ -38,6 +42,13 @@ test.describe('photo wall hover / click / modal contract', () => {
       new RegExp(`${encodeURIComponent(photoId)}\\?variant=modal`),
     );
 
+    const hoverScreenshotPath = testInfo.outputPath('wall-hover-preview.png');
+    await page.screenshot({ path: hoverScreenshotPath, fullPage: false });
+    await testInfo.attach('wall-hover-preview', {
+      path: hoverScreenshotPath,
+      contentType: 'image/png',
+    });
+
     const previewBox = await requiredBox(preview);
     const tileBox = await requiredBox(tile);
 
@@ -46,11 +57,19 @@ test.describe('photo wall hover / click / modal contract', () => {
     const modal = page.getByTestId('focused-photo-modal');
     await expect(modal).toBeVisible();
     await expect(modal).toHaveAttribute('data-photo-id', photoId);
+    await expect(modal).toHaveAttribute('data-focused-view-kind', 'lightbox');
     await expect(preview).toHaveCount(0);
 
     const modalImage = page.getByTestId('focused-photo-image');
     await expect(modalImage).toBeVisible();
     const modalBox = await requiredBox(modalImage);
+
+    const focusedScreenshotPath = testInfo.outputPath('focused-photo-open.png');
+    await page.screenshot({ path: focusedScreenshotPath, fullPage: false });
+    await testInfo.attach('focused-photo-open', {
+      path: focusedScreenshotPath,
+      contentType: 'image/png',
+    });
 
     expect(Math.abs(previewBox.width - (tileBox.width + modalBox.width) / 2)).toBeLessThanOrEqual(8);
     expect(Math.abs(previewBox.height - (tileBox.height + modalBox.height) / 2)).toBeLessThanOrEqual(8);
@@ -59,6 +78,7 @@ test.describe('photo wall hover / click / modal contract', () => {
   test('sub-threshold pointer jitter still opens the correct focused-photo modal', async ({
     page,
   }) => {
+    const shell = page.getByTestId('wall-shell');
     const wall = page.getByTestId('wall-canvas');
     const tile = await pickCenteredTile(page);
     const photoId = await requiredAttr(tile, 'data-photo-id');
@@ -91,20 +111,28 @@ test.describe('photo wall hover / click / modal contract', () => {
     await expect(wall).toHaveAttribute('data-camera-y', cameraYBefore);
   });
 
-  test('dragging past the threshold pans the wall and suppresses modal open', async ({
+  test('dragging past the threshold pans the wall, hides the hover preview, and suppresses modal open', async ({
     page,
   }) => {
+    const shell = page.getByTestId('wall-shell');
     const wall = page.getByTestId('wall-canvas');
     const tile = await pickCenteredTile(page);
     const tileBox = await requiredBox(tile);
     const cameraXBefore = await requiredAttr(wall, 'data-camera-x');
     const cameraYBefore = await requiredAttr(wall, 'data-camera-y');
 
+    await tile.hover();
+    await expect(page.getByTestId('wall-hover-preview')).toBeVisible();
+
     const centerX = tileBox.x + tileBox.width / 2;
     const centerY = tileBox.y + tileBox.height / 2;
     await page.mouse.move(centerX, centerY);
     await page.mouse.down();
     await page.mouse.move(centerX + 48, centerY + 20, { steps: 6 });
+
+    await expect(page.getByTestId('wall-hover-preview')).toHaveCount(0);
+    await expect(wall).toHaveAttribute('data-dragging', 'true');
+
     await page.mouse.up();
 
     await expect(page.getByTestId('focused-photo-modal')).toHaveCount(0);
@@ -115,6 +143,30 @@ test.describe('photo wall hover / click / modal contract', () => {
     expect(
       cameraXAfter !== cameraXBefore || cameraYAfter !== cameraYBefore,
     ).toBe(true);
+  });
+
+  test('the focused view keeps hover preview suppressed while open', async ({
+    page,
+  }) => {
+    const shell = page.getByTestId('wall-shell');
+    const wall = page.getByTestId('wall-canvas');
+    const tile = await pickCenteredTile(page);
+    const tileBox = await requiredBox(tile);
+
+
+    await tile.click();
+
+    const modal = page.getByTestId('focused-photo-modal');
+    await expect(modal).toBeVisible();
+    await expect(modal).toHaveAttribute('data-focused-view-kind', 'lightbox');
+    await expect(page.getByTestId('wall-hover-preview')).toHaveCount(0);
+
+    await page.mouse.move(
+      tileBox.x + tileBox.width / 2,
+      tileBox.y + tileBox.height / 2,
+    );
+    await expect(page.getByTestId('wall-hover-preview')).toHaveCount(0);
+    await expect(wall).toHaveAttribute('data-dragging', 'false');
   });
 });
 

@@ -62,4 +62,12 @@ describe('focused-photo state contract', () => {
     const closed = closeFocusedPhoto(INITIAL_FOCUSED_PHOTO_STATE);
     expect(closed).toBe(INITIAL_FOCUSED_PHOTO_STATE);
   });
+
+  it('reopens when the focused photo changes after closing', () => {
+    const opened = openFocusedPhoto(INITIAL_FOCUSED_PHOTO_STATE, PHOTO_A);
+    const closed = closeFocusedPhoto(opened);
+    const reopened = openFocusedPhoto(closed, PHOTO_B);
+    expect(reopened).not.toBe(opened);
+    expect(reopened.photo).toBe(PHOTO_B);
+  });
 });

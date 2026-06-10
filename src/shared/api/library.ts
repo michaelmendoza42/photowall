@@ -66,5 +66,18 @@ export interface LibraryFacetsResponse {
   folders: FolderFacet[];
 }
 
+export interface LibraryRootUpdateRequest {
+  libraryRoot: string;
+}
+
+export interface LibraryRootUpdateErrorResponse {
+  error:
+    | 'library_root_required'
+    | 'library_root_invalid'
+    | 'data_root_invalid';
+  detail?: string;
+}
+
 export const LIBRARY_STATUS_PATH = '/api/library/status';
 export const LIBRARY_FACETS_PATH = '/api/library/facets';
+export const LIBRARY_ROOT_PATH = '/api/library/root';

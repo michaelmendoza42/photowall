@@ -1,5 +1,5 @@
 # photo-wall
-Last edited: 2026-06-04
+Last edited: 2026-06-10
 
 Minimal Docker-run web app for browsing a configured photo library on the home LAN as a large, gapless photo wall.
 
@@ -46,6 +46,7 @@ playwright/   browser-driven acceptance tests (later phases)
 - recursively discover photos under that root, including likely `year/event/photo` shapes
 - render photos large in a tightly packed, gapless wall
 - dynamically load more photos as the user keeps browsing the wall
+- support dynamic zoom in/out with a near-instant broad overview and progressively better image detail as the user moves closer
 - support true two-axis trackpad panning using browser wheel deltas
 - support mouse click-drag panning with click suppression after the drag threshold
 - show an anchored hover preview on desktop fine pointers at about the midpoint between the current tile size and the eventual full-photo modal size without destabilizing layout
@@ -63,6 +64,7 @@ Month filtering is out of MVP scope.
 - `docs/runbooks/photo-wall-docker-lan.md` — operator setup, startup diagnostics, and troubleshooting flow
 - `docs/glossary.md` — shared project language
 - `docs/standards/documentation-model.md` — authority and documentation rules
+- `docs/standards/canonical-user-intent-maintenance.md` — convergence and current-truth maintenance rule
 - `AGENTS.md` — repo-wide agent instructions
 
 ## Current focus
@@ -89,6 +91,9 @@ Month filtering is out of MVP scope.
 - refine saved-filter playlist authoring once the minimal menu UI is in place
 
 ## Changelog
+
+### 2026-06-10
+- Added a discoverability link for the canonical user-intent maintenance rule from the root README.
 
 ### 2026-06-03
 - Added the optional dev-only `PHOTO_WALL_SCAN_TOP_LEVEL_YEARS_ONLY` escape hatch for noisy local libraries.

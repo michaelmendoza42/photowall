@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useLibraryFacets, useLibraryStatus } from '../../hooks/useLibrary.js';
+import {
+  useLibraryFacets,
+  useLibraryStatus,
+  useUpdateLibraryRoot,
+} from '../../hooks/useLibrary.js';
 import {
   flattenPhotoPages,
   useInfinitePhotos,
@@ -13,6 +17,8 @@ import {
 } from '../../hooks/usePlaylists.js';
 import {
   EMPTY_FILTERS,
+  ACTIVE_FILTERS_STORAGE_KEY,
+  parseActiveFilters,
   toQueryFilters,
   type ActiveFilters,
 } from '../../state/filters.js';
@@ -24,7 +30,7 @@ import {
 } from '../../state/camera.js';
 import { INITIAL_LAYOUT } from '../../state/layout.js';
 import { DebugOverlay } from '../debug/DebugOverlay.js';
-import { FocusedPhotoModal } from '../modal/FocusedPhotoModal.js';
+import { FocusedPhotoLightbox } from '../modal/FocusedPhotoLightbox.js';
 import { ControlsPanel } from '../controls/ControlsPanel.js';
 import {
   INITIAL_FOCUSED_PHOTO_STATE,
@@ -42,14 +48,21 @@ import {
 import { deriveWallScreenState } from './wallScreenState.js';
 import {
   INITIAL_DRAG_STATE,
-  WallCanvas,
   type WallDragState,
   type WallStats,
 } from './WallCanvas.js';
+import { SingleStreamWallView } from './SingleStreamWallView.js';
+import { GroupedWallView } from './GroupedWallView.js';
+import {
+  deriveGroupedCameraTarget,
+  deriveGroupedWallFoundation,
+} from './groupedWall.js';
+import { shouldLoadNextGroupedCompletenessPage } from './groupedLoading.js';
 import {
   computeWorldWidth,
   WORLD_WIDTH_MAX,
 } from './worldWidth.js';
+import { deriveActiveAlbumAreaCount } from './activeAlbumAreaCount.js';
 import type {
   PhotoQueryRecord,
   PhotosQueryResponse,
@@ -66,23 +79,27 @@ function parseDevPageSize(): number | undefined {
 }
 
 export function WallShell(): JSX.Element {
-  const [filters, setFilters] = useState<ActiveFilters>(EMPTY_FILTERS);
+  const [filters, setFilters] = useState<ActiveFilters>(() => {
+    if (typeof window === 'undefined') return EMPTY_FILTERS;
+    // Persist the operator's active wall selection so a reload returns
+    // to the same filtered browsing context instead of silently dropping
+    // back to the global wall.
+    return parseActiveFilters(window.localStorage.getItem(ACTIVE_FILTERS_STORAGE_KEY));
+  });
   const [menuOpen, setMenuOpen] = useState(false);
   const [controlsError, setControlsError] = useState<string | null>(null);
+  const [libraryRootError, setLibraryRootError] = useState<string | null>(null);
   const [camera, setCamera] = useState(INITIAL_CAMERA);
   const [wallStats, setWallStats] = useState<WallStats | null>(null);
   const [dragState, setDragState] = useState<WallDragState>(INITIAL_DRAG_STATE);
   const [focusedPhoto, setFocusedPhoto] = useState(INITIAL_FOCUSED_PHOTO_STATE);
-
-  const handlePhotoOpen = useCallback((photo: PhotoQueryRecord) => {
-    setFocusedPhoto((prev) => openFocusedPhoto(prev, photo));
-  }, []);
 
   const handlePhotoClose = useCallback(() => {
     setFocusedPhoto((prev) => closeFocusedPhoto(prev));
   }, []);
 
   const statusQuery = useLibraryStatus();
+  const updateLibraryRoot = useUpdateLibraryRoot();
   const facetsQuery = useLibraryFacets(
     statusQuery.data?.scanState === 'ready',
   );
@@ -168,6 +185,8 @@ export function WallShell(): JSX.Element {
     setCamera((prev) => panTo(prev, { x: 0, y: 0 }));
   }, [filters]);
 
+  const lastGroupedViewKeyRef = useRef<string | null>(null);
+
   const successPages = useMemo(
     () => flattenPhotoPages(pages),
     [pages],
@@ -177,6 +196,99 @@ export function WallShell(): JSX.Element {
     [successPages],
   );
   const firstPage = successPages[0];
+  const groupedFoundation = useMemo(() => {
+    if (!firstPage) return null;
+    return deriveGroupedWallFoundation({
+      filters: firstPage.appliedFilters,
+      facets: facetsQuery.data ?? null,
+      photos,
+      snapshotId: firstPage.snapshotId,
+      worldWidth,
+    });
+  }, [firstPage, facetsQuery.data, photos, worldWidth]);
+
+  const activeAlbumAreaCount = useMemo(
+    () =>
+      deriveActiveAlbumAreaCount({
+        filters: firstPage?.appliedFilters ?? {
+          years: filters.years,
+          folders: filters.folders,
+          playlistId: filters.playlistId,
+        },
+        facets: facetsQuery.data ?? null,
+        photos,
+        snapshotId: firstPage?.snapshotId ?? statusQuery.data?.snapshotId ?? null,
+        worldWidth,
+      }),
+    [
+      firstPage,
+      filters.years,
+      filters.folders,
+      filters.playlistId,
+      facetsQuery.data,
+      photos,
+      statusQuery.data?.snapshotId,
+      worldWidth,
+    ],
+  );
+
+  const handlePhotoOpen = useCallback((photo: PhotoQueryRecord) => {
+    setFocusedPhoto((prev) => openFocusedPhoto(prev, photo));
+  }, []);
+
+  useEffect(() => {
+    if (!groupedFoundation || groupedFoundation.mode !== 'grouped') {
+      lastGroupedViewKeyRef.current = null;
+      return;
+    }
+    if (lastGroupedViewKeyRef.current === groupedFoundation.viewKey) return;
+
+    const target = deriveGroupedCameraTarget({
+      foundation: groupedFoundation,
+      viewportWidth: camera.viewport.width,
+      viewportHeight: camera.viewport.height,
+    });
+    if (!target) return;
+
+    lastGroupedViewKeyRef.current = groupedFoundation.viewKey;
+    setCamera((prev) => panTo(prev, target));
+  }, [
+    groupedFoundation,
+    camera.viewport.width,
+    camera.viewport.height,
+  ]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(
+      ACTIVE_FILTERS_STORAGE_KEY,
+      JSON.stringify(filters),
+    );
+  }, [filters]);
+
+  useEffect(() => {
+    // Grouped loading orchestration stays in the shell so grouped views
+    // share the same completeness rule without smearing pagination
+    // concerns into the renderer boundaries.
+    if (
+      !shouldLoadNextGroupedCompletenessPage({
+        foundation: groupedFoundation,
+        loadedPhotoCount: photos.length,
+        hasNextPage: photosQuery.hasNextPage,
+        isFetchingNextPage: photosQuery.isFetchingNextPage,
+      })
+    ) {
+      return;
+    }
+
+    void photosQuery.fetchNextPage();
+  }, [
+    groupedFoundation,
+    photos.length,
+    photosQuery.hasNextPage,
+    photosQuery.isFetchingNextPage,
+    photosQuery.fetchNextPage,
+  ]);
 
   const screenInput = useMemo(
     () => ({
@@ -236,6 +348,31 @@ export function WallShell(): JSX.Element {
     setControlsError(null);
     setFilters(next);
   }, []);
+
+  const handleLibraryRootChange = useCallback(
+    (nextRoot: string) => {
+      const trimmed = nextRoot.trim();
+      if (trimmed.length === 0) {
+        setLibraryRootError('Library root is required.');
+        return;
+      }
+      setControlsError(null);
+      setLibraryRootError(null);
+      updateLibraryRoot.mutate(
+        { libraryRoot: trimmed },
+        {
+          onSuccess: () => {
+            setMenuOpen(false);
+            setFilters(EMPTY_FILTERS);
+          },
+          onError: (err) => {
+            setLibraryRootError(`Could not open that root: ${err.message}`);
+          },
+        },
+      );
+    },
+    [updateLibraryRoot],
+  );
 
   const handleCreatePlaylist = useCallback(
     (name: string) => {
@@ -313,6 +450,22 @@ export function WallShell(): JSX.Element {
 
   const playlists = playlistsQuery.data?.playlists ?? [];
 
+  const sharedWallProps = {
+    photos,
+    worldWidth,
+    hasNextPage: photosQuery.hasNextPage,
+    isFetchingNextPage: photosQuery.isFetchingNextPage,
+    onLoadMore: handleLoadMore,
+    onStatsChange: setWallStats,
+    camera,
+    onCameraChange: setCamera,
+    onDragStateChange: setDragState,
+    onPhotoOpen: handlePhotoOpen,
+    isModalOpen: focusedPhoto.photo !== null,
+  };
+
+  const activeLayoutMode = groupedFoundation?.mode ?? 'single';
+
   return (
     <main
       className="wall"
@@ -320,10 +473,18 @@ export function WallShell(): JSX.Element {
       data-screen={screen.kind}
       data-modal-open={focusedPhoto.photo ? 'true' : 'false'}
       data-controls-open={menuOpen ? 'true' : 'false'}
+      data-layout-mode={activeLayoutMode}
+      data-active-album-area-count={activeAlbumAreaCount}
     >
       {screen.kind === 'loading' && <LoadingState />}
       {screen.kind === 'config-error' && (
-        <ConfigErrorState message={screen.message} status={screen.status} />
+        <ConfigErrorState
+          message={screen.message}
+          status={screen.status}
+          rootChangePending={updateLibraryRoot.isPending}
+          rootChangeError={libraryRootError}
+          onRootChange={handleLibraryRootChange}
+        />
       )}
       {screen.kind === 'scanning' && <ScanningState status={screen.status} />}
       {screen.kind === 'empty-library' && (
@@ -336,19 +497,20 @@ export function WallShell(): JSX.Element {
         <SnapshotChangedState status={screen.status} />
       )}
       {screen.kind === 'ready' && firstPage && (
-        <WallCanvas
-          photos={photos}
-          worldWidth={worldWidth}
-          hasNextPage={photosQuery.hasNextPage}
-          isFetchingNextPage={photosQuery.isFetchingNextPage}
-          onLoadMore={handleLoadMore}
-          onStatsChange={setWallStats}
-          camera={camera}
-          onCameraChange={setCamera}
-          onDragStateChange={setDragState}
-          onPhotoOpen={handlePhotoOpen}
-          isModalOpen={focusedPhoto.photo !== null}
-        />
+        groupedFoundation?.mode === 'grouped' ? (
+          <GroupedWallView
+            key="wall-grouped-view"
+            {...sharedWallProps}
+            groupedFoundation={groupedFoundation}
+            activeAlbumAreaCount={activeAlbumAreaCount}
+          />
+        ) : (
+          <SingleStreamWallView
+            key="wall-single-stream-view"
+            {...sharedWallProps}
+            activeAlbumAreaCount={activeAlbumAreaCount}
+          />
+        )
       )}
 
       <ControlsPanel
@@ -365,10 +527,14 @@ export function WallShell(): JSX.Element {
         updatePending={updatePlaylist.isPending}
         deletePending={deletePlaylist.isPending}
         errorMessage={controlsError}
+        libraryRoot={statusQuery.data?.libraryRoot ?? ''}
+        onLibraryRootChange={handleLibraryRootChange}
+        libraryRootPending={updateLibraryRoot.isPending}
+        libraryRootError={libraryRootError}
       />
 
       {focusedPhoto.photo && (
-        <FocusedPhotoModal
+        <FocusedPhotoLightbox
           photo={focusedPhoto.photo}
           onClose={handlePhotoClose}
         />

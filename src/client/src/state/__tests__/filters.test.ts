@@ -5,6 +5,7 @@ import {
   clearFilters,
   findStaleFolders,
   hasAnyFilter,
+  parseActiveFilters,
   summarizeFilters,
   toQueryFilters,
   toggleFolder,
@@ -123,6 +124,29 @@ describe('filters', () => {
     it('returns an empty array when nothing is stale', () => {
       expect(findStaleFolders([], ['2024'])).toEqual([]);
       expect(findStaleFolders(['2024'], ['2024', '2025'])).toEqual([]);
+    });
+  });
+
+  describe('parseActiveFilters', () => {
+    it('returns empty filters for invalid persisted data', () => {
+      expect(parseActiveFilters('{bad json')).toBe(EMPTY_FILTERS);
+      expect(parseActiveFilters(null)).toBe(EMPTY_FILTERS);
+    });
+
+    it('normalizes persisted filters', () => {
+      expect(
+        parseActiveFilters(
+          JSON.stringify({
+            years: [2024, 2022, 'bad'],
+            folders: ['b', 'a', 1],
+            playlistId: 'pl-1',
+          }),
+        ),
+      ).toEqual({
+        years: [2022, 2024],
+        folders: ['a', 'b'],
+        playlistId: 'pl-1',
+      });
     });
   });
 });

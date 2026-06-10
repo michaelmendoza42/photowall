@@ -1,4 +1,7 @@
 # Playwright browser tests
+Last edited: 2026-06-10
+Status: Active
+Related files: `../docs/product/photo-wall-experience.md`, `../docs/system/photo-library-source-and-runtime.md`, `../src/client/README.md`
 
 Browser regression coverage for the wall interaction contract lives here.
 
@@ -28,9 +31,16 @@ npm run test:browser
 - HTML report: `playwright-report/`
 - failure screenshots and traces: `test-results/playwright/`
 
-## Covered flow
+## Protected wall contracts
 
-- anchored hover preview appears for a wall tile
-- hover preview is approximately halfway between the current tile size and the clicked focused-photo modal size
-- sub-threshold pointer jitter still opens the correct focused-photo modal
-- drag-threshold crossings pan the wall and suppress modal opening
+- `wall-layout-modes.spec.ts` — protects the single-stream versus grouped wall-mode contract and the album-area diagnostics the shell exposes for that distinction
+- `single-stream-wrap-continuity.spec.ts` — protects seamless wrap travel and verifies that the Pixi wall does not reinitialize during full-period travel
+- `wall-hover-modal.spec.ts` — protects anchored hover preview sizing, click-vs-drag suppression, and focused-photo return behavior
+- `grouped-signposts.spec.ts` — protects grouped signpost reveal, glide, modal suppression, and grouped-selection persistence
+- `zoom-detail-tiers.spec.ts` — protects zoom-aware derivative-tier behavior
+
+## Changelog
+
+### 2026-06-10
+- Converted this README to the repository documentation schema.
+- Added a protected-contract index so future maintainers can find the Playwright specs that guard the Pixi-first wall and grouped-versus-single mode behavior.

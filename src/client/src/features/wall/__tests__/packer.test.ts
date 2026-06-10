@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { PhotoQueryRecord } from '../../../../../shared/api/photos.js';
-import { packJustifiedRows, type PackedTile } from '../packer.js';
+import {
+  buildColumns,
+  computeDisplayHeight,
+  packJustifiedRows,
+  type PackedTile,
+} from '../packer.js';
 
 function photo(id: string, width: number, height: number): PhotoQueryRecord {
   return {
@@ -20,12 +25,20 @@ function photo(id: string, width: number, height: number): PhotoQueryRecord {
 
 const OPTS = {
   worldWidth: 1200,
-  targetRowHeight: 300,
   maxRowHeight: 480,
+  tileScale: 1,
 };
 
 function flattenTiles(result: ReturnType<typeof packJustifiedRows>): PackedTile[] {
   return result.rows.flatMap((row) => row.tiles);
+}
+
+function columnHeights(tiles: readonly PackedTile[]): number[] {
+  const byX = new Map<number, number>();
+  for (const tile of tiles) {
+    byX.set(tile.x, Math.max(byX.get(tile.x) ?? 0, tile.y + tile.height));
+  }
+  return [...byX.values()].sort((a, b) => a - b);
 }
 
 describe('packJustifiedRows', () => {
@@ -85,8 +98,6 @@ describe('packJustifiedRows', () => {
     expect(tiles[0]!.y).toBe(0);
     expect(tiles[1]!.y).toBe(0);
     expect(tiles[2]!.y).toBe(0);
-    // Follow-on placements land at different Y values because each next
-    // photo targets the shortest current column.
     expect(new Set(tiles.slice(3).map((tile) => Math.round(tile.y))).size).toBeGreaterThan(1);
   });
 
@@ -133,15 +144,63 @@ describe('packJustifiedRows', () => {
     expect(tiles[2]!.width).toBeCloseTo(400, 6);
   });
 
-  it('caps very tall portrait tiles at maxRowHeight', () => {
+  it('shrinks base column widths exactly with tileScale when the width divides evenly', () => {
+    const columns = buildColumns({
+      worldWidth: OPTS.worldWidth,
+      factors: [1, 1, 1],
+      tileScale: 0.75,
+    });
+
+    expect(columns).toHaveLength(4);
+    expect(columns.map((column) => column.width)).toEqual([300, 300, 300, 300]);
+  });
+
+  it('merges a tiny tail column back into the previous column instead of leaving a skinny strip', () => {
+    const columns = buildColumns({
+      worldWidth: OPTS.worldWidth,
+      factors: [1.22, 0.82, 1.08, 0.76, 1.12],
+      tileScale: 0.75,
+    });
+
+    expect(columns).toHaveLength(6);
+    expect(columns[columns.length - 1]!.width).toBeGreaterThan(250);
+    expect(columns.reduce((sum, column) => sum + column.width, 0)).toBeCloseTo(OPTS.worldWidth, 6);
+  });
+
+  it('bounds extreme portrait tiles to a mosaic-safe displayed height', () => {
+    const width = OPTS.worldWidth;
+    const height = computeDisplayHeight(width, photo('portrait', 100, 400));
+    expect(height).toBeCloseTo(width * 1.75, 6);
+  });
+
+  it('bounds extreme panoramas to a mosaic-safe displayed height', () => {
+    const width = OPTS.worldWidth;
+    const height = computeDisplayHeight(width, photo('panorama', 400, 100));
+    expect(height).toBeCloseTo(width * 0.58, 6);
+  });
+
+  it('keeps a landscape-heavy repro mix within a bounded skyline spread', () => {
     const result = packJustifiedRows(
-      [photo('portrait', 100, 400)],
-      { ...OPTS, columnWidthFactors: [1] },
+      [
+        photo('l1', 160, 90),
+        photo('l2', 160, 90),
+        photo('l3', 160, 90),
+        photo('l4', 160, 90),
+        photo('p1', 90, 160),
+        photo('l5', 160, 90),
+        photo('l6', 160, 90),
+        photo('l7', 160, 90),
+      ],
+      {
+        ...OPTS,
+        tileScale: 0.75,
+        columnWidthFactors: [1.22, 0.82, 1.08, 0.76, 1.12],
+      },
       false,
     );
-    const tile = flattenTiles(result)[0]!;
-    expect(tile.height).toBeLessThanOrEqual(OPTS.maxRowHeight);
-    expect(tile.width).toBeCloseTo(OPTS.worldWidth, 6);
+
+    const heights = columnHeights(flattenTiles(result));
+    expect(heights.at(-1)! - heights[0]!).toBeLessThan(700);
   });
 
   it('falls back to width/height when aspectRatio is missing or zero', () => {
@@ -155,7 +214,7 @@ describe('packJustifiedRows', () => {
       false,
     );
     const tile = flattenTiles(result)[0]!;
-    expect(tile.height).toBeCloseTo(200, 6);
+    expect(tile.height).toBeCloseTo(348, 6);
   });
 
   it('falls back to uniform columns for empty or invalid factors', () => {
@@ -184,15 +243,14 @@ describe('packJustifiedRows', () => {
     expect(invalid).toEqual(uniform);
   });
 
-  it('returns virtualization bands with nominal targetHeight equal to maxRowHeight', () => {
+  it('returns virtualization bands with bounded portrait extents instead of giant towers', () => {
     const result = packJustifiedRows(
-      Array.from({ length: 9 }, (_, index) => photo(`p${index}`, 100, 100)),
-      { ...OPTS, columnWidthFactors: [1, 1, 1] },
+      [photo('portrait', 100, 400)],
+      { ...OPTS, columnWidthFactors: [1] },
       false,
     );
     expect(result.rows.length).toBeGreaterThan(0);
-    for (const row of result.rows) {
-      expect(row.targetHeight).toBe(OPTS.maxRowHeight);
-    }
+    expect(result.rows[0]!.targetHeight).toBe(OPTS.maxRowHeight);
+    expect(result.rows[0]!.height).toBeCloseTo(OPTS.worldWidth * 1.75, 6);
   });
 });
