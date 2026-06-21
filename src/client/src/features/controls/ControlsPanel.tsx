@@ -14,6 +14,7 @@ import {
   toggleYear,
   type ActiveFilters,
 } from '../../state/filters.js';
+import { getAppSurfaceHref } from '../../app/appSurface.js';
 import { LibraryRootEditor } from '../library/LibraryRootEditor.js';
 
 export interface ControlsPanelProps {
@@ -420,6 +421,23 @@ export function ControlsPanel(props: ControlsPanelProps): JSX.Element {
                 Update “{selectedPlaylist.name}” with current filters
               </button>
             )}
+          </section>
+
+          <section className="controls__section controls__section--lab">
+            <header className="controls__section-header">
+              <h3 className="controls__section-title">Mosaic Lab</h3>
+            </header>
+            <p className="controls__hint">
+              Synthetic mockup surface for layout studies. The real photo wall remains the default
+              path outside the lab.
+            </p>
+            <a
+              className="controls__link controls__link--lab"
+              data-testid="controls-open-mosaic-lab"
+              href={getAppSurfaceHref('mosaic-lab')}
+            >
+              Open Mosaic Lab
+            </a>
           </section>
         </section>
       )}

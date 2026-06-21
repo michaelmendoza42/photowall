@@ -1,15 +1,15 @@
 # Photo Wall Experience
-Last edited: 2026-06-06
+Last edited: 2026-06-20
 Status: Approved
 Decision owner: Michael
 Drafted by: Pi
-Approved by: Michael via mission /plan handoff on 2026-06-02, follow-up implementation approval for wrap-around navigation on 2026-06-03, anchored hover-preview approval plus midpoint sizing clarification on 2026-06-04, and grouped multi-album area/signpost approval during the 2026-06-06 mission kickoff
+Approved by: Michael via mission /plan handoff on 2026-06-02, follow-up implementation approval for wrap-around navigation on 2026-06-03, anchored hover-preview approval plus midpoint sizing clarification on 2026-06-04, grouped multi-album area/signpost approval during the 2026-06-06 mission kickoff, and normal-build Mosaic Lab entry-seam approval during the 2026-06-14 mission kickoff
 Change policy: Do not change without explicit human approval
 Related files: `../../README.md`, `../glossary.md`, `../system/photo-library-source-and-runtime.md`, `README.md`
 
 ## Behavior summary
 
-`photo-wall` is a minimal web app that turns one configured photo library on the home LAN into a large, immersive browsing wall. The page is dominated by the photos themselves. Filtering, playlist selection, and the focused-photo view exist, but they stay visually secondary to the wall.
+`photo-wall` is a minimal web app that turns one configured photo library on the home LAN into a large, immersive browsing wall. The page is dominated by the photos themselves. Filtering, playlist selection, and the focused-photo view exist, but they stay visually secondary to the wall. The normal build still opens on the real wall first, while the controls can also expose a clearly labeled Mosaic Lab entry seam for synthetic layout evaluation plus a clear return path back to the wall. When opened, Mosaic Lab should behave like a synthetic Pixi/camera-based experiment bench with starter recipes and editable recipe comparisons for structured-mosaic studies rather than like a real-photo surface.
 
 The MVP is a trusted-LAN, Docker-run app with no auth boundary and no internet-facing exposure.
 
@@ -35,7 +35,14 @@ The MVP is a trusted-LAN, Docker-run app with no auth boundary and no internet-f
 - Clicking a non-dragged photo must open a simple focused-photo modal sized to the browser viewport, with an explicit visible `X` control to close.
 - Closing the focused-photo modal must return the user to the same wall context they came from.
 - The default interface should stay minimal: just the photo wall plus a small circular menu button.
+- The normal build must open on the real photo wall by default rather than in the Mosaic Lab.
 - Activating the small circular menu button should open a larger menu for filtering and playlist controls.
+- That controls surface must also include a clearly labeled Mosaic Lab entry for synthetic layout evaluation without replacing the wall-first framing of the product.
+- Mosaic Lab content must stay clearly labeled as synthetic/mockup-only and must not imply that full mock albums, production metrics, or other unfinished lab capabilities already exist.
+- The Mosaic Lab must provide an explicit return path back to the real photo wall.
+- Inside Mosaic Lab, the primary navigation model should be a bounded Pixi/camera workspace rather than page scrolling.
+- Mosaic Lab should expose starter recipes for All Landscape, All Portrait, Mixed, and Weird, plus in-session editable recipe comparisons with count-based source-archetype controls.
+- Uniform-input Mosaic Lab recipes such as All Landscape and All Portrait should still resolve to structured mosaics rather than trivial repeated grids; obvious grid collapse counts as lab failure.
 - Filtering must support **year** and **folder** for the MVP.
 - Folder filtering should reflect the discovered folder structure under the configured library root.
 - When the active view resolves to a single album, the wall should keep the simpler single-album browsing presentation.
@@ -63,6 +70,9 @@ The MVP is a trusted-LAN, Docker-run app with no auth boundary and no internet-f
 - Panning past the right edge should immediately continue from the left side of the currently loaded wall, and vice versa; the same wrap rule applies for top/bottom travel.
 - Applying a year or folder filter should narrow the displayed set coherently without leaving stale mixed-result tiles onscreen and without changing the minimal overall framing of the page.
 - Active year/folder selection should persist across a browser reload so the wall reopens in the same filtered context.
+- Opening Controls and choosing Mosaic Lab in the normal build should switch to a clearly synthetic mockup surface, and using the lab return path should take the user back to the real photo wall without ambiguity.
+- Duplicating or creating an editable Mosaic Lab recipe should preserve the starter recipes as immutable comparison anchors while recipe count edits immediately update the synthetic packed output and diagnostics.
+- A uniform-input Mosaic Lab scenario such as All Landscape should still show varied placement structure even when the source recipe contains only one source archetype.
 - A grouped year-wide view should resolve into one album area per child album rather than one long sequential stream.
 - In grouped mode, a multi-folder selection should give each selected folder its own album area rather than blending both folders into one undifferentiated run, and reloading the page should preserve that grouped selection.
 - Signpost labels should not appear while the user is idle in the middle of the viewport, but should appear after scroll/pan intent or edge-intent pointer movement.
@@ -83,6 +93,7 @@ The MVP is a trusted-LAN, Docker-run app with no auth boundary and no internet-f
 - Chrome-heavy gallery UI with persistent panels competing with the photos.
 - Large always-visible navigation, metadata, or management surfaces.
 - A sophisticated playlist authoring model beyond saved filter presets.
+- Presenting Mosaic Lab as a finished production feature area with real-library-backed mock albums, finalized metrics, or other unbuilt lab tooling before those capabilities actually exist.
 - Final visual specifics of the focused-photo modal beyond its viewport-sized framing and explicit `X` close control.
 
 ## Related docs
@@ -94,6 +105,13 @@ The MVP is a trusted-LAN, Docker-run app with no auth boundary and no internet-f
 - `../standards/testing.md`
 
 ## Changelog
+
+### 2026-06-20
+- Recorded the approved Mosaic Lab behavior as a synthetic Pixi/camera-based experiment bench with starter recipes, editable recipe comparisons, and explicit anti-grid expectations for uniform-input studies.
+
+### 2026-06-14
+- Documented the normal-build Mosaic Lab entry seam while keeping the real photo wall as the default first surface.
+- Clarified that Mosaic Lab is synthetic/mockup-only content with an explicit return path and no implied promise of unfinished lab capabilities.
 
 ### 2026-06-09
 - Added the grouped-view persistence and completeness rules: active year/folder selection should survive reload, grouped multi-album views should keep fetching until each selected album area has photos, and the initial grouped overview should stay near the selected album cluster instead of large empty stretches.

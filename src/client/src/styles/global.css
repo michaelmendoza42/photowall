@@ -755,6 +755,560 @@ body {
   cursor: not-allowed;
 }
 
+.controls__section--lab {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.controls__link--lab {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--pw-accent);
+}
+
+.controls__link--lab::after {
+  content: '↗';
+  font-family: var(--pw-font-mono);
+  font-size: 0.8rem;
+}
+
+/* ------------------------------------------------------------------ */
+/* Mosaic Lab                                                         */
+/* ------------------------------------------------------------------ */
+
+.mosaic-lab {
+  height: 100dvh;
+  padding: clamp(1.1rem, 3vw, 2rem);
+  display: grid;
+  gap: 1rem;
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  overflow: hidden;
+  background:
+    radial-gradient(circle at top left, rgba(212, 180, 131, 0.08), transparent 28%),
+    linear-gradient(180deg, rgba(236, 230, 220, 0.03), transparent 28%),
+    var(--pw-bg);
+}
+
+.mosaic-lab__intro {
+  width: min(100%, 58rem);
+  display: grid;
+  gap: 0.75rem;
+}
+
+.mosaic-lab__eyebrow,
+.mosaic-lab__panel-eyebrow,
+.mosaic-lab__field-label,
+.mosaic-lab__metric-label {
+  margin: 0;
+  font-family: var(--pw-font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.mosaic-lab__eyebrow,
+.mosaic-lab__panel-eyebrow,
+.mosaic-lab__field-label,
+.mosaic-lab__metric-label {
+  color: var(--pw-accent);
+}
+
+.mosaic-lab__title,
+.mosaic-lab__panel-title,
+.mosaic-lab__stage-title {
+  margin: 0;
+  font-weight: 500;
+  letter-spacing: -0.03em;
+}
+
+.mosaic-lab__title {
+  font-size: clamp(1.8rem, 4vw, 3.2rem);
+}
+
+.mosaic-lab__panel-title {
+  font-size: 1.15rem;
+}
+
+.mosaic-lab__stage-title {
+  font-size: 1rem;
+}
+
+.mosaic-lab__body,
+.mosaic-lab__stage-hint {
+  margin: 0;
+  color: var(--pw-fg-muted);
+}
+
+.mosaic-lab__body {
+  max-width: 58ch;
+}
+
+.mosaic-lab__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.mosaic-lab__link,
+.mosaic-lab__button,
+.mosaic-lab__select,
+.mosaic-lab__text-input,
+.mosaic-lab__number-input,
+.mosaic-lab__range,
+.mosaic-lab__toggle {
+  font: inherit;
+}
+
+.mosaic-lab__link,
+.mosaic-lab__button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.6rem;
+  padding: 0.6rem 0.9rem;
+  border: 1px solid var(--pw-rule);
+  color: var(--pw-fg);
+  background: rgba(236, 230, 220, 0.02);
+  text-decoration: none;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+
+.mosaic-lab__link:hover,
+.mosaic-lab__link:focus-visible,
+.mosaic-lab__button:hover,
+.mosaic-lab__button:focus-visible,
+.mosaic-lab__select:hover,
+.mosaic-lab__select:focus-visible,
+.mosaic-lab__text-input:hover,
+.mosaic-lab__text-input:focus-visible,
+.mosaic-lab__number-input:hover,
+.mosaic-lab__number-input:focus-visible,
+.mosaic-lab__range:focus-visible,
+.mosaic-lab__roster-entry:hover,
+.mosaic-lab__roster-entry:focus-visible {
+  border-color: rgba(212, 180, 131, 0.42);
+  color: var(--pw-accent);
+  outline: none;
+}
+
+.mosaic-lab__panel,
+.mosaic-lab__metric-card,
+.mosaic-lab__viewport {
+  border: 1px solid var(--pw-rule);
+  background: rgba(20, 17, 15, 0.76);
+  backdrop-filter: blur(14px);
+}
+
+.mosaic-lab__panel--controls {
+  width: min(100%, 80rem);
+  padding: 1rem;
+  display: grid;
+  gap: 0.9rem;
+}
+
+.mosaic-lab__toolbar {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.85rem;
+  align-items: end;
+}
+
+.mosaic-lab__field {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.mosaic-lab__field--seed {
+  align-self: stretch;
+}
+
+.mosaic-lab__seed,
+.mosaic-lab__select,
+.mosaic-lab__text-input,
+.mosaic-lab__number-input,
+.mosaic-lab__button,
+.mosaic-lab__range-row {
+  min-height: 2.7rem;
+}
+
+.mosaic-lab__seed,
+.mosaic-lab__select,
+.mosaic-lab__text-input,
+.mosaic-lab__number-input,
+.mosaic-lab__range-row {
+  display: flex;
+  align-items: center;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid var(--pw-rule);
+  background: rgba(236, 230, 220, 0.02);
+  color: var(--pw-fg);
+}
+
+.mosaic-lab__seed {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mosaic-lab__select,
+.mosaic-lab__text-input,
+.mosaic-lab__number-input {
+  width: 100%;
+}
+
+.mosaic-lab__select {
+  appearance: none;
+}
+
+.mosaic-lab__text-input:disabled,
+.mosaic-lab__number-input:disabled,
+.mosaic-lab__button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.mosaic-lab__field--zoom {
+  min-width: 0;
+}
+
+.mosaic-lab__range-row {
+  gap: 0.8rem;
+}
+
+.mosaic-lab__range {
+  flex: 1;
+  margin: 0;
+  accent-color: var(--pw-accent);
+  background: transparent;
+}
+
+.mosaic-lab__range-value {
+  min-width: 3.2rem;
+  text-align: right;
+  font-family: var(--pw-font-mono);
+  color: var(--pw-fg);
+}
+
+.mosaic-lab__overlay-controls,
+.mosaic-lab__stage-chip-row,
+.mosaic-lab__bench-actions,
+.mosaic-lab__recipe-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.mosaic-lab__toggle,
+.mosaic-lab__stage-chip,
+.mosaic-lab__recipe-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--pw-rule);
+  background: rgba(236, 230, 220, 0.02);
+}
+
+.mosaic-lab__toggle {
+  color: var(--pw-fg-muted);
+}
+
+.mosaic-lab__recipe-chip {
+  font-family: var(--pw-font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--pw-fg-muted);
+}
+
+.mosaic-lab__stage-chip {
+  font-family: var(--pw-font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--pw-accent);
+}
+
+.mosaic-lab__toggle input {
+  margin: 0;
+  accent-color: var(--pw-accent);
+}
+
+.mosaic-lab__bench {
+  display: grid;
+  grid-template-columns: minmax(17rem, 24rem) minmax(0, 1fr);
+  gap: 0.9rem;
+}
+
+.mosaic-lab__bench-panel {
+  display: grid;
+  gap: 0.9rem;
+  padding: 1rem;
+  border: 1px solid var(--pw-rule);
+  background: rgba(236, 230, 220, 0.02);
+}
+
+.mosaic-lab__roster-groups,
+.mosaic-lab__roster-group,
+.mosaic-lab__roster-list,
+.mosaic-lab__source-grid {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.mosaic-lab__roster-entry {
+  display: grid;
+  gap: 0.3rem;
+  padding: 0.8rem 0.9rem;
+  border: 1px solid var(--pw-rule);
+  background: rgba(12, 11, 10, 0.5);
+  color: var(--pw-fg);
+  text-align: left;
+}
+
+.mosaic-lab__roster-entry span,
+.mosaic-lab__source-detail {
+  color: var(--pw-fg-muted);
+  font-size: 0.88rem;
+}
+
+.mosaic-lab__roster-entry[data-selected='true'] {
+  border-color: rgba(212, 180, 131, 0.42);
+  background: rgba(212, 180, 131, 0.08);
+}
+
+.mosaic-lab__source-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.mosaic-lab__source-field {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.85rem 0.9rem;
+  border: 1px solid var(--pw-rule);
+  background: rgba(12, 11, 10, 0.38);
+}
+
+.mosaic-lab__source-label {
+  color: var(--pw-fg);
+  font-weight: 500;
+}
+
+.mosaic-lab__metrics {
+  width: min(100%, 80rem);
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.mosaic-lab__metric-card {
+  min-height: 7.2rem;
+  padding: 0.85rem 0.95rem;
+  display: grid;
+  align-content: start;
+  gap: 0.45rem;
+}
+
+.mosaic-lab__metric-card[data-status='pass'] {
+  border-color: rgba(143, 184, 180, 0.3);
+}
+
+.mosaic-lab__metric-card[data-status='fail'] {
+  border-color: rgba(217, 123, 91, 0.35);
+}
+
+.mosaic-lab__metric-value {
+  font-size: 1.02rem;
+  font-weight: 500;
+  color: var(--pw-fg);
+}
+
+.mosaic-lab__metric-detail,
+.mosaic-lab__legend-item p,
+.mosaic-lab__stage-diagnostics dt {
+  color: var(--pw-fg-muted);
+  font-size: 0.9rem;
+}
+
+.mosaic-lab__workspace {
+  width: min(100%, 80rem);
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(18rem, 22rem) minmax(0, 1fr);
+  gap: 1rem;
+  align-items: stretch;
+}
+
+.mosaic-lab__panel--legend,
+.mosaic-lab__panel--failure {
+  padding: 1rem;
+  display: grid;
+  gap: 0.9rem;
+}
+
+.mosaic-lab__panel-header,
+.mosaic-lab__stage-overlay {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.mosaic-lab__legend-list,
+.mosaic-lab__facts,
+.mosaic-lab__stage-diagnostics {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.mosaic-lab__legend-item {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.7rem;
+  align-items: start;
+}
+
+.mosaic-lab__legend-item p {
+  margin: 0.2rem 0 0;
+}
+
+.mosaic-lab__legend-swatch {
+  width: 0.9rem;
+  height: 0.9rem;
+  margin-top: 0.15rem;
+  border-radius: 999px;
+  box-shadow: 0 0 0 1px rgba(20, 17, 15, 0.35);
+}
+
+.mosaic-lab__facts,
+.mosaic-lab__stage-diagnostics {
+  margin: 0;
+}
+
+.mosaic-lab__facts div,
+.mosaic-lab__stage-diagnostics div {
+  display: grid;
+  gap: 0.16rem;
+}
+
+.mosaic-lab__facts dt,
+.mosaic-lab__stage-diagnostics dt {
+  font-family: var(--pw-font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--pw-fg-quiet);
+}
+
+.mosaic-lab__facts dd,
+.mosaic-lab__stage-diagnostics dd {
+  margin: 0;
+  color: var(--pw-fg);
+}
+
+.mosaic-lab__viewport {
+  min-height: 0;
+  padding: 1rem;
+  background:
+    linear-gradient(180deg, rgba(236, 230, 220, 0.02), transparent 30%),
+    rgba(11, 10, 9, 0.86);
+  overflow: hidden;
+}
+
+.mosaic-lab__viewport-frame {
+  position: relative;
+  height: 100%;
+  min-height: 0;
+  display: grid;
+}
+
+.mosaic-lab__stage-overlay,
+.mosaic-lab__stage-diagnostics {
+  position: absolute;
+  z-index: 2;
+  max-width: min(26rem, calc(100% - 2rem));
+  padding: 0.85rem 0.95rem;
+  border: 1px solid rgba(236, 230, 220, 0.08);
+  background: rgba(15, 13, 12, 0.82);
+  backdrop-filter: blur(12px);
+}
+
+.mosaic-lab__stage-overlay {
+  top: 1rem;
+  left: 1rem;
+}
+
+.mosaic-lab__stage-diagnostics {
+  right: 1rem;
+  bottom: 1rem;
+  width: min(24rem, calc(100% - 2rem));
+}
+
+.mosaic-lab__pixi-stage-host {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  border: 1px solid rgba(236, 230, 220, 0.08);
+  background: radial-gradient(circle at center, rgba(236, 230, 220, 0.04), transparent 52%);
+  cursor: grab;
+  touch-action: none;
+}
+
+.mosaic-lab__pixi-stage-host.is-dragging {
+  cursor: grabbing;
+}
+
+.mosaic-lab__pixi-stage-host canvas {
+  display: block;
+}
+
+@media (max-width: 1080px) {
+  .mosaic-lab__toolbar,
+  .mosaic-lab__metrics,
+  .mosaic-lab__source-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .mosaic-lab__bench,
+  .mosaic-lab__workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 760px) {
+  .mosaic-lab {
+    height: auto;
+    min-height: 100dvh;
+    grid-template-rows: none;
+    overflow: visible;
+  }
+
+  .mosaic-lab__panel--controls,
+  .mosaic-lab__metrics,
+  .mosaic-lab__workspace {
+    width: 100%;
+  }
+
+  .mosaic-lab__toolbar,
+  .mosaic-lab__metrics,
+  .mosaic-lab__source-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .mosaic-lab__viewport-frame,
+  .mosaic-lab__pixi-stage-host {
+    min-height: 24rem;
+  }
+
+  .mosaic-lab__stage-overlay,
+  .mosaic-lab__stage-diagnostics {
+    position: static;
+    width: 100%;
+    max-width: none;
+    margin-bottom: 0.75rem;
+  }
+}
+
 /* ------------------------------------------------------------------ */
 /* Dev-only debug overlay                                             */
 /* ------------------------------------------------------------------ */

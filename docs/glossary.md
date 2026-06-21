@@ -1,5 +1,5 @@
 # Glossary
-Last edited: 2026-06-10
+Last edited: 2026-06-20
 Status: Active
 Scope: Shared behavioral and technical terminology for repositories created from this template
 Related files: `README.md`, `product/README.md`, `workshop-ideas/README.md`, `system/README.md`, `standards/documentation-model.md`, `standards/documentation-schema.md`
@@ -157,6 +157,87 @@ The layout rule that photos should pack together tightly with no intentional gap
 - **Change risk:** high — changing this would materially alter the look of the product
 - **Surfaced to users:** yes — visible in the core interface
 
+### Structured mosaic
+The preferred wall-composition character: a column-first mosaic with intentional rhythm, varied tile shapes, and staggered seams rather than ad-hoc gap filling or obvious striping.
+
+- **Lives in:** `docs/glossary.md`, future Mosaic Lab studies, and wall-layout review notes
+- **Why it exists:** gives reviewers a durable name for the target composition quality instead of describing it from scratch each time
+- **Used by:** layout evaluation, future mockup work, and packer discussions
+- **Change risk:** medium — drifting definition can confuse both design review and implementation tradeoffs
+- **Surfaced to users:** indirectly — users feel it in the wall even if the label stays internal
+
+### Black space
+Exposed empty background space inside the intended mosaic where photo coverage should have continued.
+
+- **Lives in:** `docs/glossary.md`, wall-layout review notes
+- **Why it exists:** names the main visible failure mode the layout work is trying to avoid
+- **Used by:** layout critique, future Mosaic Lab experiments, and packer acceptance checks
+- **Change risk:** low — the term is diagnostic, but losing it makes review language vaguer
+- **Surfaced to users:** yes — visible as an unwanted hole in the wall
+
+### Standard tile
+The default tile shape or size band the mosaic tries first before rescue adjustments are needed.
+
+- **Lives in:** future wall-layout implementation notes and Mosaic Lab mockups
+- **Why it exists:** distinguishes normal packing choices from explicit corrective interventions
+- **Used by:** layout vocabulary, synthetic studies, and future packer tuning
+- **Change risk:** medium — changing what counts as standard shifts comparison against rescue behavior
+- **Surfaced to users:** indirectly — users see the result, not the label
+
+### Rescue shape
+An intentionally non-default tile shape introduced to solve a local packing problem without opening black space.
+
+- **Lives in:** future wall-layout implementation notes and Mosaic Lab mockups
+- **Why it exists:** separates corrective shape choices from the normal tile rhythm
+- **Used by:** packer discussions, layout debugging, and synthetic studies
+- **Change risk:** medium — vague use can turn targeted rescue logic into arbitrary shape churn
+- **Surfaced to users:** indirectly — visible through the wall pattern rather than the term itself
+
+### Scale rescue
+A local size adjustment used to absorb layout mismatch and preserve mosaic continuity when shape changes alone are not enough.
+
+- **Lives in:** future wall-layout implementation notes and Mosaic Lab mockups
+- **Why it exists:** names a corrective move that changes scale without implying a whole new shape family
+- **Used by:** layout debugging and packer tradeoff discussions
+- **Change risk:** medium — careless use can blur the boundary between controlled rescue and global sizing drift
+- **Surfaced to users:** indirectly — users notice the continuity, not the term
+
+### Neutral connector
+A low-attention bridging tile that helps neighboring shapes meet cleanly without becoming the focal shape in that local cluster.
+
+- **Lives in:** future wall-layout implementation notes and Mosaic Lab mockups
+- **Why it exists:** gives a name to the quiet supporting role some tiles play in keeping the mosaic coherent
+- **Used by:** layout critique, mockup review, and future packer heuristics
+- **Change risk:** low to medium — losing the term makes it harder to discuss subtle support roles in the layout
+- **Surfaced to users:** indirectly — it influences the feel of the wall more than explicit perception
+
+### Seam-break rescue
+A targeted corrective move that interrupts an overly long seam line before the wall starts reading as striped or mechanically repetitive.
+
+- **Lives in:** future wall-layout implementation notes and Mosaic Lab mockups
+- **Why it exists:** names a specific intervention for one of the main structured-mosaic failure modes
+- **Used by:** packer heuristics, layout review, and synthetic studies
+- **Change risk:** medium — misuse can either over-fragment the wall or leave obvious seam problems untreated
+- **Surfaced to users:** indirectly — visible through the wall rhythm rather than the term itself
+
+### Clean gutters
+Tile joins that stay visually tight and consistent, without accidental spacing noise, ragged offsets, or void-like slivers.
+
+- **Lives in:** `docs/glossary.md`, wall-layout review notes
+- **Why it exists:** gives review language for seam quality without implying large literal gutters in the wall
+- **Used by:** layout evaluation, mockup critique, and future acceptance checks
+- **Change risk:** low — mostly a communication term, but useful for consistent reviews
+- **Surfaced to users:** yes — visible in the wall finish quality
+
+### Long seam line
+An uninterrupted tile edge alignment that runs long enough to make the wall feel striped, mechanical, or overly grid-like.
+
+- **Lives in:** `docs/glossary.md`, wall-layout review notes
+- **Why it exists:** names a recurring composition failure mode that should trigger rescue behavior
+- **Used by:** layout critique, future packer heuristics, and Mosaic Lab experiments
+- **Change risk:** low to medium — unclear use weakens evaluation of mosaic rhythm
+- **Surfaced to users:** indirectly — users perceive the stripe effect even if they do not name it
+
 ### Wrap-around wall
 A finite photo wall that loops seamlessly at its left/right and top/bottom edges within the currently loaded world, without becoming a procedurally infinite surface.
 
@@ -175,6 +256,27 @@ The secondary control surface opened from the small circular menu button. It exp
 - **Used by:** filtering behavior and future control-surface design
 - **Change risk:** medium — changing this impacts the balance between minimalism and control
 - **Surfaced to users:** yes — it is the main visible control entry point
+
+### Mosaic Lab
+An isolated synthetic app surface, reachable from the normal build, for evaluating mosaic structure without loading the real-photo wall path.
+
+- **Lives in:** `src/client/src/App.tsx`, `src/client/src/features/mosaic-lab/`
+- **Why it exists:** creates a deliberate entry/exit seam for mockup-only wall studies while keeping the real photo wall as the default experience
+- **Used by:** app-surface selection, browser validation, and future synthetic layout experiments
+- **Change risk:** medium — changing the seam affects how maintainers and reviewers reach lab-only work
+- **Alias:** synthetic layout lab
+- **Surfaced to users:** yes — reachable from the client UI
+- **Notes:** the lab now centers on a synthetic Pixi/camera workspace with starter recipes, editable recipe comparisons, and structure diagnostics, but it must stay clearly synthetic until a later task intentionally broadens it
+
+### Structured mosaic
+A rectilinear exact-fill layout that still shows local variation and seam-breaking rather than collapsing into a repeated grid.
+
+- **Lives in:** `docs/product/photo-wall-experience.md`, `docs/glossary.md`, `src/client/src/features/mosaic-lab/`
+- **Why it exists:** gives reviewers and maintainers a shared success/failure standard for Mosaic Lab output quality
+- **Used by:** Mosaic Lab recipe evaluation, packer acceptance criteria, and browser-proof review
+- **Change risk:** medium — changing the term shifts what counts as acceptable synthetic layout structure
+- **Surfaced to users:** indirectly — the user sees the result even if the term stays mostly internal
+- **Notes:** in Mosaic Lab, obvious single-footprint grid collapse for uniform-input recipes is the opposite of a structured mosaic
 
 ### Album area
 The loose wall region that belongs to exactly one album when the active view resolves to multiple albums.
@@ -278,6 +380,12 @@ A place where multiple state updates, async operations, or subsystems must agree
 The seam where serialized, server-generated, cached, or persisted data becomes live runtime state.
 
 ### Domain-to-implementation mapping terms
+
+#### Source archetype
+A synthetic-input descriptor for what kind of mock source image a Mosaic Lab recipe contains, such as standard landscape, panorama, square, or tall nonstandard.
+
+#### Placement footprint
+The layout shape the Mosaic Lab packer may place into the exact-fill mosaic. A placement footprint is intentionally distinct from a source archetype.
 
 #### Domain model
 A representation of business entities and rules as the system understands them.
@@ -533,6 +641,13 @@ Short definition.
 - `standards/documentation-schema.md`
 
 ## Changelog
+
+### 2026-06-20
+- Updated `Mosaic Lab` to reflect the approved Pixi/camera recipe-bench behavior.
+- Added `Structured mosaic`, `Source archetype`, and `Placement footprint` so the new synthetic-layout contracts use shared language.
+
+### 2026-06-14
+- Added the shared Mosaic Lab and structured-mosaic vocabulary for future synthetic layout experiments and review language.
 
 ### 2026-06-10
 - Added `Wall layout mode` so future maintainers can find the single-stream versus grouped distinction without reviving renderer-selection terminology.
