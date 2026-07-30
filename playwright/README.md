@@ -39,12 +39,18 @@ npm run test:browser
 - `grouped-signposts.spec.ts` — protects grouped signpost reveal, glide, modal suppression, and grouped-selection persistence
 - `zoom-detail-tiers.spec.ts` — protects zoom-aware derivative-tier behavior
 - `media-diagnostics.spec.ts` — proves the real wall advances through browser texture stages, the server observes media outcomes, and neither diagnostic snapshot exposes media identifiers
+- `mosaic-lab-entry-seam.spec.ts` — protects the explicit wall-to-lab entry/return seam, the production-wall renderer contract, the session-local sample-album flow, and the synthetic-media guardrail that keeps `lab:*` ids out of backend `/api/media` requests
 
 ## Changelog
 
 ### 2026-07-29
 
 - Added the media-diagnostics browser proof to the protected-contract index.
+
+### 2026-06-26
+
+- Added the Mosaic Lab entry-seam spec to the protected browser-contract index.
+- Clarified that browser coverage should preserve the wall-first Mosaic Lab framing rather than an old dashboard-first metaphor.
 
 ### 2026-06-10
 - Converted this README to the repository documentation schema.

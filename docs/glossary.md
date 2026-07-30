@@ -258,15 +258,26 @@ The secondary control surface opened from the small circular menu button. It exp
 - **Surfaced to users:** yes — it is the main visible control entry point
 
 ### Mosaic Lab
-An isolated synthetic app surface, reachable from the normal build, for evaluating mosaic structure without loading the real-photo wall path.
+A lab-mode mock photo wall sandbox, reachable from the normal build, for creating or selecting synthetic sample albums, generating photo-like inputs, rerunning the production wall path, and identifying where the mosaic algorithm fails.
 
-- **Lives in:** `src/client/src/App.tsx`, `src/client/src/features/mosaic-lab/`
-- **Why it exists:** creates a deliberate entry/exit seam for mockup-only wall studies while keeping the real photo wall as the default experience
-- **Used by:** app-surface selection, browser validation, and future synthetic layout experiments
-- **Change risk:** medium — changing the seam affects how maintainers and reviewers reach lab-only work
-- **Alias:** synthetic layout lab
+- **Lives in:** `src/client/src/App.tsx`, `src/client/src/features/mosaic-lab/`, `docs/product/photo-wall-experience.md`
+- **Why it exists:** creates a deliberate entry/exit seam for synthetic wall studies while keeping the real photo wall as the default experience
+- **Used by:** app-surface selection, shared wall-renderer reuse, browser validation, and future synthetic layout experiments
+- **Change risk:** medium — changing the seam affects both the product metaphor and how maintainers validate renderer behavior
+- **Alias:** wall sandbox
 - **Surfaced to users:** yes — reachable from the client UI
-- **Notes:** the lab now centers on a synthetic Pixi/camera workspace with starter recipes, editable recipe comparisons, and structure diagnostics, but it must stay clearly synthetic until a later task intentionally broadens it
+- **Notes:** the lab should stay wall-first, clearly synthetic, and production-path-aligned; recipes, seeds, metrics, and diagnostics support the sandbox but are not the primary metaphor
+
+### Sample album
+A named synthetic album preset or editable lab album configuration used to exercise the mock photo wall with realistic or pathological photo mixes.
+
+- **Lives in:** `docs/product/photo-wall-experience.md`, `src/client/src/features/mosaic-lab/model/sampleAlbums.ts`
+- **Why it exists:** gives Mosaic Lab a durable user-facing unit for single-album and grouped-album scenarios without pretending the inputs come from the real library
+- **Used by:** lab controls, synthetic photo generation, grouped-layout checks, and diagnostics
+- **Change risk:** medium — changing the term carelessly can blur the difference between real albums and lab-only inputs
+- **Alias:** synthetic sample album
+- **Surfaced to users:** yes — selectable and editable in Mosaic Lab
+- **Notes:** selecting one sample album should exercise single-wall behavior, while selecting multiple sample albums should exercise grouped album-area behavior
 
 ### Structured mosaic
 A rectilinear exact-fill layout that still shows local variation and seam-breaking rather than collapsing into a repeated grid.
@@ -380,6 +391,17 @@ A place where multiple state updates, async operations, or subsystems must agree
 The seam where serialized, server-generated, cached, or persisted data becomes live runtime state.
 
 ### Domain-to-implementation mapping terms
+
+#### Synthetic photo record
+A `PhotoQueryRecord`-compatible lab record generated from sample-album settings instead of backend library media.
+
+- **Lives in:** `src/client/src/features/mosaic-lab/model/syntheticPhotos.ts`, `src/shared/api/photos.ts`
+- **Why it exists:** lets Mosaic Lab feed synthetic inputs through the shared production wall path without pretending the records came from the real photo library
+- **Used by:** shared wall rendering, synthetic media-source resolution, hover/modal safeguards, and diagnostics
+- **Change risk:** medium to high — changing this contract can break renderer reuse or leak lab-only IDs into production media paths
+- **Alias:** lab photo record
+- **Surfaced to users:** indirectly — users see the rendered synthetic wall, not the record shape
+- **Notes:** synthetic IDs stay lab-only and should not leak into production `/api/media/:photoId` requests; v1 placeholders can use SVG or data URLs instead of backend media
 
 #### Source archetype
 A synthetic-input descriptor for what kind of mock source image a Mosaic Lab recipe contains, such as standard landscape, panorama, square, or tall nonstandard.
@@ -654,6 +676,10 @@ Short definition.
 
 ### 2026-07-29
 - Added `Media diagnostics` as the shared name for the bounded server/browser photo-loading evidence.
+
+### 2026-06-26
+- Reframed `Mosaic Lab` as a wall-first mock photo wall sandbox aligned to the production wall path.
+- Added `Sample album` and `Synthetic photo record` to capture the approved lab-input vocabulary.
 
 ### 2026-06-20
 - Updated `Mosaic Lab` to reflect the approved Pixi/camera recipe-bench behavior.

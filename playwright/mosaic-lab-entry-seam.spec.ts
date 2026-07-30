@@ -1,480 +1,541 @@
-import { writeFileSync } from 'node:fs';
-import { expect, test, type Locator, type Page, type TestInfo } from '@playwright/test';
+import { writeFileSync } from "node:fs";
+import {
+	expect,
+	test,
+	type Locator,
+	type Page,
+	type TestInfo,
+} from "@playwright/test";
 
-type StarterRecipeKey = 'all-landscape' | 'all-portrait' | 'mixed' | 'weird';
-type WorldOrientation = 'landscape' | 'portrait';
+test.describe("Mosaic Lab wall-first contract", () => {
+	test.describe.configure({ timeout: 60_000 });
 
-interface ScenarioExpectation {
-  key: StarterRecipeKey;
-  name: string;
-  activeArchetypes: string;
-  sourcePoolText: string;
-  sourceOrientationTexts: readonly string[];
-  sourceFamilyTexts?: readonly string[];
-  footprintTexts: readonly string[];
-  worldOrientation: WorldOrientation;
-}
+	let consoleErrors: string[];
 
-interface ScenarioEvidence {
-  key: StarterRecipeKey;
-  name: string;
-  screenshotPath: string;
-  sourceArchetypesText: string;
-  placementFootprintsText: string;
-  antiGridSeamsText: string;
-  sourceSignalsText: string;
-  placementSignalsText: string;
-  stage: Awaited<ReturnType<typeof readStageState>>;
-}
+	test.beforeEach(async ({ page }) => {
+		consoleErrors = [];
 
-const STARTER_SCENARIOS: readonly ScenarioExpectation[] = [
-  {
-    key: 'all-landscape',
-    name: 'All Landscape',
-    activeArchetypes: '1 active',
-    sourcePoolText: '50 sources',
-    sourceOrientationTexts: ['landscape: 50'],
-    sourceFamilyTexts: ['standard: 50'],
-    footprintTexts: ['3 unique', 'Square rescue', 'Standard landscape', 'Large landscape'],
-    worldOrientation: 'landscape',
-  },
-  {
-    key: 'all-portrait',
-    name: 'All Portrait',
-    activeArchetypes: '1 active',
-    sourcePoolText: '50 sources',
-    sourceOrientationTexts: ['portrait: 50'],
-    sourceFamilyTexts: ['standard: 50'],
-    footprintTexts: ['3 unique', 'Square rescue', 'Standard portrait', 'Large portrait'],
-    worldOrientation: 'portrait',
-  },
-  {
-    key: 'mixed',
-    name: 'Mixed',
-    activeArchetypes: '2 active',
-    sourcePoolText: '50 sources',
-    sourceOrientationTexts: ['landscape: 25', 'portrait: 25'],
-    sourceFamilyTexts: ['standard: 50'],
-    footprintTexts: ['3 unique', 'Square rescue', 'Standard portrait', 'Large portrait'],
-    worldOrientation: 'landscape',
-  },
-  {
-    key: 'weird',
-    name: 'Weird',
-    activeArchetypes: '6 active',
-    sourcePoolText: '50 sources',
-    sourceOrientationTexts: ['landscape: 25', 'portrait: 17', 'square: 8'],
-    sourceFamilyTexts: ['nonstandard: 32', 'standard: 18'],
-    footprintTexts: ['3 unique', 'Square rescue', 'Standard portrait', 'Large portrait'],
-    worldOrientation: 'landscape',
-  },
-] as const;
+		page.on("console", (message) => {
+			if (message.type() === "error") {
+				consoleErrors.push(message.text());
+			}
+		});
+		page.on("pageerror", (error) => {
+			consoleErrors.push(error.message);
+		});
+	});
 
-test.describe('Mosaic Lab workflow', () => {
-  test('opens the lab and proves the integrated Pixi-backed workflow in-browser', async ({
-    page,
-  }, testInfo: TestInfo) => {
-    const evidence: {
-      cwd: string;
-      stageInteraction: Record<string, unknown>;
-      recipeEditing: Record<string, unknown>;
-      scenarios: ScenarioEvidence[];
-      wallReturn: Record<string, unknown>;
-    } = {
-      cwd: process.cwd(),
-      stageInteraction: {},
-      recipeEditing: {},
-      scenarios: [],
-      wallReturn: {},
-    };
+	test.afterEach(async () => {
+		expect(consoleErrors).toEqual([]);
+	});
 
-    await openReadyWall(page);
+	test("opens the real wall by default, enters Mosaic Lab from controls, and returns to the wall", async ({
+		page,
+	}, testInfo: TestInfo) => {
+		await openReadyWall(page);
 
-    await expect(page).not.toHaveURL(/#mosaic-lab$/);
-    await expect(page.getByTestId('wall-shell')).toBeVisible();
-    await expect(page.getByTestId('mosaic-lab-shell')).toHaveCount(0);
+		await expect(page).toHaveURL(/(?:#wall)?$/);
+		await expect(page.getByTestId("wall-shell")).toBeVisible();
+		await expect(page.getByTestId("mosaic-lab-shell")).toHaveCount(0);
 
-    await openControls(page);
-    await expect(page.getByTestId('controls-open-mosaic-lab')).toBeVisible();
-    await page.getByTestId('controls-open-mosaic-lab').click();
+		await openMosaicLab(page);
 
-    await expect(page).toHaveURL(/#mosaic-lab$/);
-    await expect(page.getByTestId('mosaic-lab-shell')).toBeVisible();
-    await expect(page.getByText('Synthetic recipe and placement lab')).toBeVisible();
-    await expect(page.getByTestId('mosaic-lab-session-summary')).toContainText('Recipe · Mixed Draft');
-    await expect(page.getByTestId('mosaic-lab-session-summary')).toContainText('Diagnostics · on');
-    await expect(page.getByTestId('mosaic-lab-metrics')).toBeVisible();
-    await expect(page.getByTestId('mosaic-lab-metric-source-archetypes')).toBeVisible();
-    await expect(page.getByTestId('mosaic-lab-metric-placement-footprints')).toBeVisible();
-    await expect(page.getByTestId('mosaic-lab-metric-anti-grid-seams')).toBeVisible();
-    await expect(page.getByTestId('mosaic-lab-source-recipe-signals')).toBeVisible();
-    await expect(page.getByTestId('mosaic-lab-placement-structure-signals')).toBeVisible();
-    await expect(page.getByTestId('mosaic-lab-pixi-stage')).toBeVisible();
-    await expect(page.getByTestId('mosaic-lab-stage-diagnostics')).toBeVisible();
-    await expect(page.getByTestId('mosaic-lab-metric-black-space')).toHaveText('Pass');
-    await expect(page.getByTestId('mosaic-lab-metric-overlap')).toHaveText('Pass');
-    await expect(page.getByTestId('mosaic-lab-shell')).toHaveAttribute(
-      'data-scroll-model',
-      'bounded-stage',
-    );
+		const labShell = page.getByTestId("mosaic-lab-shell");
+		const labWall = page.getByTestId("wall-canvas");
 
-    const shellScrollBefore = await readScrollMetrics(page.getByTestId('mosaic-lab-shell'));
-    expect(shellScrollBefore.scrollTop).toBe(0);
+		await assertDefaultLabContract(page);
+		await expect(labWall).toHaveAttribute("data-layout-mode", "grouped");
+		await expect(labWall).toHaveAttribute("data-active-album-area-count", "2");
+		await expect(page.getByTestId("wall-photo-tile").first()).toBeVisible();
 
-    const windowScrollBefore = await page.evaluate(() => window.scrollY);
-    const stage = page.getByTestId('mosaic-lab-pixi-stage');
-    const stageBox = await boundingBoxOrThrow(stage);
-    await page.mouse.move(stageBox.x + stageBox.width * 0.5, stageBox.y + stageBox.height * 0.5);
+		const groupedScreenshotPath = testInfo.outputPath(
+			"mosaic-lab-grouped-default.png",
+		);
+		await page.screenshot({ path: groupedScreenshotPath, fullPage: false });
+		await testInfo.attach("mosaic-lab-grouped-default", {
+			path: groupedScreenshotPath,
+			contentType: "image/png",
+		});
 
-    const cameraBeforePan = await readStageState(stage);
-    await dispatchWheel(stage, { deltaX: 280, deltaY: 340 });
-    await expect.poll(async () => (await readStageState(stage)).moveCount).toBeGreaterThan(cameraBeforePan.moveCount);
-    const cameraAfterPan = await readStageState(stage);
-    expect(cameraAfterPan.x).not.toBe(cameraBeforePan.x);
-    expect(cameraAfterPan.y).not.toBe(cameraBeforePan.y);
+		await page.getByTestId("mosaic-lab-return").click();
+		await expect(page).toHaveURL(/#wall$/);
+		await expect(page.getByTestId("wall-shell")).toHaveAttribute(
+			"data-screen",
+			"ready",
+			{ timeout: 60_000 },
+		);
+		await expect(page.getByTestId("wall-photo-tile").first()).toBeVisible();
+		await expect(labShell).toHaveCount(0);
 
-    const windowScrollAfterPan = await page.evaluate(() => window.scrollY);
-    expect(windowScrollAfterPan).toBe(windowScrollBefore);
+		const proofSummaryPath = testInfo.outputPath(
+			"mosaic-lab-entry-return.json",
+		);
+		writeFileSync(
+			proofSummaryPath,
+			`${JSON.stringify(
+				{
+					entryUrl: "#mosaic-lab",
+					finalUrl: page.url(),
+					finalWallScreen: await page
+						.getByTestId("wall-shell")
+						.getAttribute("data-screen"),
+					groupedScreenshotPath,
+				},
+				null,
+				2,
+			)}\n`,
+			"utf8",
+		);
+		await testInfo.attach("mosaic-lab-entry-return", {
+			path: proofSummaryPath,
+			contentType: "application/json",
+		});
+	});
 
-    const shellScrollAfterPan = await readScrollMetrics(page.getByTestId('mosaic-lab-shell'));
-    expect(shellScrollAfterPan.scrollTop).toBe(shellScrollBefore.scrollTop);
+	test("creates, edits, duplicates, and narrows Mosaic Lab albums down to guarded single mode", async ({
+		page,
+	}, testInfo: TestInfo) => {
+		await openMosaicLab(page);
 
-    await dispatchWheel(stage, { deltaX: 0, deltaY: -280, shiftKey: true });
+		const labShell = page.getByTestId("mosaic-lab-shell");
+		const labWall = page.getByTestId("wall-canvas");
 
-    await expect.poll(async () => (await readStageState(stage)).zoom).toBeGreaterThan(cameraAfterPan.zoom);
-    const cameraAfterZoom = await readStageState(stage);
-    expect(cameraAfterZoom.zoomCount).toBeGreaterThan(cameraAfterPan.zoomCount);
+		await page
+			.getByTestId("mosaic-lab-create-preset-select")
+			.selectOption("tiny-album");
+		await page.getByTestId("mosaic-lab-create-album").click();
 
-    await dispatchDrag(stage, {
-      startXRatio: 0.5,
-      startYRatio: 0.5,
-      endXRatio: 0.72,
-      endYRatio: 0.72,
-    });
+		await expect(labShell).toHaveAttribute("data-selected-album-count", "3");
+		await expect(labShell).toHaveAttribute("data-generated-photo-count", "139");
+		await expect(
+			page.getByTestId("mosaic-lab-active-album-name-input"),
+		).toHaveValue("Tiny Album Draft");
+		await expect(
+			page.getByTestId("mosaic-lab-selected-album-names"),
+		).toContainText("Tiny Album Draft");
 
-    await expect.poll(async () => (await readStageState(stage)).moveCount).toBeGreaterThan(cameraAfterZoom.moveCount);
-    const cameraAfterDrag = await readStageState(stage);
-    expect(cameraAfterDrag.x).not.toBe(cameraAfterZoom.x);
+		const snapshotBeforeEdit = await requiredAttr(labShell, "data-snapshot-id");
+		const aspectDistributionBeforeEdit = await page
+			.getByTestId("mosaic-lab-aspect-distribution")
+			.innerText();
 
-    for (let index = 0; index < 6; index += 1) {
-      await dispatchWheel(stage, { deltaX: 900, deltaY: 900 });
-    }
-    const boundedCamera = await readStageState(stage);
-    expect(boundedCamera.x).toBeGreaterThanOrEqual(boundedCamera.minX);
-    expect(boundedCamera.x).toBeLessThanOrEqual(boundedCamera.maxX);
-    expect(boundedCamera.y).toBeGreaterThanOrEqual(boundedCamera.minY);
-    expect(boundedCamera.y).toBeLessThanOrEqual(boundedCamera.maxY);
-    expect(Math.abs(boundedCamera.x - boundedCamera.minX)).toBeLessThanOrEqual(1.5);
-    expect(Math.abs(boundedCamera.y - boundedCamera.minY)).toBeLessThanOrEqual(1.5);
+		await setInputValue(
+			page.getByTestId("mosaic-lab-active-album-name-input"),
+			"Tiny Stress Study",
+		);
+		await expect(
+			page.getByTestId("mosaic-lab-selected-album-names"),
+		).toContainText("Tiny Stress Study");
+		await expect(
+			page.getByTestId("mosaic-lab-album-edit-user-tiny-album-draft"),
+		).toContainText("Tiny Stress Study");
 
-    evidence.stageInteraction = {
-      shellScrollBefore,
-      shellScrollAfterPan,
-      windowScrollBefore,
-      windowScrollAfterPan,
-      cameraBeforePan,
-      cameraAfterPan,
-      cameraAfterZoom,
-      cameraAfterDrag,
-      boundedCamera,
-      cameraEventsText: await page.getByTestId('mosaic-lab-camera-events').innerText(),
-    };
+		await setInputValue(
+			page.getByTestId("mosaic-lab-active-album-count-input"),
+			"11",
+		);
+		await expect(labShell).toHaveAttribute("data-generated-photo-count", "141");
+		await expect(
+			page.getByTestId("mosaic-lab-generated-photo-count"),
+		).toContainText("Photos · 141");
+		await expect(page.getByTestId("mosaic-lab-packed-summary")).toContainText(
+			"141 packed tiles",
+		);
 
-    await expect(page.getByTestId('mosaic-lab-recipe-roster-entry-user-recipe-1')).toHaveAttribute(
-      'data-selected',
-      'true',
-    );
+		await page
+			.getByTestId("mosaic-lab-active-album-profile-select")
+			.selectOption("phone-weird");
+		await expect
+			.poll(async () =>
+				page.getByTestId("mosaic-lab-aspect-distribution").innerText(),
+			)
+			.not.toBe(aspectDistributionBeforeEdit);
 
-    const portraitScenario = STARTER_SCENARIOS.find((scenario) => scenario.key === 'all-portrait');
-    if (!portraitScenario) {
-      throw new Error('Expected all-portrait scenario');
-    }
+		await setInputValue(
+			page.getByTestId("mosaic-lab-active-album-seed-input"),
+			"tiny-seed-a",
+		);
+		await expect(page.getByTestId("mosaic-lab-seed-summary")).toHaveText(
+			"tiny-seed-a",
+		);
+		await expect
+			.poll(async () => requiredAttr(labShell, "data-snapshot-id"))
+			.not.toBe(snapshotBeforeEdit);
 
-    evidence.scenarios.push(await captureStarterScenario(page, testInfo, portraitScenario));
-    await expect(page.getByTestId('mosaic-lab-starter-edit-note')).toBeVisible();
+		await page.getByTestId("mosaic-lab-duplicate-album").click();
+		await expect(
+			page.getByTestId("mosaic-lab-active-album-name-input"),
+		).toHaveValue("Tiny Stress Study Copy");
+		await expect(labShell).toHaveAttribute("data-selected-album-count", "4");
+		await expect(labShell).toHaveAttribute("data-generated-photo-count", "152");
+		await expect(
+			page.getByTestId("mosaic-lab-selected-album-names"),
+		).toContainText("Tiny Stress Study Copy");
 
-    await page.getByTestId('mosaic-lab-create-recipe').click();
-    await expect(page.getByTestId('mosaic-lab-recipe-name-input')).toHaveValue('Recipe 2');
-    await expect(page.getByTestId('mosaic-lab-selected-recipe-origin')).toHaveText('Editable recipe');
-    await expect(page.getByTestId('mosaic-lab-editable-recipe-note')).toBeVisible();
-    await expect(page.getByTestId('mosaic-lab-metric-recipe')).toHaveText('Recipe 2');
+		await toggleAlbumSelection(page, "panorama-heavy");
+		await toggleAlbumSelection(page, "user-tiny-album-draft");
+		await toggleAlbumSelection(page, "user-tiny-album-draft-copy");
 
-    await setInputValue(page.getByTestId('mosaic-lab-recipe-name-input'), 'Portrait Study A');
-    await expect(page.getByTestId('mosaic-lab-metric-recipe')).toHaveText('Portrait Study A');
-    await expect(page.getByTestId('mosaic-lab-session-summary')).toContainText('Recipe · Portrait Study A');
-    await expect(page.getByTestId('mosaic-lab-recipe-roster-entry-user-recipe-2')).toContainText(
-      'Portrait Study A',
-    );
-    await expect(page.getByText('Packed workspace for Portrait Study A')).toBeVisible();
+		await expect(labShell).toHaveAttribute("data-selected-album-count", "1");
+		await expect(labShell).toHaveAttribute("data-layout-mode", "single");
+		await expect(labShell).toHaveAttribute("data-generated-photo-count", "72");
+		await expect(labWall).toHaveAttribute("data-layout-mode", "single");
+		await expect(labWall).toHaveAttribute("data-active-album-area-count", "1");
+		await expect(page.getByTestId("mosaic-lab-layout-mode")).toContainText(
+			"Layout · single",
+		);
+		await expect(
+			page.getByTestId("mosaic-lab-selected-album-names"),
+		).toHaveText("Mixed Vacation");
 
-    await setInputValue(page.getByTestId('mosaic-lab-source-count-source-standard-portrait'), '18');
-    await expect(page.getByTestId('mosaic-lab-selected-recipe-total')).toHaveText('18 sources');
-    await expect(page.getByTestId('mosaic-lab-metric-recipe')).toHaveText('Portrait Study A');
-    await expect
-      .poll(async () => normalizeText(await page.getByTestId('mosaic-lab-source-recipe-signals').innerText()).toLowerCase())
-      .toContain('source pool 18 sources');
-    await expect(page.getByTestId('mosaic-lab-pixi-stage')).toBeVisible();
+		await toggleAlbumSelection(page, "mixed-vacation");
+		await expect(
+			page.getByTestId("mosaic-lab-album-select-mixed-vacation"),
+		).toHaveAttribute("data-selected", "true");
+		await expect(labShell).toHaveAttribute("data-selected-album-count", "1");
+		await expect(labShell).toHaveAttribute("data-layout-mode", "single");
 
-    const editedStage = await readStageState(stage);
-    expect(editedStage.worldHeight).toBeGreaterThan(editedStage.worldWidth);
+		const proofSummaryPath = testInfo.outputPath("mosaic-lab-edit-flow.json");
+		writeFileSync(
+			proofSummaryPath,
+			`${JSON.stringify(
+				{
+					snapshotBeforeEdit,
+					snapshotAfterEdit: await requiredAttr(labShell, "data-snapshot-id"),
+					selectedAlbumNames: await page
+						.getByTestId("mosaic-lab-selected-album-names")
+						.innerText(),
+					layoutMode: await labShell.getAttribute("data-layout-mode"),
+					generatedPhotoCount: await labShell.getAttribute(
+						"data-generated-photo-count",
+					),
+				},
+				null,
+				2,
+			)}\n`,
+			"utf8",
+		);
+		await testInfo.attach("mosaic-lab-edit-flow", {
+			path: proofSummaryPath,
+			contentType: "application/json",
+		});
+	});
 
-    await page.getByTestId('mosaic-lab-duplicate-recipe').click();
-    await expect(page.getByTestId('mosaic-lab-recipe-name-input')).toHaveValue('Portrait Study A Copy');
-    await expect(page.getByTestId('mosaic-lab-selected-recipe-cloned-from')).toHaveText(
-      'Cloned from user-recipe-2',
-    );
+	test("keeps uniform-input albums structurally varied through the production wall", async ({
+		page,
+	}, testInfo: TestInfo) => {
+		await openMosaicLab(page);
 
-    evidence.recipeEditing = {
-      createdRecipeKey: 'user-recipe-2',
-      renamedRecipe: 'Portrait Study A',
-      editedSourcePool: await page.getByTestId('mosaic-lab-selected-recipe-total').innerText(),
-      duplicateRecipeKey: 'user-recipe-3',
-      duplicateRecipeName: await page.getByTestId('mosaic-lab-recipe-name-input').inputValue(),
-      clonedFrom: await page.getByTestId('mosaic-lab-selected-recipe-cloned-from').innerText(),
-      sourceSignalsText: normalizeText(await page.getByTestId('mosaic-lab-source-recipe-signals').innerText()),
-      stage: editedStage,
-    };
+		const labShell = page.getByTestId("mosaic-lab-shell");
+		const evidence: Record<string, TileStructureEvidence> = {};
 
-    for (const scenario of STARTER_SCENARIOS.filter((candidate) => candidate.key !== 'all-portrait')) {
-      evidence.scenarios.push(await captureStarterScenario(page, testInfo, scenario));
-    }
+		await toggleAlbumSelection(page, "all-landscape");
+		await toggleAlbumSelection(page, "mixed-vacation");
+		await toggleAlbumSelection(page, "panorama-heavy");
+		await expect(labShell).toHaveAttribute("data-layout-mode", "single");
+		await expect(labShell).toHaveAttribute("data-generated-photo-count", "64");
+		evidence.allLandscape = await assertStructuredUniformAlbum(page);
 
-    const proofSummaryPath = testInfo.outputPath('mosaic-lab-proof-summary.json');
-    writeFileSync(proofSummaryPath, `${JSON.stringify(evidence, null, 2)}\n`, 'utf8');
+		await toggleAlbumSelection(page, "all-portrait");
+		await toggleAlbumSelection(page, "all-landscape");
+		await expect(labShell).toHaveAttribute("data-layout-mode", "single");
+		await expect(labShell).toHaveAttribute("data-generated-photo-count", "64");
+		evidence.allPortrait = await assertStructuredUniformAlbum(page);
 
-    await page.getByTestId('mosaic-lab-exit').click();
-    await expect(page).toHaveURL(/#wall$/);
-    await expect(page.getByTestId('wall-shell')).toHaveAttribute('data-screen', 'ready', {
-      timeout: 60_000,
-    });
-    await expect(page.getByTestId('wall-photo-tile').first()).toBeVisible();
+		const screenshotPath = testInfo.outputPath(
+			"mosaic-lab-uniform-input-structure.png",
+		);
+		await page.screenshot({ path: screenshotPath, fullPage: false });
+		await testInfo.attach("mosaic-lab-uniform-input-structure", {
+			path: screenshotPath,
+			contentType: "image/png",
+		});
 
-    evidence.wallReturn = {
-      url: page.url(),
-      wallScreen: await page.getByTestId('wall-shell').getAttribute('data-screen'),
-      firstTileVisible: await page.getByTestId('wall-photo-tile').first().isVisible(),
-    };
+		const evidencePath = testInfo.outputPath(
+			"mosaic-lab-uniform-input-structure.json",
+		);
+		writeFileSync(evidencePath, `${JSON.stringify(evidence, null, 2)}\n`, "utf8");
+		await testInfo.attach("mosaic-lab-uniform-input-evidence", {
+			path: evidencePath,
+			contentType: "application/json",
+		});
+	});
 
-    writeFileSync(proofSummaryPath, `${JSON.stringify(evidence, null, 2)}\n`, 'utf8');
-    await testInfo.attach('mosaic-lab-proof-summary', {
-      path: proofSummaryPath,
-      contentType: 'application/json',
-    });
-  });
+	test("opens a focused synthetic modal with a data URL source and never hits backend lab media routes", async ({
+		page,
+	}, testInfo: TestInfo) => {
+		const syntheticMediaRequests: string[] = [];
+		const syntheticMediaResponses: Array<{ url: string; status: number }> = [];
+
+		page.on("request", (request) => {
+			const url = request.url();
+			if (isSyntheticBackendMediaUrl(url)) {
+				syntheticMediaRequests.push(url);
+			}
+		});
+		page.on("response", (response) => {
+			const url = response.url();
+			if (isSyntheticBackendMediaUrl(url)) {
+				syntheticMediaResponses.push({ url, status: response.status() });
+			}
+		});
+
+		await openMosaicLab(page);
+
+		const tile = await pickClickableTile(page);
+		const syntheticPhotoId = await requiredAttr(tile, "data-photo-id");
+		expect(syntheticPhotoId.startsWith("lab:")).toBe(true);
+
+		await tile.click();
+
+		const modal = page.getByTestId("focused-photo-modal");
+		await expect(modal).toBeVisible();
+		await expect(modal).toHaveAttribute("data-photo-id", syntheticPhotoId);
+		const focusedPhotoImage = page.getByTestId("focused-photo-image");
+		await expect(focusedPhotoImage).toHaveAttribute(
+			"src",
+			/^data:image\/svg\+xml/i,
+		);
+		const imageSource = await focusedPhotoImage.getAttribute("src");
+
+		const modalScreenshotPath = testInfo.outputPath(
+			"mosaic-lab-focused-synthetic-modal.png",
+		);
+		await page.screenshot({ path: modalScreenshotPath, fullPage: false });
+		await testInfo.attach("mosaic-lab-focused-synthetic-modal", {
+			path: modalScreenshotPath,
+			contentType: "image/png",
+		});
+
+		expect(syntheticMediaRequests).toEqual([]);
+		expect(syntheticMediaResponses).toEqual([]);
+
+		await page.getByTestId("focused-photo-close").click();
+		await expect(modal).toHaveCount(0);
+
+		const proofSummaryPath = testInfo.outputPath(
+			"mosaic-lab-synthetic-media-proof.json",
+		);
+		writeFileSync(
+			proofSummaryPath,
+			`${JSON.stringify(
+				{
+					syntheticPhotoId,
+					syntheticMediaRequests,
+					syntheticMediaResponses,
+					imageSource,
+				},
+				null,
+				2,
+			)}\n`,
+			"utf8",
+		);
+		await testInfo.attach("mosaic-lab-synthetic-media-proof", {
+			path: proofSummaryPath,
+			contentType: "application/json",
+		});
+	});
 });
 
-async function captureStarterScenario(
-  page: Page,
-  testInfo: TestInfo,
-  scenario: ScenarioExpectation,
-): Promise<ScenarioEvidence> {
-  const stage = page.getByTestId('mosaic-lab-pixi-stage');
+interface TileStructureEvidence {
+	mountedTileCount: number;
+	uniqueFootprintCount: number;
+	uniqueWidthCount: number;
+	uniqueHeightCount: number;
+}
 
-  await page.getByTestId(`mosaic-lab-recipe-roster-entry-${scenario.key}`).click();
-  await expect(page.getByTestId(`mosaic-lab-recipe-roster-entry-${scenario.key}`)).toHaveAttribute(
-    'data-selected',
-    'true',
-  );
-  await expect(page.getByTestId('mosaic-lab-metric-recipe')).toHaveText(scenario.name);
-  await expect(page.getByTestId('mosaic-lab-metric-source-archetypes')).toHaveText(
-    scenario.activeArchetypes,
-  );
-  await expect(page.getByTestId('mosaic-lab-metric-black-space')).toHaveText('Pass');
-  await expect(page.getByTestId('mosaic-lab-metric-overlap')).toHaveText('Pass');
+async function assertStructuredUniformAlbum(
+	page: Page,
+): Promise<TileStructureEvidence> {
+	await expect(page.getByTestId("mosaic-lab-packed-summary")).toContainText(
+		"64 packed tiles",
+	);
+	const tiles = page.getByTestId("wall-photo-tile");
+	await expect.poll(async () => tiles.count()).toBeGreaterThan(8);
 
-  await expect
-    .poll(async () => {
-      const current = await readStageState(stage);
-      return scenario.worldOrientation === 'portrait'
-        ? current.worldHeight - current.worldWidth
-        : current.worldWidth - current.worldHeight;
-    })
-    .toBeGreaterThan(0);
+	const dimensions = await tiles.evaluateAll((nodes) =>
+		nodes.map((node) => {
+			const element = node as HTMLElement;
+			return {
+				width: Math.round(Number.parseFloat(element.style.width)),
+				height: Math.round(Number.parseFloat(element.style.height)),
+			};
+		}),
+	);
+	const evidence = {
+		mountedTileCount: dimensions.length,
+		uniqueFootprintCount: new Set(
+			dimensions.map(({ width, height }) => `${width}x${height}`),
+		).size,
+		uniqueWidthCount: new Set(dimensions.map(({ width }) => width)).size,
+		uniqueHeightCount: new Set(dimensions.map(({ height }) => height)).size,
+	};
 
-  const sourceSignalsText = normalizeText(await page.getByTestId('mosaic-lab-source-recipe-signals').innerText());
-  const placementSignalsText = normalizeText(
-    await page.getByTestId('mosaic-lab-placement-structure-signals').innerText(),
-  );
-  const placementFootprintsText = await readMetricCardText(page.getByTestId('mosaic-lab-metric-placement-footprints'));
-  const antiGridSeamsText = await readMetricCardText(page.getByTestId('mosaic-lab-metric-anti-grid-seams'));
-  const sourceArchetypesText = await readMetricCardText(page.getByTestId('mosaic-lab-metric-source-archetypes'));
-
-  expect(sourceSignalsText).toContain(scenario.sourcePoolText);
-  for (const text of scenario.sourceOrientationTexts) {
-    expect(sourceSignalsText).toContain(text);
-  }
-  for (const text of scenario.sourceFamilyTexts ?? []) {
-    expect(sourceSignalsText).toContain(text);
-  }
-  for (const text of scenario.footprintTexts) {
-    expect(placementFootprintsText).toContain(text);
-    expect(placementSignalsText).toContain(text);
-  }
-
-  const screenshotPath = testInfo.outputPath(`mosaic-lab-${scenario.key}.png`);
-  await page.getByTestId('mosaic-lab-shell').screenshot({ path: screenshotPath });
-  await testInfo.attach(`mosaic-lab-${scenario.key}`, {
-    path: screenshotPath,
-    contentType: 'image/png',
-  });
-
-  return {
-    key: scenario.key,
-    name: scenario.name,
-    screenshotPath,
-    sourceArchetypesText,
-    placementFootprintsText,
-    antiGridSeamsText,
-    sourceSignalsText,
-    placementSignalsText,
-    stage: await readStageState(stage),
-  };
+	expect(evidence.mountedTileCount).toBeGreaterThan(8);
+	expect(evidence.uniqueFootprintCount).toBeGreaterThan(1);
+	expect(evidence.uniqueWidthCount).toBeGreaterThan(1);
+	expect(evidence.uniqueHeightCount).toBeGreaterThan(1);
+	return evidence;
 }
 
 async function openReadyWall(page: Page): Promise<void> {
-  await page.goto('/');
-  await expect(page.getByTestId('wall-shell')).toHaveAttribute('data-screen', 'ready', {
-    timeout: 60_000,
-  });
-  await expect(page.getByTestId('wall-photo-tile').first()).toBeVisible();
+	await page.goto("/");
+	await expect(page.getByTestId("wall-shell")).toHaveAttribute(
+		"data-screen",
+		"ready",
+		{
+			timeout: 60_000,
+		},
+	);
+	await expect(page.getByTestId("wall-photo-tile").first()).toBeVisible();
 }
 
 async function openControls(page: Page): Promise<void> {
-  const trigger = page.getByTestId('controls-trigger');
-  await trigger.click();
-  await expect(page.getByTestId('controls-panel')).toBeVisible();
+	const trigger = page.getByTestId("controls-trigger");
+	await trigger.click();
+	await expect(page.getByTestId("controls-panel")).toBeVisible();
+}
+
+async function openMosaicLab(page: Page): Promise<void> {
+	await openReadyWall(page);
+	await openControls(page);
+	await page.getByTestId("controls-open-mosaic-lab").click();
+	await expect(page).toHaveURL(/#mosaic-lab$/);
+	await expect(page.getByTestId("mosaic-lab-shell")).toBeVisible();
+	await expect(page.getByTestId("wall-photo-tile").first()).toBeVisible();
+}
+
+async function assertDefaultLabContract(page: Page): Promise<void> {
+	const labShell = page.getByTestId("mosaic-lab-shell");
+
+	await expect(labShell).toHaveAttribute(
+		"data-lab-renderer",
+		"production-wall",
+	);
+	await expect(page.getByTestId("mosaic-lab-wall-sandbox")).toHaveAttribute(
+		"data-lab-renderer",
+		"production-wall",
+	);
+	await expect(
+		page.getByText("Mosaic Lab · synthetic mockup only"),
+	).toBeVisible();
+	await expect(page.getByText("Production wall sandbox")).toBeVisible();
+	await expect(page.getByTestId("mosaic-lab-return")).toBeVisible();
+	await expect(labShell).toHaveAttribute("data-layout-mode", "grouped");
+	await expect(labShell).toHaveAttribute("data-selected-album-count", "2");
+	await expect(labShell).toHaveAttribute("data-generated-photo-count", "130");
+	await expect(
+		page.getByTestId("mosaic-lab-selected-album-count"),
+	).toContainText("Albums · 2");
+	await expect(
+		page.getByTestId("mosaic-lab-generated-photo-count"),
+	).toContainText("Photos · 130");
+	await expect(page.getByTestId("mosaic-lab-layout-mode")).toContainText(
+		"Layout · grouped",
+	);
+	await expect(page.getByTestId("mosaic-lab-selected-album-names")).toHaveText(
+		"Mixed Vacation · Panorama Heavy",
+	);
+	await expect(page.getByTestId("mosaic-lab-seed-summary")).toHaveText(
+		"mixed-vacation-v1",
+	);
+	await expect(page.getByTestId("mosaic-lab-packed-summary")).toContainText(
+		"130 packed tiles",
+	);
+	await expect(page.getByTestId("mosaic-lab-world-summary")).toHaveText(
+		/\d+ × \d+ px/,
+	);
+	await expect(page.getByTestId("mosaic-lab-deferred-metrics")).toContainText(
+		"deferred",
+	);
 }
 
 async function setInputValue(locator: Locator, value: string): Promise<void> {
-  await locator.evaluate((node, nextValue) => {
-    const input = node as HTMLInputElement;
-    const descriptor = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value');
-    descriptor?.set?.call(input, nextValue);
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-    input.dispatchEvent(new Event('change', { bubbles: true }));
-  }, value);
+	await locator.evaluate((node, nextValue) => {
+		const input = node as HTMLInputElement;
+		const descriptor = Object.getOwnPropertyDescriptor(
+			window.HTMLInputElement.prototype,
+			"value",
+		);
+		descriptor?.set?.call(input, nextValue);
+		input.dispatchEvent(new Event("input", { bubbles: true }));
+		input.dispatchEvent(new Event("change", { bubbles: true }));
+	}, value);
 }
 
-async function dispatchWheel(
-  locator: Locator,
-  init: { deltaX: number; deltaY: number; shiftKey?: boolean },
+async function toggleAlbumSelection(
+	page: Page,
+	albumId: string,
 ): Promise<void> {
-  await locator.evaluate((node, nextInit) => {
-    const element = node as HTMLElement;
-    const rect = element.getBoundingClientRect();
-    const event = new WheelEvent('wheel', {
-      bubbles: true,
-      cancelable: true,
-      clientX: rect.left + rect.width / 2,
-      clientY: rect.top + rect.height / 2,
-      deltaX: nextInit.deltaX,
-      deltaY: nextInit.deltaY,
-      shiftKey: nextInit.shiftKey ?? false,
-    });
-    element.dispatchEvent(event);
-  }, init);
+	const toggle = page.getByTestId(`mosaic-lab-album-select-${albumId}`);
+	await toggle.evaluate((node) => {
+		(node as HTMLButtonElement).click();
+	});
 }
 
-async function dispatchDrag(
-  locator: Locator,
-  init: {
-    startXRatio: number;
-    startYRatio: number;
-    endXRatio: number;
-    endYRatio: number;
-  },
-): Promise<void> {
-  await locator.evaluate((node, nextInit) => {
-    const element = node as HTMLElement;
-    const rect = element.getBoundingClientRect();
-    const startX = rect.left + rect.width * nextInit.startXRatio;
-    const startY = rect.top + rect.height * nextInit.startYRatio;
-    const endX = rect.left + rect.width * nextInit.endXRatio;
-    const endY = rect.top + rect.height * nextInit.endYRatio;
+async function pickClickableTile(page: Page): Promise<Locator> {
+	const tiles = page.getByTestId("wall-photo-tile");
+	const index = await tiles.evaluateAll((nodes) => {
+		const viewportCenterX = window.innerWidth / 2;
+		const viewportCenterY = window.innerHeight / 2;
+		let bestIndex = -1;
+		let bestScore = Number.POSITIVE_INFINITY;
 
-    element.dispatchEvent(
-      new PointerEvent('pointerdown', {
-        bubbles: true,
-        cancelable: true,
-        pointerId: 1,
-        button: 0,
-        buttons: 1,
-        clientX: startX,
-        clientY: startY,
-      }),
-    );
-    element.dispatchEvent(
-      new PointerEvent('pointermove', {
-        bubbles: true,
-        cancelable: true,
-        pointerId: 1,
-        button: 0,
-        buttons: 1,
-        clientX: endX,
-        clientY: endY,
-      }),
-    );
-    element.dispatchEvent(
-      new PointerEvent('pointerup', {
-        bubbles: true,
-        cancelable: true,
-        pointerId: 1,
-        button: 0,
-        buttons: 0,
-        clientX: endX,
-        clientY: endY,
-      }),
-    );
-  }, init);
+		nodes.forEach((node, index) => {
+			if (!(node instanceof HTMLElement)) {
+				return;
+			}
+
+			const rect = node.getBoundingClientRect();
+			if (rect.width < 40 || rect.height < 40) {
+				return;
+			}
+
+			const visibleWidth =
+				Math.min(rect.right, window.innerWidth) - Math.max(rect.left, 0);
+			const visibleHeight =
+				Math.min(rect.bottom, window.innerHeight) - Math.max(rect.top, 0);
+			if (
+				visibleWidth < rect.width * 0.6 ||
+				visibleHeight < rect.height * 0.6
+			) {
+				return;
+			}
+
+			const centerX = rect.left + rect.width / 2;
+			const centerY = rect.top + rect.height / 2;
+			const topNode = document.elementFromPoint(centerX, centerY);
+			if (!(topNode instanceof Element) || !node.contains(topNode)) {
+				return;
+			}
+
+			const dx = centerX - viewportCenterX;
+			const dy = centerY - viewportCenterY;
+			const score = dx * dx + dy * dy;
+			if (score < bestScore) {
+				bestScore = score;
+				bestIndex = index;
+			}
+		});
+
+		return bestIndex;
+	});
+
+	if (index < 0) {
+		throw new Error("Expected a clickable Mosaic Lab wall tile");
+	}
+
+	return tiles.nth(index);
 }
 
-async function boundingBoxOrThrow(locator: Locator) {
-  const box = await locator.boundingBox();
-  if (!box) {
-    throw new Error('Expected element bounding box');
-  }
-  return box;
+async function requiredAttr(locator: Locator, name: string): Promise<string> {
+	const value = await locator.getAttribute(name);
+	if (!value) {
+		throw new Error(`Expected ${name} on ${locator.toString()}`);
+	}
+	return value;
 }
 
-async function readScrollMetrics(locator: Locator) {
-  return locator.evaluate((node) => {
-    const element = node as HTMLElement;
-    return {
-      scrollTop: element.scrollTop,
-      scrollHeight: element.scrollHeight,
-      clientHeight: element.clientHeight,
-    };
-  });
-}
-
-async function readStageState(locator: Locator) {
-  return locator.evaluate((node) => {
-    const read = (name: string) => Number(node.getAttribute(name) ?? '0');
-
-    return {
-      x: read('data-camera-x'),
-      y: read('data-camera-y'),
-      zoom: read('data-camera-zoom'),
-      minX: read('data-camera-min-x'),
-      maxX: read('data-camera-max-x'),
-      minY: read('data-camera-min-y'),
-      maxY: read('data-camera-max-y'),
-      worldWidth: read('data-world-width'),
-      worldHeight: read('data-world-height'),
-      viewportWidth: read('data-viewport-width'),
-      viewportHeight: read('data-viewport-height'),
-      moveCount: read('data-move-count'),
-      zoomCount: read('data-zoom-count'),
-    };
-  });
-}
-
-async function readMetricCardText(locator: Locator): Promise<string> {
-  return locator.evaluate((node) =>
-    (node.parentElement?.innerText ?? node.textContent ?? '').replace(/\s+/g, ' ').trim(),
-  );
-}
-
-function normalizeText(value: string): string {
-  return value.replace(/\s+/g, ' ').trim();
+function isSyntheticBackendMediaUrl(url: string): boolean {
+	return /\/api\/media\/(?:lab:|lab%3A)/i.test(url);
 }
