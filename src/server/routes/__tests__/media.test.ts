@@ -8,6 +8,10 @@ import sharp from 'sharp';
 import { MEDIA_BASE_PATH } from '../../../shared/api/media.js';
 import { LibraryService } from '../../snapshots/library-service.js';
 import { DerivativeService } from '../../media/derivative-service.js';
+import {
+  MEDIA_DIAGNOSTICS_PATH,
+  MediaDiagnostics,
+} from '../../media/media-diagnostics.js';
 import { registerMediaRoutes } from '../media.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -18,6 +22,7 @@ describe('/api/media route', () => {
   let dataRoot: string;
   let library: LibraryService;
   let derivatives: DerivativeService;
+  let diagnostics: MediaDiagnostics;
   let photoId: string;
 
   beforeEach(async () => {
@@ -26,6 +31,7 @@ describe('/api/media route', () => {
     await library.initialize();
     await library.rescan();
     derivatives = new DerivativeService({ cacheRoot: library.getCacheDir() });
+    diagnostics = new MediaDiagnostics();
     const firstPhoto = library.getActiveSnapshot()!.photos[0];
     if (!firstPhoto) throw new Error('fixture must include at least one photo');
     photoId = firstPhoto.id;
@@ -37,7 +43,7 @@ describe('/api/media route', () => {
 
   async function newApp() {
     const app = Fastify({ logger: false });
-    await registerMediaRoutes(app, { library, derivatives });
+    await registerMediaRoutes(app, { library, derivatives, diagnostics });
     return app;
   }
 
@@ -61,6 +67,29 @@ describe('/api/media route', () => {
     const meta = await sharp(body).metadata();
     expect(meta.format).toBe('webp');
 
+    await app.close();
+  });
+
+  it('reports privacy-safe aggregate media diagnostics', async () => {
+    const app = await newApp();
+    await app.inject({
+      method: 'GET',
+      url: `${MEDIA_BASE_PATH}/${photoId}?variant=wall&format=webp`,
+    });
+
+    const res = await app.inject({ method: 'GET', url: MEDIA_DIAGNOSTICS_PATH });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['cache-control']).toBe('no-store');
+    expect(res.json()).toMatchObject({
+      requestCounters: {
+        total: 1,
+        byReason: { success_rendered: 1 },
+        byVariant: { wall: 1 },
+      },
+      library: { scanState: 'ready', photoCount: expect.any(Number) },
+      derivativeQueue: { activeRenders: 0, queuedRenders: 0 },
+    });
+    expect(res.body).not.toMatch(/photoId|libraryRoot|filePath|url/i);
     await app.close();
   });
 

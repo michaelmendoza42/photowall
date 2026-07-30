@@ -17,6 +17,24 @@ describe('buildFocusedPhotoLightboxSlide', () => {
     });
   });
 
+  it('uses a custom media source resolver when provided', () => {
+    expect(
+      buildFocusedPhotoLightboxSlide(
+        {
+          id: 'lab:focused-1',
+          width: 1200,
+          height: 800,
+        },
+        ({ photo, variant }) => `mock://${photo.id}/${variant}/${photo.width}x${photo.height}`,
+      ),
+    ).toEqual({
+      src: 'mock://lab:focused-1/modal/1200x800',
+      alt: '',
+      width: 1200,
+      height: 800,
+    });
+  });
+
   it('omits invalid dimensions instead of passing zeroes through to the lightbox', () => {
     expect(
       buildFocusedPhotoLightboxSlide({

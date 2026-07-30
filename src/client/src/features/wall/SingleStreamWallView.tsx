@@ -10,19 +10,26 @@ import {
 } from './appearanceTracking.js';
 import { computeAnchoredHoverPreviewRect } from './hoverPreview.js';
 import { PixiWallSurface } from './PixiWallSurface.js';
+import { WallZoomControls } from './WallZoomControls.js';
+import { useTouchPinchZoom } from './useTouchPinchZoom.js';
+import { useRafCameraPublisher } from './useRafCameraPublisher.js';
 import {
   DRAG_THRESHOLD_PX,
   hasCrossedThreshold,
   type DragOrigin,
 } from './dragGesture.js';
 import {
-  buildSingleStreamSceneModel,
+  buildSingleStreamLayout,
+  projectSingleStreamSceneModel,
   type SingleStreamSceneRow,
   type SingleStreamSceneTile,
 } from './singleStreamSceneModel.js';
 import type { PhotoQueryRecord } from '../../../../shared/api/photos.js';
-import { mediaResourcePath } from '../../../../shared/api/media.js';
 import { DEFAULT_OVERSCAN, type LayoutOverscan } from '../../state/layout.js';
+import {
+  resolveWallMediaSource,
+  type WallMediaSourceResolver,
+} from './mediaSourceResolver.js';
 import { panBy, type CameraState } from '../../state/camera.js';
 import type { WallDragState, WallStats } from './WallCanvas.js';
 
@@ -47,6 +54,7 @@ export interface SingleStreamWallViewProps {
   onPhotoOpen?: (photo: PhotoQueryRecord) => void;
   isModalOpen?: boolean;
   dragThresholdPx?: number;
+  mediaSourceResolver?: WallMediaSourceResolver;
 }
 
 interface ActiveDrag {
@@ -58,7 +66,7 @@ interface ActiveDrag {
 }
 
 interface HoverPreviewState {
-  photoId: string;
+  photo: PhotoQueryRecord;
   left: number;
   top: number;
   width: number;
@@ -89,6 +97,7 @@ export function SingleStreamWallView(props: SingleStreamWallViewProps): JSX.Elem
     onPhotoOpen,
     isModalOpen = false,
     dragThresholdPx = DRAG_THRESHOLD_PX,
+    mediaSourceResolver,
   } = props;
 
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -101,10 +110,7 @@ export function SingleStreamWallView(props: SingleStreamWallViewProps): JSX.Elem
     cameraRef.current = camera;
   }, [camera]);
 
-  const cameraChangeRef = useRef(onCameraChange);
-  useEffect(() => {
-    cameraChangeRef.current = onCameraChange;
-  }, [onCameraChange]);
+  const { publish: publishCamera, flush: flushCamera } = useRafCameraPublisher(onCameraChange);
 
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
   const [dragActive, setDragActive] = useState(false);
@@ -115,6 +121,7 @@ export function SingleStreamWallView(props: SingleStreamWallViewProps): JSX.Elem
   useEffect(() => {
     zoomRef.current = zoom;
   }, [zoom]);
+  useTouchPinchZoom(containerRef, zoomRef, setZoom, MIN_WALL_ZOOM, MAX_WALL_ZOOM);
 
   const dragStateChangeRef = useRef(onDragStateChange);
   useEffect(() => {
@@ -147,11 +154,22 @@ export function SingleStreamWallView(props: SingleStreamWallViewProps): JSX.Elem
     return () => observer.disconnect();
   }, []);
 
-  const sceneModel = useMemo(
+  const packedLayout = useMemo(
     () =>
-      buildSingleStreamSceneModel({
+      buildSingleStreamLayout({
         photos,
         hasMore: hasNextPage,
+        worldWidth,
+        maxRowHeight: DEFAULT_MAX_ROW_HEIGHT,
+        columnWidthFactors: DEFAULT_MOSAIC_COLUMN_FACTORS,
+      }),
+    [photos, hasNextPage, worldWidth],
+  );
+
+  const sceneModel = useMemo(
+    () =>
+      projectSingleStreamSceneModel({
+        packed: packedLayout,
         worldWidth,
         cameraX: camera.x,
         cameraY: camera.y,
@@ -159,12 +177,9 @@ export function SingleStreamWallView(props: SingleStreamWallViewProps): JSX.Elem
         viewportWidth: viewportSize.width,
         viewportHeight: viewportSize.height,
         overscan,
-        maxRowHeight: DEFAULT_MAX_ROW_HEIGHT,
-        columnWidthFactors: DEFAULT_MOSAIC_COLUMN_FACTORS,
       }),
     [
-      photos,
-      hasNextPage,
+      packedLayout,
       worldWidth,
       camera.x,
       camera.y,
@@ -281,11 +296,19 @@ export function SingleStreamWallView(props: SingleStreamWallViewProps): JSX.Elem
       });
       if (next !== cameraRef.current) {
         cameraRef.current = next;
-        cameraChangeRef.current(next);
+        publishCamera(next);
       }
     };
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
+  }, []);
+
+  const changeZoom = useCallback((factor: number) => {
+    const nextZoom = clamp(zoomRef.current * factor, MIN_WALL_ZOOM, MAX_WALL_ZOOM);
+    if (nextZoom !== zoomRef.current) {
+      zoomRef.current = nextZoom;
+      setZoom(nextZoom);
+    }
   }, []);
 
   const handlePointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
@@ -355,10 +378,10 @@ export function SingleStreamWallView(props: SingleStreamWallViewProps): JSX.Elem
       });
       if (next !== cameraRef.current) {
         cameraRef.current = next;
-        cameraChangeRef.current(next);
+        publishCamera(next);
       }
     },
-    [dragThresholdPx],
+    [dragThresholdPx, publishCamera],
   );
 
   const endDrag = useCallback(
@@ -377,6 +400,7 @@ export function SingleStreamWallView(props: SingleStreamWallViewProps): JSX.Elem
           ? pressedPhotoIdRef.current
           : null;
 
+      flushCamera();
       dragRef.current = null;
       pressedPhotoIdRef.current = null;
       setDragActive(false);
@@ -391,7 +415,7 @@ export function SingleStreamWallView(props: SingleStreamWallViewProps): JSX.Elem
       setHoverPreview(null);
       photoOpenRef.current?.(photo);
     },
-    [photosById],
+    [flushCamera, photosById],
   );
 
   const updateHoverPreview = useCallback(
@@ -427,7 +451,7 @@ export function SingleStreamWallView(props: SingleStreamWallViewProps): JSX.Elem
       if (previewRect.width <= 0 || previewRect.height <= 0) return;
 
       setHoverPreview({
-        photoId,
+        photo,
         left: previewRect.left,
         top: previewRect.top,
         width: previewRect.width,
@@ -452,7 +476,7 @@ export function SingleStreamWallView(props: SingleStreamWallViewProps): JSX.Elem
   );
 
   const handleTilePointerLeave = useCallback((photoId: string) => {
-    setHoverPreview((prev) => (prev?.photoId === photoId ? null : prev));
+    setHoverPreview((prev) => (prev?.photo.id === photoId ? null : prev));
   }, []);
 
   return (
@@ -482,12 +506,21 @@ export function SingleStreamWallView(props: SingleStreamWallViewProps): JSX.Elem
       onPointerCancel={endDrag}
     >
       <PixiWallSurface
-        tiles={sceneModel.pixiTiles}
+        tiles={sceneModel.pixiTiles.map((tile) => ({
+          ...tile,
+          sourceMtimeMs: photosById.get(tile.photoId)?.mtimeMs,
+        }))}
         viewportWidth={viewportSize.width}
         viewportHeight={viewportSize.height}
         worldWidth={worldWidth}
         worldHeight={sceneModel.packed.contentHeight}
         zoom={zoom}
+        mediaSourceResolver={mediaSourceResolver}
+      />
+
+      <WallZoomControls
+        onZoomOut={() => changeZoom(1 / 1.25)}
+        onZoomIn={() => changeZoom(1.25)}
       />
 
       <div
@@ -526,14 +559,18 @@ export function SingleStreamWallView(props: SingleStreamWallViewProps): JSX.Elem
         <div
           className="wall-hover-preview"
           data-testid="wall-hover-preview"
-          data-photo-id={hoverPreview.photoId}
+          data-photo-id={hoverPreview.photo.id}
           style={hoverPreviewStyle(hoverPreview)}
         >
           <img
             className="wall-hover-preview__img"
             data-testid="wall-hover-preview-image"
             data-media-variant="modal"
-            src={mediaResourcePath(hoverPreview.photoId, 'modal')}
+            src={resolveWallMediaSource(
+              hoverPreview.photo,
+              'modal',
+              mediaSourceResolver,
+            )}
             alt=""
             draggable={false}
           />

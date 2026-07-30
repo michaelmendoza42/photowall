@@ -76,27 +76,44 @@ export function computeVisibleRowRange(
   const top = Math.max(0, scrollTop);
   const bottom = top + viewportHeight;
 
-  let start = 0;
-  while (
-    start < rows.length &&
-    rows[start]!.offsetTop + rows[start]!.height <= top
-  ) {
-    start++;
-  }
+  const start = firstRowEndingAfter(rows, top);
   if (start === rows.length) {
     const startIndex = Math.max(0, rows.length - overscan.rowsAbove);
     return { startIndex, endIndex: rows.length };
   }
 
-  let end = start;
-  while (end < rows.length && rows[end]!.offsetTop < bottom) {
-    end++;
-  }
+  const end = firstRowStartingAtOrAfter(rows, bottom, start);
 
   return {
     startIndex: Math.max(0, start - overscan.rowsAbove),
     endIndex: Math.min(rows.length, end + overscan.rowsBelow),
   };
+}
+
+function firstRowEndingAfter(rows: readonly PackedRow[], top: number): number {
+  let low = 0;
+  let high = rows.length;
+  while (low < high) {
+    const mid = low + Math.floor((high - low) / 2);
+    const row = rows[mid]!;
+    if (row.offsetTop + row.height <= top) low = mid + 1;
+    else high = mid;
+  }
+  return low;
+}
+
+function firstRowStartingAtOrAfter(
+  rows: readonly PackedRow[],
+  bottom: number,
+  low = 0,
+): number {
+  let high = rows.length;
+  while (low < high) {
+    const mid = low + Math.floor((high - low) / 2);
+    if (rows[mid]!.offsetTop < bottom) low = mid + 1;
+    else high = mid;
+  }
+  return low;
 }
 
 /**

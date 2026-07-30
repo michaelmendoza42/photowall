@@ -1,8 +1,5 @@
 import { expect, test, type Locator, type Page, type TestInfo } from '@playwright/test';
-import {
-  FAR_ZOOM_MAX,
-  NEAR_ZOOM_MIN,
-} from '../src/client/src/features/wall/pixiScene.js';
+import { NEAR_ZOOM_MIN } from '../src/client/src/features/wall/pixiScene.js';
 
 test.describe('zoom/detail tiers', () => {
   let consoleErrors: string[];
@@ -24,9 +21,11 @@ test.describe('zoom/detail tiers', () => {
       const url = response.url();
       if (!url.includes('/api/media/')) return;
 
-      const variant = new URL(url).searchParams.get('variant');
-      if (variant) {
-        seenMediaVariants.add(variant);
+      try {
+        const variant = new URL(url).searchParams.get('variant');
+        if (variant) seenMediaVariants.add(variant);
+      } catch {
+        // Playwright response URLs are expected to be absolute; ignore malformed noise.
       }
     });
 
@@ -45,18 +44,14 @@ test.describe('zoom/detail tiers', () => {
     const pixi = page.getByTestId('wall-pixi-surface');
 
     await expect(shell).toHaveAttribute('data-active-album-area-count', '1');
-    await expect(pixi).toHaveAttribute('data-media-variant', 'wall');
+    await expect(pixi).toHaveAttribute('data-media-variant', 'thumb');
     await expect(pixi).toHaveAttribute('data-app-init-count', '1');
-    await expect.poll(() => seenMediaVariants.has('wall')).toBe(true);
-
-    await zoomUntilVariant(page, wall, pixi, 'thumb', 220);
-    expect(Number.parseFloat(await requiredAttr(wall, 'data-zoom'))).toBeLessThanOrEqual(
-      FAR_ZOOM_MAX,
-    );
     await expect.poll(() => seenMediaVariants.has('thumb')).toBe(true);
-    await expect(pixi).toHaveAttribute('data-app-init-count', '1');
 
     await zoomUntilVariant(page, wall, pixi, 'modal', -220);
+    await expect.poll(() => seenMediaVariants.has('modal')).toBe(true);
+    await expect(pixi).toHaveAttribute('data-app-init-count', '1');
+
     expect(Number.parseFloat(await requiredAttr(wall, 'data-zoom'))).toBeGreaterThanOrEqual(
       NEAR_ZOOM_MIN,
     );

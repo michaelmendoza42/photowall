@@ -1,5 +1,5 @@
 # Photo Wall Docker/LAN Operator Runbook
-Last edited: 2026-06-10
+Last edited: 2026-07-29
 Status: Active
 Owner: Michael
 Related files: `../../README.md`, `../system/photo-library-source-and-runtime.md`, `../product/photo-wall-experience.md`, `../../docker-compose.yml`, `../../.env.example`
@@ -155,6 +155,31 @@ Check the `startup summary` and `library scan completed` logs first:
 - `warmLoaded: true` means the app initially served a prior snapshot before the new scan finished
 - if the root shown in the UI is wrong, change it from the in-app `Library root` form before rebuilding containers or editing hidden state
 
+Then inspect the bounded media diagnostics:
+
+```bash
+curl -s http://localhost:${PHOTO_WALL_PORT:-3001}/api/diagnostics/media | jq
+```
+
+Interpret the evidence in this order:
+
+- `library_not_ready`, `library_scan_failed`, or `no_photos_discovered` means the problem precedes image requests; inspect the library status and scan logs.
+- `no_media_requests_seen` with a non-empty library means the browser has metadata but has not reached the server media route; inspect browser console/network state.
+- `source_resolution_failures` points to stale snapshot entries, unreadable source files, or root-containment rejection.
+- `derivative_delivery_failures` means a Sharp generation or response-stream failure was last observed within the previous five minutes. Its `cumulativeCount` is process-lifetime context, not a five-minute-window count.
+- `derivative_backpressure` means cold derivative work is queued; it may explain slow appearance without implying permanent failure.
+- A high `success_rendered` count followed by `success_cache_hit` counts means completed responses have been observed from the server media path; if the wall is still blank, inspect the browser texture stages next.
+
+In the browser DevTools console, run:
+
+```js
+photoWallMediaDiagnostics.snapshot()
+```
+
+The browser snapshot separates `requested`, `image_ready`, `texture_created`, and `sprite_applied` stages. `load_failed` indicates browser/network image loading failed, `texture_create_failed` indicates Pixi could not create a texture, `decode_fallback` records recovery through the native image load event, and `superseded` is normally expected when a tile or zoom tier changes before an earlier request completes.
+
+Both snapshots are process/page-lifetime aggregates and contain no photo IDs, filesystem paths, or media URLs. Browser refresh and server restart reset them.
+
 ## Related docs
 
 - `../../README.md`
@@ -164,6 +189,9 @@ Check the `startup summary` and `library scan completed` logs first:
 - `../../.env.example`
 
 ## Changelog
+
+### 2026-07-29
+- Added the server and browser media-diagnostics commands plus an ordered interpretation guide for empty or non-loading pictures.
 
 ### 2026-06-10
 - Added the operator-facing in-app library-root recovery step and clarified when the local picker is only a best-effort prefill helper.

@@ -1,0 +1,62 @@
+feature: media-diagnostics
+verified_at: "2026-07-29T15:12:46-07:00"
+verifier: verify-and-review
+contract:
+  server_probe: GET /api/diagnostics/media
+  browser_probe: photoWallMediaDiagnostics.snapshot()
+  persistence: in-memory only
+  browser_uploads: false
+  retries: false
+  privacy:
+    fixed_dimensions_only: true
+    forbidden_fields:
+      - photoId
+      - libraryRoot
+      - filePath
+      - mediaUrl
+      - sourceUrl
+phases:
+  signals:
+    passed: true
+    evidence:
+      - Fixed server reasons, variants, formats, statuses, and latency buckets.
+      - Current library and derivative-queue state drive readiness/backpressure heuristics.
+      - Recent server failures expire from active heuristics.
+      - Fixed browser texture-stage and scheduler counters contain no media identifiers.
+  implementation:
+    passed: true
+    evidence:
+      - Media routes record exactly one aggregate outcome using an idempotent recorder across stream finish/error.
+      - GET diagnostics use Cache-Control no-store.
+      - Pixi texture stages record aggregate events without changing load success/failure behavior.
+      - Image handlers attach before src assignment and include bounded timeout fallback.
+  unit_tests:
+    passed: true
+    command: npm test
+    result: 54 files and 355 tests passed.
+  typecheck:
+    passed: true
+    command: npm run typecheck
+  build:
+    passed: true
+    command: npm run build
+  browser:
+    passed: true
+    command: npx playwright test
+    result: 22 passed and 1 intentional desktop skip against a fresh local build.
+    assertions:
+      - Server and browser counters advance during the real wall loading flow.
+      - Diagnostics snapshots contain no forbidden identifier/path/URL field names.
+      - Server response is no-store.
+  independent_review:
+    passed: true
+    evidence:
+      - Fresh reviewers found no blockers after the final Pixi lifecycle fixes.
+      - Read-only completion audits confirmed code, tests, docs, and glossary alignment for the implemented GET plus DevTools-snapshot contract.
+  operator_runtime:
+    passed: true
+    evidence: Existing photo-wall Docker service was restored healthy on assigned port 5176 after fresh local verification; no Docker image build was performed.
+residual_risks:
+  - Browser diagnostics are page-lifetime observations; absence of a browser snapshot is unknown, not proof of health.
+  - Active textures can temporarily keep the finite cache above its soft cap because active sources are never evicted.
+  - The abandoned POST telemetry proposal remains only in an ephemeral subagent artifact and is not canonical scope.

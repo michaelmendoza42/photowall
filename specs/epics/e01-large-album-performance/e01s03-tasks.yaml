@@ -1,0 +1,23 @@
+story_id: e01s03
+title: Bound client wall rendering work
+status: passing
+bcps: 8
+tasks:
+  - id: 1
+    description: Separate immutable layout packing from camera projection and replace linear visible-row lookup.
+    risk: P1
+    security: none
+    verify: npx vitest run src/client/src/features/wall/__tests__/singleStreamSceneModel.test.ts src/client/src/features/wall/__tests__/virtualization.test.ts --pool=threads --maxWorkers=1 --minWorkers=1
+    status: passing
+  - id: 2
+    description: Publish camera updates at animation-frame cadence without regressing drag, wrap, signposts, or mobile zoom.
+    risk: P1
+    security: none
+    verify: npx playwright test playwright/mobile-pinch-zoom.spec.ts playwright/single-stream-wrap-continuity.spec.ts --project=chromium-mobile
+    status: passing
+  - id: 3
+    description: Add prioritized bounded texture loading and safe texture eviction with tier continuity.
+    risk: P1
+    security: none
+    verify: npx vitest run src/client/src/features/wall/__tests__/pixiScene.test.ts src/client/src/features/wall/__tests__/textureScheduler.test.ts --pool=threads --maxWorkers=1 --minWorkers=1
+    status: passing

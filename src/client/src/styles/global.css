@@ -226,6 +226,31 @@ body {
   pointer-events: none;
 }
 
+.wall-zoom-controls {
+  display: none;
+}
+
+@media (pointer: coarse) {
+  .wall-zoom-controls {
+    position: fixed;
+    right: 1rem;
+    bottom: 1rem;
+    z-index: 20;
+    display: grid;
+    gap: 0.5rem;
+  }
+
+  .wall-zoom-controls button {
+    width: 3rem;
+    height: 3rem;
+    border: 1px solid rgba(236, 230, 220, 0.3);
+    border-radius: 50%;
+    background: rgba(20, 17, 15, 0.82);
+    color: var(--pw-fg);
+    font: 1.5rem/1 sans-serif;
+  }
+}
+
 .wall-canvas__world {
   position: relative;
   z-index: 1;

@@ -13,6 +13,12 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, '..', '..', '..', '..');
 const smokeRoot = path.join(repoRoot, 'fixtures', 'library-smoke');
 
+class TestDerivativeService extends DerivativeService {
+  runWithPermit<T>(work: () => Promise<T>): Promise<T> {
+    return this.renderWithPermit(work);
+  }
+}
+
 describe('DerivativeService', () => {
   let dataRoot: string;
   let library: LibraryService;
@@ -63,7 +69,100 @@ describe('DerivativeService', () => {
     expect(probed.height!).toBeLessThanOrEqual(640);
   });
 
+  it('coalesces concurrent cold requests for the same derivative', async () => {
+    const request = { photoId: firstPhotoId(), variant: 'wall' as const, format: 'webp' as const };
+    const [first, second] = await Promise.all([
+      service.generate(snapshot, request),
+      service.generate(snapshot, request),
+    ]);
+    if (!first.ok || !second.ok) throw new Error('expected both requests to succeed');
+    expect(first.cacheKey).toBe(second.cacheKey);
+    expect(first.filePath).toBe(second.filePath);
+    expect(first.fromCache).toBe(false);
+    expect(second.fromCache).toBe(false);
+    expect(service.getMetrics()).toEqual({
+      activeRenders: 0,
+      queuedRenders: 0,
+      inFlightRenders: 0,
+    });
+  });
+
+  it('caps distinct cold render work and reports queue transitions', async () => {
+    const boundedService = new TestDerivativeService({
+      cacheRoot: library.getCacheDir(),
+      maxConcurrentRenders: 2,
+    });
+    const queued = boundedService.runWithPermit.bind(boundedService);
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    let active = 0;
+    let peakActive = 0;
+    const run = (result: string) => queued(async () => {
+      active += 1;
+      peakActive = Math.max(peakActive, active);
+      await gate;
+      active -= 1;
+      return result;
+    });
+
+    const first = run('first');
+    const second = run('second');
+    const third = run('third');
+
+    expect(boundedService.getMetrics()).toEqual({
+      activeRenders: 2,
+      queuedRenders: 1,
+      inFlightRenders: 0,
+    });
+    release();
+    await expect(Promise.all([first, second, third])).resolves.toEqual([
+      'first',
+      'second',
+      'third',
+    ]);
+    expect(peakActive).toBe(2);
+    expect(boundedService.getMetrics()).toEqual({
+      activeRenders: 0,
+      queuedRenders: 0,
+      inFlightRenders: 0,
+    });
+  });
+
+  it('rejects a render limit that cannot make progress', () => {
+    expect(() => new DerivativeService({
+      cacheRoot: library.getCacheDir(),
+      maxConcurrentRenders: 0,
+    })).toThrow(/maxConcurrentRenders/);
+  });
+
+  it('releases a failed render permit so queued work can continue', async () => {
+    const singleRenderService = new TestDerivativeService({
+      cacheRoot: library.getCacheDir(),
+      maxConcurrentRenders: 1,
+    });
+    const queued = singleRenderService.runWithPermit.bind(singleRenderService);
+    const first = queued(async () => {
+      throw new Error('expected render failure');
+    });
+    const second = queued(async () => 'rendered-after-failure');
+
+    await expect(first).rejects.toThrow('expected render failure');
+    await expect(second).resolves.toBe('rendered-after-failure');
+    expect(singleRenderService.getMetrics()).toEqual({
+      activeRenders: 0,
+      queuedRenders: 0,
+      inFlightRenders: 0,
+    });
+  });
+
   it('reuses the cached file on the second request (cache hit)', async () => {
+    const debugRecords: Array<{ obj: unknown; msg?: string }> = [];
+    service = new DerivativeService({
+      cacheRoot: library.getCacheDir(),
+      logger: {
+        debug: (obj, msg) => debugRecords.push({ obj, msg }),
+      },
+    });
     const photoId = firstPhotoId();
     const req = { photoId, variant: 'wall' as const, format: 'webp' as const };
     const first = await service.generate(snapshot, req);
@@ -83,6 +182,16 @@ describe('DerivativeService', () => {
 
     const secondStat = await fs.stat(second.filePath);
     expect(secondStat.mtimeMs).toBe(firstStat.mtimeMs);
+    expect(debugRecords).toEqual([
+      {
+        obj: { photoId, variant: 'wall', format: 'webp' },
+        msg: 'derivative cache miss — rendered fresh',
+      },
+      {
+        obj: { photoId, variant: 'wall', format: 'webp' },
+        msg: 'derivative cache hit',
+      },
+    ]);
   });
 
   it('exposes both wall and modal variants distinctly', async () => {
@@ -149,12 +258,14 @@ describe('DerivativeService', () => {
     // fingerprints — that is the property the route depends on.
     const beforeKey = computeCacheKey({
       photoId,
+      libraryRoot: snapshot.libraryRoot,
       variant: 'wall',
       format: 'webp',
       sourceFingerprint: sourceFingerprint(stat.mtimeMs, stat.size),
     });
     const afterKey = computeCacheKey({
       photoId,
+      libraryRoot: snapshot.libraryRoot,
       variant: 'wall',
       format: 'webp',
       sourceFingerprint: sourceFingerprint(stat.mtimeMs + 3_600_000, stat.size),

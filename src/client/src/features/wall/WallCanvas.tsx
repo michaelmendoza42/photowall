@@ -25,6 +25,9 @@ import {
   computeAnchoredHoverPreviewRect,
 } from './hoverPreview.js';
 import { PixiWallSurface } from './PixiWallSurface.js';
+import { WallZoomControls } from './WallZoomControls.js';
+import { useTouchPinchZoom } from './useTouchPinchZoom.js';
+import { useRafCameraPublisher } from './useRafCameraPublisher.js';
 import { computeWrapAwareCameraTarget, easeOutCubic } from './signpostNavigation.js';
 import {
   detectEdgeIntent,
@@ -38,8 +41,11 @@ import {
   type DragOrigin,
 } from './dragGesture.js';
 import type { PhotoQueryRecord } from '../../../../shared/api/photos.js';
-import { mediaResourcePath } from '../../../../shared/api/media.js';
 import { DEFAULT_OVERSCAN, type LayoutOverscan } from '../../state/layout.js';
+import {
+  resolveWallMediaSource,
+  type WallMediaSourceResolver,
+} from './mediaSourceResolver.js';
 import {
   panBy,
   panTo,
@@ -108,6 +114,7 @@ export interface WallCanvasProps {
   isModalOpen?: boolean;
   /** Override for unit tests; defaults to {@link DRAG_THRESHOLD_PX}. */
   dragThresholdPx?: number;
+  mediaSourceResolver?: WallMediaSourceResolver;
 }
 
 interface ActiveDrag {
@@ -141,7 +148,7 @@ interface RenderedRowInstance {
 }
 
 interface HoverPreviewState {
-  photoId: string;
+  photo: PhotoQueryRecord;
   left: number;
   top: number;
   width: number;
@@ -166,6 +173,7 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
     onPhotoOpen,
     isModalOpen = false,
     dragThresholdPx = DRAG_THRESHOLD_PX,
+    mediaSourceResolver,
   } = props;
 
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -182,10 +190,7 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
     cameraRef.current = camera;
   }, [camera]);
 
-  const cameraChangeRef = useRef(onCameraChange);
-  useEffect(() => {
-    cameraChangeRef.current = onCameraChange;
-  }, [onCameraChange]);
+  const { publish: publishCamera, flush: flushCamera } = useRafCameraPublisher(onCameraChange);
 
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
   // Mirror the live drag flag into React state so the `data-dragging`
@@ -201,6 +206,7 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
   useEffect(() => {
     zoomRef.current = zoom;
   }, [zoom]);
+  useTouchPinchZoom(containerRef, zoomRef, setZoom, MIN_WALL_ZOOM, MAX_WALL_ZOOM);
 
   const dragStateChangeRef = useRef(onDragStateChange);
   useEffect(() => {
@@ -532,12 +538,20 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
         // between React renders compounds off the latest value rather
         // than a stale snapshot.
         cameraRef.current = next;
-        cameraChangeRef.current(next);
+        publishCamera(next);
       }
     };
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
   }, [cancelActiveGlide, revealSignposts, signpostsEnabled]);
+
+  const changeZoom = useCallback((factor: number) => {
+    const nextZoom = clamp(zoomRef.current * factor, MIN_WALL_ZOOM, MAX_WALL_ZOOM);
+    if (nextZoom !== zoomRef.current) {
+      zoomRef.current = nextZoom;
+      setZoom(nextZoom);
+    }
+  }, []);
 
   const handlePointerDown = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
@@ -642,10 +656,10 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
       });
       if (next !== cameraRef.current) {
         cameraRef.current = next;
-        cameraChangeRef.current(next);
+        publishCamera(next);
       }
     },
-    [dragThresholdPx, groupedFoundation, isModalOpen, revealSignposts, signpostsEnabled],
+    [dragThresholdPx, groupedFoundation, isModalOpen, publishCamera, revealSignposts, signpostsEnabled],
   );
 
   const endDrag = useCallback(
@@ -664,6 +678,7 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
           ? pressedPhotoIdRef.current
           : null;
 
+      flushCamera();
       dragRef.current = null;
       pressedPhotoIdRef.current = null;
       setDragActive(false);
@@ -678,7 +693,7 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
       setHoverPreview(null);
       photoOpenRef.current?.(photo);
     },
-    [photosById],
+    [flushCamera, photosById],
   );
 
   const updateHoverPreview = useCallback(
@@ -712,7 +727,7 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
       if (previewRect.width <= 0 || previewRect.height <= 0) return;
 
       setHoverPreview({
-        photoId,
+        photo,
         left: previewRect.left,
         top: previewRect.top,
         width: previewRect.width,
@@ -743,7 +758,7 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
   );
 
   const handleTilePointerLeave = useCallback((photoId: string) => {
-    setHoverPreview((prev) => (prev?.photoId === photoId ? null : prev));
+    setHoverPreview((prev) => (prev?.photo.id === photoId ? null : prev));
   }, []);
 
   const handleSignpostActivate = useCallback((targetX: number, targetY: number) => {
@@ -766,16 +781,17 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
         y: startCamera.y + (target.y - startCamera.y) * eased,
       });
       cameraRef.current = next;
-      cameraChangeRef.current(next);
+      publishCamera(next);
       if (progress < 1) {
         glideFrameRef.current = requestAnimationFrame(tick);
       } else {
         glideFrameRef.current = null;
+        flushCamera();
       }
     };
 
     glideFrameRef.current = requestAnimationFrame(tick);
-  }, [cancelActiveGlide, isModalOpen, revealSignposts]);
+  }, [cancelActiveGlide, flushCamera, isModalOpen, publishCamera, revealSignposts]);
 
   const pixiTiles = useMemo(
     () =>
@@ -790,9 +806,10 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
           photoId: tile.photoId,
           sourceWidth: tile.sourceWidth,
           sourceHeight: tile.sourceHeight,
+          sourceMtimeMs: photosById.get(tile.photoId)?.mtimeMs,
         })),
       ),
-    [renderPlan.renderedRows],
+    [photosById, renderPlan.renderedRows],
   );
 
   return (
@@ -826,6 +843,12 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
         worldWidth={worldWidth}
         worldHeight={packed.contentHeight}
         zoom={zoom}
+        mediaSourceResolver={mediaSourceResolver}
+      />
+
+      <WallZoomControls
+        onZoomOut={() => changeZoom(1 / 1.25)}
+        onZoomIn={() => changeZoom(1.25)}
       />
 
       {/*
@@ -887,14 +910,18 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
         <div
           className="wall-hover-preview"
           data-testid="wall-hover-preview"
-          data-photo-id={hoverPreview.photoId}
+          data-photo-id={hoverPreview.photo.id}
           style={hoverPreviewStyle(hoverPreview)}
         >
           <img
             className="wall-hover-preview__img"
             data-testid="wall-hover-preview-image"
             data-media-variant="modal"
-            src={mediaResourcePath(hoverPreview.photoId, 'modal')}
+            src={resolveWallMediaSource(
+              hoverPreview.photo,
+              'modal',
+              mediaSourceResolver,
+            )}
             alt=""
             draggable={false}
           />

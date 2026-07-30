@@ -1,13 +1,12 @@
 import { mkdtempSync } from 'node:fs';
 import os from 'node:os';
-import path from 'node:path';
+import { sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig, devices } from '@playwright/test';
 
-const repoRoot = path.dirname(fileURLToPath(new URL(import.meta.url)));
-const port = 3110;
-const smokeLibraryRoot = path.join(repoRoot, 'fixtures', 'library-smoke');
-const dataRoot = mkdtempSync(path.join(os.tmpdir(), 'photo-wall-playwright-'));
+const port = 5176;
+const smokeLibraryRoot = fileURLToPath(new URL('./fixtures/library-smoke/', import.meta.url));
+const dataRoot = mkdtempSync(`${os.tmpdir()}${sep}photo-wall-playwright-`);
 
 export default defineConfig({
   testDir: './playwright',
@@ -30,10 +29,10 @@ export default defineConfig({
     command: 'npm run playwright:serve',
     url: `http://127.0.0.1:${port}/healthz`,
     timeout: 120_000,
-    reuseExistingServer: false,
+    reuseExistingServer: process.env['PLAYWRIGHT_REUSE_EXISTING_SERVER'] === 'true',
     env: {
       NODE_ENV: 'test',
-      PHOTO_WALL_BIND_HOST: '127.0.0.1',
+      PHOTO_WALL_BIND_HOST: '0.0.0.0',
       PHOTO_WALL_PORT: String(port),
       PHOTO_WALL_LIBRARY_ROOT: smokeLibraryRoot,
       PHOTO_WALL_DATA_ROOT: dataRoot,
@@ -48,6 +47,16 @@ export default defineConfig({
         ...devices['Desktop Chrome'],
         viewport: { width: 1440, height: 960 },
       },
+    },
+    {
+      name: 'chromium-mobile',
+      testMatch: [
+        '**/media-diagnostics.spec.ts',
+        '**/mobile-pinch-zoom.spec.ts',
+        '**/single-stream-wrap-continuity.spec.ts',
+        '**/zoom-detail-tiers.spec.ts',
+      ],
+      use: { ...devices['iPhone 13'], browserName: 'chromium' },
     },
   ],
 });

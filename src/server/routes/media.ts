@@ -1,12 +1,9 @@
 import { createReadStream } from 'node:fs';
-import { promises as fs } from 'node:fs';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import {
   DEFAULT_MEDIA_FORMAT,
   MEDIA_BASE_PATH,
-  MEDIA_FORMAT_VALUES,
-  MEDIA_VARIANT_VALUES,
   mediaContentType,
   type MediaErrorResponse,
   type MediaFormat,
@@ -14,6 +11,13 @@ import {
 } from '../../shared/api/media.js';
 import type { LibraryService } from '../snapshots/library-service.js';
 import type { DerivativeService } from '../media/derivative-service.js';
+import {
+  MediaDiagnostics,
+  type DiagnosticMediaFormat,
+  type DiagnosticMediaVariant,
+  type MediaDiagnosticReason,
+} from '../media/media-diagnostics.js';
+import { registerMediaDiagnosticsRoute } from './media-diagnostics.js';
 
 const QuerySchema = z.object({
   variant: z.enum(['thumb', 'wall', 'modal']).default('wall'),
@@ -29,13 +33,33 @@ export async function registerMediaRoutes(
   deps: {
     library: LibraryService;
     derivatives: DerivativeService;
+    diagnostics?: MediaDiagnostics;
   },
 ): Promise<void> {
+  const diagnostics = deps.diagnostics ?? new MediaDiagnostics();
+
   app.get(
     `${MEDIA_BASE_PATH}/:photoId`,
     async (request: FastifyRequest, reply: FastifyReply) => {
+      const startedAt = performance.now();
+      let variant: DiagnosticMediaVariant = 'unknown';
+      let format: DiagnosticMediaFormat = 'unknown';
+      let recorded = false;
+      const record = (status: 200 | 400 | 404 | 500 | 503, reason: MediaDiagnosticReason): void => {
+        if (recorded) return;
+        recorded = true;
+        diagnostics.record({
+          variant,
+          format,
+          status,
+          reason,
+          durationMs: performance.now() - startedAt,
+        });
+      };
+
       const params = ParamsSchema.safeParse(request.params);
       if (!params.success) {
+        record(400, 'invalid_photo_id');
         return sendError(reply, 400, {
           error: 'photo_not_found',
           detail: 'photoId is required',
@@ -48,20 +72,18 @@ export async function registerMediaRoutes(
           .map((issue) => `${issue.path.join('.') || '(root)'}: ${issue.message}`)
           .join('; ');
         const offendingPath = query.error.issues[0]?.path[0];
-        const code =
-          offendingPath === 'variant'
-            ? 'variant_invalid'
-            : offendingPath === 'format'
-              ? 'format_invalid'
-              : 'variant_invalid';
+        let code: 'variant_invalid' | 'format_invalid' = 'variant_invalid';
+        if (offendingPath === 'format') code = 'format_invalid';
+        record(400, code === 'format_invalid' ? 'invalid_format' : 'invalid_variant');
         return sendError(reply, 400, { error: code, detail });
       }
 
-      const variant = query.data.variant as MediaVariant;
-      const format = query.data.format as MediaFormat;
+      variant = query.data.variant as MediaVariant;
+      format = query.data.format as MediaFormat;
 
       const snapshot = deps.library.getActiveSnapshot();
       if (!snapshot) {
+        record(503, 'snapshot_unavailable');
         return sendError(reply, 503, {
           error: 'snapshot_unavailable',
           detail: 'library snapshot not yet available',
@@ -77,28 +99,32 @@ export async function registerMediaRoutes(
       if (!outcome.ok) {
         switch (outcome.failure.kind) {
           case 'photo_not_found':
+            record(404, 'photo_not_found');
             return sendError(reply, 404, { error: 'photo_not_found' });
           case 'source_outside_root':
+            record(404, 'source_outside_root');
             return sendError(reply, 404, {
               error: 'source_outside_root',
               detail: 'resolved source escaped library root',
             });
           case 'source_unreadable':
+            record(404, 'source_unreadable');
             return sendError(reply, 404, {
               error: 'source_unreadable',
               detail: outcome.failure.detail,
             });
           case 'render_failed':
+            record(500, 'render_failed');
             return sendError(reply, 500, {
               error: 'render_failed',
               detail: outcome.failure.detail,
             });
+          default:
+            throw new Error('Unhandled derivative failure');
         }
       }
 
-      const stat = await fs.stat(outcome.filePath);
       reply.header('Content-Type', mediaContentType(format));
-      reply.header('Content-Length', stat.size.toString());
       // The cache key folds in source fingerprint, variant and format,
       // so any cached file at this URL is byte-stable for its lifetime.
       // immutable + long max-age is the correct browser caching policy.
@@ -113,9 +139,21 @@ export async function registerMediaRoutes(
       );
       reply.header('X-Photo-Wall-Variant', variant);
       reply.code(200);
-      return reply.send(createReadStream(outcome.filePath));
+
+      const stream = createReadStream(outcome.filePath);
+      stream.once('error', () => record(500, 'delivery_failed'));
+      reply.raw.once('finish', () => {
+        record(200, outcome.fromCache ? 'success_cache_hit' : 'success_rendered');
+      });
+      return reply.send(stream);
     },
   );
+
+  await registerMediaDiagnosticsRoute(app, {
+    diagnostics,
+    library: deps.library,
+    derivatives: deps.derivatives,
+  });
 }
 
 function sendError(

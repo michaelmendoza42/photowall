@@ -1,0 +1,34 @@
+id: e01
+title: Large Album Performance
+wsjf: 5.0
+total_bcps: 21
+status: planned
+stories:
+  - id: e01s01
+    title: Bound cold derivative work
+    bcps: 5
+    status: todo
+    delta: MODIFIED
+    spec: e01s01-bound-cold-derivatives.md
+    tasks: e01s01-tasks.yaml
+  - id: e01s02
+    title: Make cached media identity correct
+    bcps: 5
+    status: todo
+    delta: MODIFIED
+    spec: e01s02-versioned-media-identity.md
+    tasks: e01s02-tasks.yaml
+  - id: e01s03
+    title: Bound client wall rendering work
+    bcps: 8
+    status: todo
+    delta: MODIFIED
+    spec: e01s03-bounded-wall-rendering.md
+    tasks: e01s03-tasks.yaml
+  - id: e01s04
+    title: Protect large-album and mobile performance
+    bcps: 3
+    status: todo
+    delta: MODIFIED
+    spec: e01s04-performance-regressions.md
+    tasks: e01s04-tasks.yaml

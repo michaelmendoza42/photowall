@@ -37,7 +37,13 @@ test.describe('single-stream wrap continuity', () => {
     expect(before.renderWindowSegments).toBeGreaterThan(0);
     expect(before.renderWindowXCopies).toBeGreaterThan(0);
 
-    await page.mouse.wheel(before.worldWidth, before.contentHeight);
+    await wall.evaluate((element, deltaX) => {
+      element.dispatchEvent(new WheelEvent('wheel', {
+        bubbles: true,
+        cancelable: true,
+        deltaX,
+      }));
+    }, before.worldWidth);
 
     await expect.poll(async () => requiredAttr(wall, 'data-render-x')).toBe(before.renderX);
     await expect.poll(async () => requiredAttr(wall, 'data-render-y')).toBe(before.renderY);
@@ -108,7 +114,7 @@ async function collectDiagnostics(page: Page): Promise<{
       await requiredAttr(wall, 'data-render-window-x-copies'),
       10,
     ),
-    worldWidth: Math.max(1, Math.round(Number.parseFloat(await requiredAttr(wall, 'data-world-width')))),
+    worldWidth: Math.max(1, Number.parseFloat(await requiredAttr(wall, 'data-world-width'))),
     contentHeight: Math.max(
       1,
       Math.round(Number.parseFloat(await requiredAttr(wall, 'data-content-height'))),

@@ -1,5 +1,5 @@
 # Glossary
-Last edited: 2026-06-20
+Last edited: 2026-07-29
 Status: Active
 Scope: Shared behavioral and technical terminology for repositories created from this template
 Related files: `README.md`, `product/README.md`, `workshop-ideas/README.md`, `system/README.md`, `standards/documentation-model.md`, `standards/documentation-schema.md`
@@ -546,6 +546,16 @@ A targeted diagnostic check used to observe runtime behavior.
 #### Instrumentation point
 A code location where logs, metrics, traces, or debug signals are emitted.
 
+#### Media diagnostics
+The bounded, in-memory evidence used to locate a photo-loading failure across library readiness, server media preparation, derivative pressure, browser image readiness, Pixi texture creation, and sprite application.
+
+- **Lives in:** `src/server/media/media-diagnostics.ts`, `src/server/routes/media-diagnostics.ts`, `src/client/src/features/wall/mediaLoadDiagnostics.ts`
+- **Why it exists:** distinguishes where pictures stop progressing without retaining sensitive or high-cardinality identifiers
+- **Used by:** `/api/diagnostics/media`, `photoWallMediaDiagnostics.snapshot()`, and the Docker/LAN troubleshooting runbook
+- **Change risk:** medium — misleading stages or unbounded dimensions can produce false diagnoses or leak library details
+- **Surfaced to users:** indirectly — exposed as trusted-LAN operator and DevTools probes
+- **Notes:** counters reset on server restart or browser refresh and never include photo IDs, filesystem paths, or media URLs
+
 #### Backpressure
 A condition where downstream capacity limits require the system to slow, buffer, reject, or reshape incoming work.
 
@@ -641,6 +651,9 @@ Short definition.
 - `standards/documentation-schema.md`
 
 ## Changelog
+
+### 2026-07-29
+- Added `Media diagnostics` as the shared name for the bounded server/browser photo-loading evidence.
 
 ### 2026-06-20
 - Updated `Mosaic Lab` to reflect the approved Pixi/camera recipe-bench behavior.

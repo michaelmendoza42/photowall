@@ -1,5 +1,5 @@
 # Playwright browser tests
-Last edited: 2026-06-10
+Last edited: 2026-07-29
 Status: Active
 Related files: `../docs/product/photo-wall-experience.md`, `../docs/system/photo-library-source-and-runtime.md`, `../src/client/README.md`
 
@@ -38,8 +38,13 @@ npm run test:browser
 - `wall-hover-modal.spec.ts` — protects anchored hover preview sizing, click-vs-drag suppression, and focused-photo return behavior
 - `grouped-signposts.spec.ts` — protects grouped signpost reveal, glide, modal suppression, and grouped-selection persistence
 - `zoom-detail-tiers.spec.ts` — protects zoom-aware derivative-tier behavior
+- `media-diagnostics.spec.ts` — proves the real wall advances through browser texture stages, the server observes media outcomes, and neither diagnostic snapshot exposes media identifiers
 
 ## Changelog
+
+### 2026-07-29
+
+- Added the media-diagnostics browser proof to the protected-contract index.
 
 ### 2026-06-10
 - Converted this README to the repository documentation schema.

@@ -7,6 +7,21 @@ import {
   type PixiSceneSprite,
   type PixiSceneTileInput,
 } from './pixiScene.js';
+import type { WallMediaSourceResolver } from './mediaSourceResolver.js';
+import {
+  browserMediaDiagnostics,
+  mediaVariantFromSource,
+  waitForMediaImage,
+} from './mediaLoadDiagnostics.js';
+import {
+  collectDisplayedTextureSources,
+  evictInactiveTextures,
+  TextureLoadScheduler,
+  touchTexture,
+} from './textureScheduler.js';
+
+const MAX_TEXTURE_CACHE_ENTRIES = 128;
+const MAX_CONCURRENT_TEXTURE_LOADS = 4;
 
 export interface PixiWallSurfaceProps {
   tiles: readonly PixiSceneTileInput[];
@@ -15,11 +30,13 @@ export interface PixiWallSurfaceProps {
   worldWidth: number;
   worldHeight: number;
   zoom: number;
+  mediaSourceResolver?: WallMediaSourceResolver;
 }
 
 interface SpriteEntry {
   sprite: Sprite;
   src: string;
+  displayedSrc: string | null;
 }
 
 export const PixiWallSurface = memo(function PixiWallSurface(
@@ -32,6 +49,7 @@ export const PixiWallSurface = memo(function PixiWallSurface(
     worldWidth,
     worldHeight,
     zoom,
+    mediaSourceResolver,
   } = props;
 
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -40,11 +58,24 @@ export const PixiWallSurface = memo(function PixiWallSurface(
   const sceneRef = useRef<Container | null>(null);
   const spriteEntriesRef = useRef<Map<string, SpriteEntry>>(new Map());
   const textureCacheRef = useRef<Map<string, Texture>>(new Map());
-  const texturePromiseCacheRef = useRef<Map<string, Promise<Texture>>>(new Map());
+  const textureSchedulerRef = useRef<TextureLoadScheduler<Texture> | null>(null);
+  const surfaceDisposedRef = useRef(false);
+  if (!textureSchedulerRef.current) {
+    textureSchedulerRef.current = new TextureLoadScheduler(MAX_CONCURRENT_TEXTURE_LOADS);
+  }
+  const textureScheduler = textureSchedulerRef.current;
   const [sceneReady, setSceneReady] = useState(false);
   const [appInitCount, setAppInitCount] = useState(0);
 
-  const sprites = useMemo(() => buildPixiSceneSprites(tiles, zoom), [tiles, zoom]);
+  useEffect(
+    () => browserMediaDiagnostics.registerScheduler(textureScheduler),
+    [textureScheduler],
+  );
+
+  const sprites = useMemo(
+    () => buildPixiSceneSprites(tiles, zoom, mediaSourceResolver),
+    [tiles, zoom, mediaSourceResolver],
+  );
   const activeVariant = useMemo(() => selectPixiSceneVariant(zoom), [zoom]);
 
   useEffect(() => {
@@ -52,6 +83,7 @@ export const PixiWallSurface = memo(function PixiWallSurface(
     if (!host) return undefined;
 
     let disposed = false;
+    surfaceDisposedRef.current = false;
     const app = new Application();
 
     const setup = async (): Promise<void> => {
@@ -91,20 +123,20 @@ export const PixiWallSurface = memo(function PixiWallSurface(
 
     return () => {
       disposed = true;
-      for (const entry of spriteEntriesRef.current.values()) {
-        entry.sprite.destroy();
-      }
+      surfaceDisposedRef.current = true;
+      const currentApp = appRef.current;
+      appRef.current = null;
+      currentApp?.stop();
+      currentApp?.destroy(true, { children: true });
       spriteEntriesRef.current.clear();
       for (const texture of textureCacheRef.current.values()) {
         texture.destroy(true);
       }
       textureCacheRef.current.clear();
-      texturePromiseCacheRef.current.clear();
+      textureSchedulerRef.current = null;
       sceneRef.current = null;
       viewportRef.current = null;
       setSceneReady(false);
-      appRef.current?.destroy(true, { children: true });
-      appRef.current = null;
     };
   }, []);
 
@@ -131,15 +163,17 @@ export const PixiWallSurface = memo(function PixiWallSurface(
     const scene = sceneRef.current;
     if (!sceneReady || !scene) return undefined;
 
-    let cancelled = false;
     const spriteEntries = spriteEntriesRef.current;
     const nextKeys = new Set(sprites.map((sprite) => sprite.key));
+    const getActiveSources = () =>
+      collectDisplayedTextureSources(spriteEntries.values());
 
     for (const [key, entry] of spriteEntries) {
       if (nextKeys.has(key)) continue;
-      scene.removeChild(entry.sprite);
-      entry.sprite.destroy();
+      const removedSprite = entry.sprite;
+      scene.removeChild(removedSprite);
       spriteEntries.delete(key);
+      requestAnimationFrame(() => removedSprite.destroy());
     }
 
     for (let index = 0; index < sprites.length; index += 1) {
@@ -148,17 +182,23 @@ export const PixiWallSurface = memo(function PixiWallSurface(
         scene,
         spriteEntries,
         textureCache: textureCacheRef.current,
-        texturePromises: texturePromiseCacheRef.current,
+        textureScheduler,
+        getActiveSources,
+        isDisposed: () => surfaceDisposedRef.current,
         spriteData,
+        priority: -index,
         zIndex: index,
-        cancelledRef: () => cancelled,
       });
     }
 
-    return () => {
-      cancelled = true;
-    };
-  }, [sceneReady, sprites]);
+    evictInactiveTextures(
+      textureCacheRef.current,
+      getActiveSources(),
+      MAX_TEXTURE_CACHE_ENTRIES,
+      destroyTextureAfterRender,
+    );
+    return undefined;
+  }, [sceneReady, sprites, textureScheduler]);
 
   return (
     <div
@@ -176,19 +216,23 @@ function syncSprite(args: {
   scene: Container;
   spriteEntries: Map<string, SpriteEntry>;
   textureCache: Map<string, Texture>;
-  texturePromises: Map<string, Promise<Texture>>;
+  textureScheduler: TextureLoadScheduler<Texture>;
+  getActiveSources: () => Set<string>;
+  isDisposed: () => boolean;
   spriteData: PixiSceneSprite;
+  priority: number;
   zIndex: number;
-  cancelledRef: () => boolean;
 }): void {
   const {
     scene,
     spriteEntries,
     textureCache,
-    texturePromises,
+    textureScheduler,
+    getActiveSources,
+    isDisposed,
     spriteData,
+    priority,
     zIndex,
-    cancelledRef,
   } = args;
 
   const current = spriteEntries.get(spriteData.key);
@@ -201,20 +245,39 @@ function syncSprite(args: {
     const cachedTexture = textureCache.get(spriteData.src);
     current.src = spriteData.src;
     if (cachedTexture) {
+      touchTexture(textureCache, spriteData.src, cachedTexture);
       current.sprite.texture = cachedTexture;
+      current.displayedSrc = spriteData.src;
       current.sprite.visible = true;
+      browserMediaDiagnostics.record('sprite_applied', spriteData.variant);
       return;
     }
 
     // Keep the previously visible texture in place until the next zoom-tier
     // derivative is ready so zoom-crossing does not black out the wall.
-    void loadTexture(spriteData.src, textureCache, texturePromises).then((texture) => {
-      if (cancelledRef()) return;
+    void loadTexture(
+      spriteData.src,
+      textureCache,
+      textureScheduler,
+      priority,
+      isDisposed,
+    ).then((texture) => {
       const latest = spriteEntries.get(spriteData.key);
-      if (!latest || latest.sprite !== current.sprite || latest.src !== spriteData.src) return;
+      if (!latest || latest.sprite !== current.sprite || latest.src !== spriteData.src) {
+        browserMediaDiagnostics.record('superseded', spriteData.variant);
+        return;
+      }
       latest.sprite.texture = texture;
+      latest.displayedSrc = spriteData.src;
       latest.sprite.visible = true;
-    });
+      browserMediaDiagnostics.record('sprite_applied', spriteData.variant);
+      evictInactiveTextures(
+        textureCache,
+        getActiveSources(),
+        MAX_TEXTURE_CACHE_ENTRIES,
+        destroyTextureAfterRender,
+      );
+    }).catch(() => undefined);
     return;
   }
 
@@ -222,22 +285,46 @@ function syncSprite(args: {
   sprite.visible = false;
   applySpriteLayout(sprite, spriteData, zIndex);
   scene.addChild(sprite);
-  spriteEntries.set(spriteData.key, { sprite, src: spriteData.src });
+  spriteEntries.set(spriteData.key, {
+    sprite,
+    src: spriteData.src,
+    displayedSrc: null,
+  });
 
   const cachedTexture = textureCache.get(spriteData.src);
   if (cachedTexture) {
+    touchTexture(textureCache, spriteData.src, cachedTexture);
     sprite.texture = cachedTexture;
+    const entry = spriteEntries.get(spriteData.key);
+    if (entry) entry.displayedSrc = spriteData.src;
     sprite.visible = true;
+    browserMediaDiagnostics.record('sprite_applied', spriteData.variant);
     return;
   }
 
-  void loadTexture(spriteData.src, textureCache, texturePromises).then((texture) => {
-    if (cancelledRef()) return;
+  void loadTexture(
+    spriteData.src,
+    textureCache,
+    textureScheduler,
+    priority,
+    isDisposed,
+  ).then((texture) => {
     const latest = spriteEntries.get(spriteData.key);
-    if (!latest || latest.sprite !== sprite || latest.src !== spriteData.src) return;
+    if (!latest || latest.sprite !== sprite || latest.src !== spriteData.src) {
+      browserMediaDiagnostics.record('superseded', spriteData.variant);
+      return;
+    }
     latest.sprite.texture = texture;
+    latest.displayedSrc = spriteData.src;
     latest.sprite.visible = true;
-  });
+    browserMediaDiagnostics.record('sprite_applied', spriteData.variant);
+    evictInactiveTextures(
+      textureCache,
+      getActiveSources(),
+      MAX_TEXTURE_CACHE_ENTRIES,
+      destroyTextureAfterRender,
+    );
+  }).catch(() => undefined);
 }
 
 function applySpriteLayout(
@@ -253,37 +340,62 @@ function applySpriteLayout(
   sprite.label = `${spriteData.photoId}:${spriteData.variant}`;
 }
 
+function destroyTextureAfterRender(texture: Texture): void {
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      if (!texture.destroyed) texture.destroy(false);
+    });
+  });
+}
+
 async function loadTexture(
   src: string,
   textureCache: Map<string, Texture>,
-  texturePromises: Map<string, Promise<Texture>>,
+  textureScheduler: TextureLoadScheduler<Texture>,
+  priority: number,
+  isDisposed: () => boolean,
 ): Promise<Texture> {
   const cachedTexture = textureCache.get(src);
   if (cachedTexture) return cachedTexture;
 
-  const pending = texturePromises.get(src);
-  if (pending) return pending;
+  return textureScheduler.load(src, async () => {
+    const variant = mediaVariantFromSource(src);
+    if (isDisposed()) {
+      browserMediaDiagnostics.record('superseded', variant);
+      throw new Error('Media texture load superseded');
+    }
+    browserMediaDiagnostics.record('requested', variant);
 
-  const promise = (async () => {
     const image = new Image();
     image.decoding = 'async';
-    image.src = src;
-    await image.decode().catch(
-      () =>
-        new Promise<void>((resolve, reject) => {
-          image.onload = () => resolve();
-          image.onerror = () => reject(new Error(`Could not load texture: ${src}`));
-        }),
-    );
-    const texture = Texture.from(image);
-    textureCache.set(src, texture);
-    texturePromises.delete(src);
-    return texture;
-  })().catch((error) => {
-    texturePromises.delete(src);
-    throw error;
-  });
+    try {
+      await waitForMediaImage(image, src, {
+        onDecodeFallback: () => browserMediaDiagnostics.record('decode_fallback', variant),
+      });
+    } catch (error) {
+      browserMediaDiagnostics.record(isDisposed() ? 'superseded' : 'load_failed', variant);
+      throw error;
+    }
+    if (isDisposed()) {
+      browserMediaDiagnostics.record('superseded', variant);
+      throw new Error('Media texture load superseded');
+    }
+    browserMediaDiagnostics.record('image_ready', variant);
 
-  texturePromises.set(src, promise);
-  return promise;
+    let texture: Texture;
+    try {
+      texture = Texture.from(image, true);
+    } catch (error) {
+      browserMediaDiagnostics.record('texture_create_failed', variant);
+      throw error;
+    }
+    if (isDisposed()) {
+      texture.destroy(true);
+      browserMediaDiagnostics.record('superseded', variant);
+      throw new Error('Media texture load superseded');
+    }
+    browserMediaDiagnostics.record('texture_created', variant);
+    touchTexture(textureCache, src, texture);
+    return texture;
+  }, priority);
 }

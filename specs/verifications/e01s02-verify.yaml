@@ -1,0 +1,38 @@
+story_id: e01s02
+verified_at: "2026-07-29T13:58:49-07:00"
+verifier: verify-work
+risk: P1
+phases:
+  smoke:
+    passed: true
+    evidence: Fresh local production build served the smoke library on assigned port 5176; browser media requests completed successfully.
+  build:
+    passed: true
+    command: npm run build
+  typecheck:
+    passed: true
+    command: npm run typecheck
+  tests:
+    passed: true
+    commands:
+      - npx vitest run src/shared/api/media.test.ts src/client/src/features/wall/__tests__/pixiScene.test.ts --pool=threads --maxWorkers=1 --minWorkers=1
+      - npx vitest run src/server/media/__tests__/cache-key.test.ts src/server/media/__tests__/source-resolver.test.ts --pool=threads --maxWorkers=1 --minWorkers=1
+    result: 21 targeted tests passed.
+  terminal_verdict:
+    command: npm test
+    exit_code: 0
+    captured_at: "2026-07-29T13:49:34-07:00"
+    note: Single contiguous run; 54 files and 355 tests passed.
+  security:
+    passed: true
+    evidence: Fresh reviewer confirmed cache keys include library root and source fingerprint and source paths remain realpath-bounded.
+  manual:
+    steps:
+      - step: Exercise overview, near-detail, and focused media in desktop and mobile browsers.
+        expected: Immutable browser media URLs remain versioned and all media tiers load without console/network failures.
+        actual: Full fresh-build Playwright suite passed; server logs and client tests confirmed versioned v query parameters.
+        passed: true
+  gaps:
+    closed: true
+    notes:
+      - Legacy cache files are retained and become unreachable through namespaced identity; no destructive migration was added.

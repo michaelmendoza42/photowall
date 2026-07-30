@@ -15,8 +15,10 @@ export function mediaResourcePath(
   photoId: string,
   variant: MediaVariant,
   format: MediaFormat = DEFAULT_MEDIA_FORMAT,
+  sourceVersion?: string | number,
 ): string {
-  return `${MEDIA_BASE_PATH}/${encodeURIComponent(photoId)}?variant=${variant}&format=${format}`;
+  const base = `${MEDIA_BASE_PATH}/${encodeURIComponent(photoId)}?variant=${variant}&format=${format}`;
+  return sourceVersion === undefined ? base : `${base}&v=${encodeURIComponent(String(sourceVersion))}`;
 }
 
 /** Variants the MVP exposes. Keep narrow — broader variants are deferred. */

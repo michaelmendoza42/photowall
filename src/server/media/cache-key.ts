@@ -16,6 +16,8 @@ export const CACHE_LAYOUT_VERSION = 'v1';
 
 export interface CacheKeyInput {
   photoId: string;
+  /** Distinguishes identical relative IDs stored under different configured roots. */
+  libraryRoot: string;
   variant: MediaVariant;
   format: MediaFormat;
   /**
@@ -36,6 +38,8 @@ export function computeCacheKey(input: CacheKeyInput): string {
   hash.update(CACHE_LAYOUT_VERSION);
   hash.update('\0');
   hash.update(input.photoId);
+  hash.update('\0');
+  hash.update(input.libraryRoot);
   hash.update('\0');
   hash.update(input.variant);
   hash.update('\0');

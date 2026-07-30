@@ -10,6 +10,7 @@ import {
 describe('cache-key', () => {
   const baseInput = {
     photoId: 'abc123',
+    libraryRoot: '/photos/library-a',
     variant: 'wall' as const,
     format: 'webp' as const,
     sourceFingerprint: '1700000000000-204800',
@@ -29,6 +30,12 @@ describe('cache-key', () => {
       sourceFingerprint: '1700000000001-204800',
     });
     expect(before).not.toBe(after);
+  });
+
+  it('changes when the configured library root changes', () => {
+    const a = computeCacheKey(baseInput);
+    const b = computeCacheKey({ ...baseInput, libraryRoot: '/photos/library-b' });
+    expect(a).not.toBe(b);
   });
 
   it('changes when the variant changes', () => {

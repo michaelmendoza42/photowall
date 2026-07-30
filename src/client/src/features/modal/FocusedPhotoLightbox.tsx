@@ -1,19 +1,24 @@
 import { useLayoutEffect, useMemo, useState, type HTMLAttributes } from 'react';
 import Lightbox, { type SlideImage } from 'yet-another-react-lightbox';
-import { mediaResourcePath } from '../../../../shared/api/media.js';
 import type { PhotoQueryRecord } from '../../../../shared/api/photos.js';
 import { computeFocusedPhotoRenderSize } from '../wall/hoverPreview.js';
+import {
+  resolveWallMediaSource,
+  type WallMediaSourceResolver,
+} from '../wall/mediaSourceResolver.js';
 
 export interface FocusedPhotoLightboxProps {
   photo: PhotoQueryRecord;
   onClose: () => void;
+  mediaSourceResolver?: WallMediaSourceResolver;
 }
 
 export function buildFocusedPhotoLightboxSlide(
   photo: Pick<PhotoQueryRecord, 'id' | 'width' | 'height'>,
+  mediaSourceResolver?: WallMediaSourceResolver,
 ): SlideImage {
   return {
-    src: mediaResourcePath(photo.id, 'modal'),
+    src: resolveWallMediaSource(photo, 'modal', mediaSourceResolver),
     alt: '',
     ...(photo.width > 0 ? { width: photo.width } : {}),
     ...(photo.height > 0 ? { height: photo.height } : {}),
@@ -23,9 +28,12 @@ export function buildFocusedPhotoLightboxSlide(
 export function FocusedPhotoLightbox(
   props: FocusedPhotoLightboxProps,
 ): JSX.Element {
-  const { photo, onClose } = props;
+  const { photo, onClose, mediaSourceResolver } = props;
 
-  const slide = useMemo(() => buildFocusedPhotoLightboxSlide(photo), [photo]);
+  const slide = useMemo(
+    () => buildFocusedPhotoLightboxSlide(photo, mediaSourceResolver),
+    [photo, mediaSourceResolver],
+  );
   const [viewportSize, setViewportSize] = useState(() => ({
     width: typeof window === 'undefined' ? 0 : window.innerWidth,
     height: typeof window === 'undefined' ? 0 : window.innerHeight,

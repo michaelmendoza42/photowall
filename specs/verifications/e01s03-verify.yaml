@@ -1,0 +1,45 @@
+story_id: e01s03
+verified_at: "2026-07-29T13:58:49-07:00"
+verifier: verify-work
+risk: P1
+phases:
+  smoke:
+    passed: true
+    evidence: Fresh local production build ran on assigned port 5176 with deterministic smoke-library data.
+  build:
+    passed: true
+    command: npm run build
+  typecheck:
+    passed: true
+    command: npm run typecheck
+  tests:
+    passed: true
+    commands:
+      - npx vitest run src/client/src/features/wall/__tests__/singleStreamSceneModel.test.ts src/client/src/features/wall/__tests__/virtualization.test.ts --pool=threads --maxWorkers=1 --minWorkers=1
+      - npx vitest run src/client/src/features/wall/__tests__/pixiScene.test.ts src/client/src/features/wall/__tests__/textureScheduler.test.ts --pool=threads --maxWorkers=1 --minWorkers=1
+      - npx playwright test playwright/mobile-pinch-zoom.spec.ts playwright/single-stream-wrap-continuity.spec.ts --project=chromium-mobile
+    result: Layout/culling, priority scheduling, failure release, mobile zoom, and wrap continuity passed.
+  terminal_verdict:
+    command: npm test
+    exit_code: 0
+    captured_at: "2026-07-29T13:49:34-07:00"
+    note: Single contiguous run; 54 files and 355 tests passed.
+  manual:
+    steps:
+      - step: Zoom across derivative tiers and transition between the wall and Mosaic Lab.
+        expected: Old textures remain visible until replacements apply; eviction does not invalidate active Pixi render instructions.
+        actual: Full fresh-build Playwright suite passed 22 tests with one intentional desktop skip; Mosaic Lab transitions passed without alphaMode/addressMode errors.
+        passed: true
+  browser:
+    passed: true
+    command: npx playwright test
+    result: 22 passed, 1 intentionally skipped.
+    screenshots:
+      - test-results/playwright/single-stream-wrap-continuity-single-*/single-stream-wrap-continuity.png
+      - test-results/playwright/zoom-detail-tiers-*/zoom-detail-modal-tier.png
+  gaps:
+    closed: true
+    notes:
+      - Restored canonical wrap-continuity coverage.
+      - Added priority ordering and displayed-texture retention coverage.
+      - Resolved Pixi source-destruction races found by the full browser suite.

@@ -1,7 +1,8 @@
+import type { MediaVariant } from '../../../../shared/api/media.js';
 import {
-  mediaResourcePath,
-  type MediaVariant,
-} from '../../../../shared/api/media.js';
+  resolveWallMediaSource,
+  type WallMediaSourceResolver,
+} from './mediaSourceResolver.js';
 
 export interface PixiSceneTileInput {
   key: string;
@@ -13,6 +14,7 @@ export interface PixiSceneTileInput {
   photoId: string;
   sourceWidth?: number;
   sourceHeight?: number;
+  sourceMtimeMs?: number;
 }
 
 export interface PixiSceneSprite {
@@ -28,7 +30,8 @@ export interface PixiSceneSprite {
   sourceHeight: number | null;
 }
 
-export const FAR_ZOOM_MAX = 0.85;
+// Initial zoom is an overview: thumbnails keep the first real-library frame responsive.
+export const FAR_ZOOM_MAX = 1.05;
 export const NEAR_ZOOM_MIN = 1.7;
 
 export function selectPixiSceneVariant(zoom: number): MediaVariant {
@@ -40,6 +43,7 @@ export function selectPixiSceneVariant(zoom: number): MediaVariant {
 export function buildPixiSceneSprites(
   tiles: readonly PixiSceneTileInput[],
   zoom: number,
+  mediaSourceResolver?: WallMediaSourceResolver,
 ): PixiSceneSprite[] {
   const variant = selectPixiSceneVariant(zoom);
 
@@ -50,7 +54,16 @@ export function buildPixiSceneSprites(
     width: tile.width,
     height: tile.height,
     photoId: tile.photoId,
-    src: mediaResourcePath(tile.photoId, variant),
+    src: resolveWallMediaSource(
+      {
+        id: tile.photoId,
+        width: tile.sourceWidth ?? 0,
+        height: tile.sourceHeight ?? 0,
+        mtimeMs: tile.sourceMtimeMs,
+      },
+      variant,
+      mediaSourceResolver,
+    ),
     variant,
     sourceWidth: tile.sourceWidth ?? null,
     sourceHeight: tile.sourceHeight ?? null,

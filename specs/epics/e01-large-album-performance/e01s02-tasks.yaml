@@ -1,0 +1,17 @@
+story_id: e01s02
+title: Make cached media identity correct
+status: passing
+bcps: 5
+tasks:
+  - id: 1
+    description: Version browser media URLs from snapshot source metadata while retaining immutable cache semantics.
+    risk: P1
+    security: low
+    verify: npx vitest run src/shared/api/media.test.ts src/client/src/features/wall/__tests__/pixiScene.test.ts --pool=threads --maxWorkers=1 --minWorkers=1
+    status: passing
+  - id: 2
+    description: Namespace derivative cache identity by configured library root without deleting legacy cache files.
+    risk: P1
+    security: medium
+    verify: npx vitest run src/server/media/__tests__/cache-key.test.ts src/server/media/__tests__/source-resolver.test.ts --pool=threads --maxWorkers=1 --minWorkers=1
+    status: passing

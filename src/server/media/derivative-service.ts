@@ -28,6 +28,8 @@ export interface DerivativeServiceLogger {
 export interface DerivativeServiceOptions {
   cacheRoot: string;
   logger?: DerivativeServiceLogger;
+  /** Caps CPU/disk-heavy cold Sharp renders; cache hits bypass this queue. */
+  maxConcurrentRenders?: number;
 }
 
 export interface DerivativeRequest {
@@ -74,14 +76,32 @@ export type DerivativeFailure =
 export class DerivativeService {
   private readonly cacheRoot: string;
   private readonly logger?: DerivativeServiceLogger;
+  private readonly maxConcurrentRenders: number;
+  private readonly inFlight = new Map<string, Promise<DerivativeOutcome>>();
+  private activeRenders = 0;
+  private queuedRenders = 0;
+  private readonly renderWaiters: Array<() => void> = [];
 
   constructor(options: DerivativeServiceOptions) {
     this.cacheRoot = options.cacheRoot;
     this.logger = options.logger;
+    const maxConcurrentRenders = options.maxConcurrentRenders ?? 4;
+    if (!Number.isInteger(maxConcurrentRenders) || maxConcurrentRenders < 1) {
+      throw new RangeError('maxConcurrentRenders must be a positive integer');
+    }
+    this.maxConcurrentRenders = maxConcurrentRenders;
   }
 
   getCacheRoot(): string {
     return this.cacheRoot;
+  }
+
+  getMetrics(): { activeRenders: number; queuedRenders: number; inFlightRenders: number } {
+    return {
+      activeRenders: this.activeRenders,
+      queuedRenders: this.queuedRenders,
+      inFlightRenders: this.inFlight.size,
+    };
   }
 
   async generate(
@@ -99,6 +119,7 @@ export class DerivativeService {
     );
     const keyInput = {
       photoId: resolved.photoId,
+      libraryRoot: snapshot.libraryRoot,
       variant: request.variant,
       format: request.format,
       sourceFingerprint: fingerprint,
@@ -121,29 +142,65 @@ export class DerivativeService {
       };
     }
 
-    try {
-      await renderToFile(resolved.absolutePath, target, request);
-    } catch (err) {
-      const detail = err instanceof Error ? err.message : String(err);
-      this.logger?.error?.(
-        { photoId: resolved.photoId, variant: request.variant, err: detail },
-        'derivative render failed',
-      );
-      return { ok: false, failure: { kind: 'render_failed', detail } };
-    }
+    const existingRender = this.inFlight.get(cacheKey);
+    if (existingRender) return existingRender;
 
-    this.logger?.debug?.(
-      { photoId: resolved.photoId, variant: request.variant, format: request.format },
-      'derivative cache miss — rendered fresh',
-    );
-    return {
-      ok: true,
-      filePath: target,
-      cacheKey,
-      fromCache: false,
-      sourceMtimeMs: resolved.mtimeMs,
-      sourceFileSize: resolved.fileSize,
-    };
+    const render = this.renderWithPermit(async () => {
+      // Another queued request may have populated the cache while this one waited.
+      if (await fileExists(target)) {
+        return {
+          ok: true as const,
+          filePath: target,
+          cacheKey,
+          fromCache: true,
+          sourceMtimeMs: resolved.mtimeMs,
+          sourceFileSize: resolved.fileSize,
+        };
+      }
+      try {
+        await renderToFile(resolved.absolutePath, target, request);
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : String(err);
+        this.logger?.error?.(
+          { photoId: resolved.photoId, variant: request.variant, err: detail },
+          'derivative render failed',
+        );
+        return { ok: false as const, failure: { kind: 'render_failed' as const, detail } };
+      }
+      this.logger?.debug?.(
+        { photoId: resolved.photoId, variant: request.variant, format: request.format },
+        'derivative cache miss — rendered fresh',
+      );
+      return {
+        ok: true as const,
+        filePath: target,
+        cacheKey,
+        fromCache: false,
+        sourceMtimeMs: resolved.mtimeMs,
+        sourceFileSize: resolved.fileSize,
+      };
+    });
+    this.inFlight.set(cacheKey, render);
+    try {
+      return await render;
+    } finally {
+      this.inFlight.delete(cacheKey);
+    }
+  }
+
+  protected async renderWithPermit<T>(work: () => Promise<T>): Promise<T> {
+    if (this.activeRenders >= this.maxConcurrentRenders) {
+      this.queuedRenders += 1;
+      await new Promise<void>((resolve) => this.renderWaiters.push(resolve));
+      this.queuedRenders -= 1;
+    }
+    this.activeRenders += 1;
+    try {
+      return await work();
+    } finally {
+      this.activeRenders -= 1;
+      this.renderWaiters.shift()?.();
+    }
   }
 }
 

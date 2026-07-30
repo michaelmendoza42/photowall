@@ -2,6 +2,17 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { PersistedSnapshot } from '../snapshots/schema.js';
 
+const photoIndexes = new WeakMap<PersistedSnapshot, Map<string, PersistedSnapshot['photos'][number]>>();
+
+function photoIndex(snapshot: PersistedSnapshot): Map<string, PersistedSnapshot['photos'][number]> {
+  let index = photoIndexes.get(snapshot);
+  if (!index) {
+    index = new Map(snapshot.photos.map((photo) => [photo.id, photo]));
+    photoIndexes.set(snapshot, index);
+  }
+  return index;
+}
+
 /** Reasons a source path lookup may fail. Each maps to an HTTP outcome. */
 export type SourceResolutionFailure =
   | { kind: 'photo_not_found' }
@@ -40,7 +51,7 @@ export async function resolveSafeSourcePath(
   snapshot: PersistedSnapshot,
   photoId: string,
 ): Promise<SourceResolution> {
-  const photo = snapshot.photos.find((p) => p.id === photoId);
+  const photo = photoIndex(snapshot).get(photoId);
   if (!photo) {
     return { ok: false, failure: { kind: 'photo_not_found' } };
   }

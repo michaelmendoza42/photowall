@@ -51,8 +51,7 @@ import {
   type WallDragState,
   type WallStats,
 } from './WallCanvas.js';
-import { SingleStreamWallView } from './SingleStreamWallView.js';
-import { GroupedWallView } from './GroupedWallView.js';
+import { PhotoWallSurface } from './PhotoWallSurface.js';
 import {
   deriveGroupedCameraTarget,
   deriveGroupedWallFoundation,
@@ -497,20 +496,11 @@ export function WallShell(): JSX.Element {
         <SnapshotChangedState status={screen.status} />
       )}
       {screen.kind === 'ready' && firstPage && (
-        groupedFoundation?.mode === 'grouped' ? (
-          <GroupedWallView
-            key="wall-grouped-view"
-            {...sharedWallProps}
-            groupedFoundation={groupedFoundation}
-            activeAlbumAreaCount={activeAlbumAreaCount}
-          />
-        ) : (
-          <SingleStreamWallView
-            key="wall-single-stream-view"
-            {...sharedWallProps}
-            activeAlbumAreaCount={activeAlbumAreaCount}
-          />
-        )
+        <PhotoWallSurface
+          {...sharedWallProps}
+          groupedFoundation={groupedFoundation}
+          activeAlbumAreaCount={activeAlbumAreaCount}
+        />
       )}
 
       <ControlsPanel

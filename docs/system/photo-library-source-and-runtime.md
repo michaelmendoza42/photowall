@@ -1,5 +1,5 @@
 # Photo Library Source and Runtime
-Last edited: 2026-06-10
+Last edited: 2026-07-29
 Status: Active
 Scope: Docker runtime, configurable photo-library root, trusted-LAN deployment model, and filesystem discovery assumptions
 Related files: `../../README.md`, `../product/photo-wall-experience.md`, `../glossary.md`, `README.md`
@@ -45,6 +45,8 @@ The MVP is explicitly a trusted-LAN-only app: it is intended to run on the opera
 - Future wall changes should preserve that one-path model and extend layout modes or interaction layers in place rather than reviving a renderer-selection seam.
 - The trusted-LAN assumption shapes which threats are in scope (e.g. unsafe path access, broken mounts, missing permissions) versus which are out of scope (e.g. hostile internet exposure, multi-user auth).
 - Startup diagnostics should make broken mounts, overlapping source/data paths, and unreadable or unwritable roots obvious in operator logs.
+- Media diagnostics are bounded, in-memory aggregates split across the server media pipeline and the browser texture pipeline. They use fixed dimensions and must not retain photo IDs, filesystem paths, media URLs, or arbitrary error text.
+- The server exposes the current aggregate snapshot at `/api/diagnostics/media`; the browser exposes its page-lifetime texture snapshot as `photoWallMediaDiagnostics.snapshot()` in DevTools. These are diagnostic probes, not durable analytics or production monitoring.
 - The current MVP scan model is restart-driven from the operator perspective: startup may warm-load a prior snapshot, then runs a fresh scan in the background.
 
 ## Related docs
@@ -55,6 +57,9 @@ The MVP is explicitly a trusted-LAN-only app: it is intended to run on the opera
 - `README.md`
 
 ## Changelog
+
+### 2026-07-29
+- Added the bounded server/browser media-diagnostics boundary and its privacy constraints.
 
 ### 2026-06-10
 - Clarified that the Pixi-first wall is now the only supported wall implementation path, with single-stream and grouped browsing treated as layout modes rather than renderer choices.

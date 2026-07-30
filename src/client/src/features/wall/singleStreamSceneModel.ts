@@ -47,12 +47,27 @@ export interface SingleStreamSceneModel {
   renderedTileCount: number;
 }
 
-export function buildSingleStreamSceneModel(
-  input: SingleStreamSceneModelInput,
+export function buildSingleStreamLayout(input: Pick<
+  SingleStreamSceneModelInput,
+  'photos' | 'hasMore' | 'worldWidth' | 'maxRowHeight' | 'columnWidthFactors' | 'tileScale'
+>): PackerResult {
+  return packJustifiedRows(
+    input.photos,
+    {
+      worldWidth: input.worldWidth,
+      maxRowHeight: input.maxRowHeight,
+      columnWidthFactors: input.columnWidthFactors,
+      tileScale: input.tileScale,
+    },
+    input.hasMore,
+  );
+}
+
+export function projectSingleStreamSceneModel(
+  input: Omit<SingleStreamSceneModelInput, 'photos' | 'hasMore' | 'maxRowHeight' | 'columnWidthFactors' | 'tileScale'> & { packed: PackerResult },
 ): SingleStreamSceneModel {
   const {
-    photos,
-    hasMore,
+    packed,
     worldWidth,
     cameraX,
     cameraY,
@@ -60,21 +75,7 @@ export function buildSingleStreamSceneModel(
     viewportWidth,
     viewportHeight,
     overscan,
-    maxRowHeight,
-    columnWidthFactors,
-    tileScale,
   } = input;
-
-  const packed = packJustifiedRows(
-    photos,
-    {
-      worldWidth,
-      maxRowHeight,
-      columnWidthFactors,
-      tileScale,
-    },
-    hasMore,
-  );
 
   const projection = projectSingleStreamViewport({
     worldWidth,
@@ -110,6 +111,22 @@ export function buildSingleStreamSceneModel(
     verticalSegmentCount: renderWindow.verticalSegmentCount,
     renderedTileCount: renderWindow.renderedTileCount,
   };
+}
+
+export function buildSingleStreamSceneModel(
+  input: SingleStreamSceneModelInput,
+): SingleStreamSceneModel {
+  const packed = buildSingleStreamLayout(input);
+  return projectSingleStreamSceneModel({
+    packed,
+    worldWidth: input.worldWidth,
+    cameraX: input.cameraX,
+    cameraY: input.cameraY,
+    zoom: input.zoom,
+    viewportWidth: input.viewportWidth,
+    viewportHeight: input.viewportHeight,
+    overscan: input.overscan,
+  });
 }
 
 export function buildPixiSceneTileInputs(
