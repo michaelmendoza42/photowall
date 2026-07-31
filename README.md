@@ -1,5 +1,5 @@
 # photo-wall
-Last edited: 2026-06-10
+Last edited: 2026-07-30
 
 Minimal Docker-run web app for browsing a configured photo library on the home LAN as a large, gapless photo wall.
 
@@ -10,7 +10,7 @@ Local dev (Vite + Fastify with hot reload):
 ```bash
 npm install
 cp .env.example .env   # then edit PHOTO_WALL_HOST_LIBRARY_PATH
-npm run dev            # client on :5173, server on :3001
+npm run dev            # client on :5176, server on :3001
 ```
 
 Docker (production-style single image):
@@ -91,6 +91,9 @@ Month filtering is out of MVP scope.
 - refine saved-filter playlist authoring once the minimal menu UI is in place
 
 ## Changelog
+
+### 2026-07-30
+- Aligned local Vite onboarding with the repository's stable port `5176` and LAN binding contract.
 
 ### 2026-06-10
 - Added a discoverability link for the canonical user-intent maintenance rule from the root README.

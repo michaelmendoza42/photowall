@@ -22,18 +22,11 @@ function resolveClientRoot(): string | null {
   return null;
 }
 
-export async function registerClientStatic(
-  app: FastifyInstance,
-): Promise<{ mounted: boolean; root: string | null }> {
-  const root = resolveClientRoot();
-  if (!root) {
-    return { mounted: false, root: null };
-  }
+export async function mountClientStatic(app: FastifyInstance, root: string): Promise<void> {
   await app.register(fastifyStatic, {
     root,
     prefix: '/',
     index: ['index.html'],
-    wildcard: false,
   });
   app.setNotFoundHandler(async (request, reply) => {
     if (request.method !== 'GET') {
@@ -44,5 +37,15 @@ export async function registerClientStatic(
     }
     return reply.sendFile('index.html');
   });
+}
+
+export async function registerClientStatic(
+  app: FastifyInstance,
+): Promise<{ mounted: boolean; root: string | null }> {
+  const root = resolveClientRoot();
+  if (!root) {
+    return { mounted: false, root: null };
+  }
+  await mountClientStatic(app, root);
   return { mounted: true, root };
 }

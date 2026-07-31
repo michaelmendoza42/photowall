@@ -1,5 +1,5 @@
 # Photo Wall Docker/LAN Operator Runbook
-Last edited: 2026-07-29
+Last edited: 2026-07-30
 Status: Active
 Owner: Michael
 Related files: `../../README.md`, `../system/photo-library-source-and-runtime.md`, `../product/photo-wall-experience.md`, `../../docker-compose.yml`, `../../.env.example`
@@ -26,7 +26,7 @@ Use this runbook when you need to:
 
    Required keys:
 
-   - `PHOTO_WALL_HOST_LIBRARY_PATH` — host path to the source photo library
+   - `PHOTO_WALL_HOST_LIBRARY_PATH` — host path to the source photo library (the current operator host uses `/mnt/sigma/Files/users/michael/Projects/Photography`)
    - `PHOTO_WALL_HOST_DATA_PATH` — host path for writable app state
    - `PHOTO_WALL_PORT` — host/container port (default `3001`)
 
@@ -62,11 +62,13 @@ Use this runbook when you need to:
    curl http://localhost:${PHOTO_WALL_PORT:-3001}/healthz
    ```
 
-6. Validate LAN reachability from another device on the same network:
+6. Validate LAN reachability from another device on the same network using the configured Compose port:
 
    ```text
-   http://<host-lan-ip>:<PHOTO_WALL_PORT>
+   http://mmdebian.local:<PHOTO_WALL_PORT>/
    ```
+
+   The portable default is `3001`. The current operator deployment explicitly sets `PHOTO_WALL_PORT=5176`, so its managed route is `http://mmdebian.local:5176/`. The bare hostname (`http://mmdebian.local/`) is a different service on port 80.
 
 7. If the app opens with the wrong or missing root, use the in-app root editor:
 
@@ -190,8 +192,17 @@ Both snapshots are process/page-lifetime aggregates and contain no photo IDs, fi
 
 ## Changelog
 
+### 2026-07-30
+- Clarified the current operator library path and the managed LAN route without turning either into a portable repository default.
+
 ### 2026-07-29
 - Added the server and browser media-diagnostics commands plus an ordered interpretation guide for empty or non-loading pictures.
+
+### 2026-07-17
+- Recorded the current deployment route `http://mmdebian.local:5176/` while preserving the configured/default Compose-port procedure, and clarified that the bare hostname is not Photo Wall.
+
+### 2026-07-16
+- Recorded `/mnt/sigma/Files/users/michael/Projects/Photography` as the current operator host library path.
 
 ### 2026-06-10
 - Added the operator-facing in-app library-root recovery step and clarified when the local picker is only a best-effort prefill helper.

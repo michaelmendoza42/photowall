@@ -1,5 +1,5 @@
 # Photo Library Source and Runtime
-Last edited: 2026-07-29
+Last edited: 2026-07-30
 Status: Active
 Scope: Docker runtime, configurable photo-library root, trusted-LAN deployment model, and filesystem discovery assumptions
 Related files: `../../README.md`, `../product/photo-wall-experience.md`, `../glossary.md`, `README.md`
@@ -8,7 +8,7 @@ This note records the current technical shape the project should preserve while 
 
 ## Context
 
-The intended runtime is Docker. The app should operate against a host photo library exposed to the container as a read-only mount, with configuration pointing at a single library root path. Mutable application state (snapshots, saved-filter playlists, and derivative image cache) belongs on a separate writable mount, not on the photo library mount.
+The intended runtime is Docker. The app operates against one configured host photo library exposed to the container as a read-only mount; the current operator deployment points at `/mnt/sigma/Files/users/michael/Projects/Photography`. Mutable application state (snapshots, saved-filter playlists, and derivative image cache) belongs on a separate writable mount, not on the photo library mount.
 
 The MVP is explicitly a trusted-LAN-only app: it is intended to run on the operator's home network without auth, accounts, or internet exposure.
 
@@ -58,8 +58,14 @@ The MVP is explicitly a trusted-LAN-only app: it is intended to run on the opera
 
 ## Changelog
 
+### 2026-07-30
+- Clarified that the recorded operator library path is a deployment value, while the repository contract remains configurable.
+
 ### 2026-07-29
 - Added the bounded server/browser media-diagnostics boundary and its privacy constraints.
+
+### 2026-07-16
+- Recorded `/mnt/sigma/Files/users/michael/Projects/Photography` as the current operator deployment's host photo-library root.
 
 ### 2026-06-10
 - Clarified that the Pixi-first wall is now the only supported wall implementation path, with single-stream and grouped browsing treated as layout modes rather than renderer choices.

@@ -84,6 +84,12 @@ This repo uses four tiers:
 - Repeatable operational procedures: `docs/runbooks/`
 - Consequential tradeoff records: `docs/decisions/`
 
+## LAN development contract
+
+- Keep the browser development server on this repository's stable port from `/home/michael/Projects/Code/pi-mods/bin/dev-ports ensure .`; do not replace it with a framework default or hard-coded shared port.
+- Bind browser development servers to `0.0.0.0`. Use `http://127.0.0.1:<port>` locally, `http://mmdebian.local:<port>` from the LAN, and `http://mmdebian.mendoza.home:<port>` from authorized Tailscale devices.
+- Preserve this contract when changing package scripts, Vite/Next/Flask configuration, Docker development settings, or onboarding docs.
+
 ## Convergence maintenance
 
 - Apply canonical user-intent maintenance: when user feedback changes desired future behavior, workflow shape, or shared terminology, update the governing durable docs so they reflect the refined current truth instead of leaving that refinement only in chat, memory, or scratch notes.
