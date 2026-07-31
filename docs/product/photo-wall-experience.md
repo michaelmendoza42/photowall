@@ -1,5 +1,5 @@
 # Photo Wall Experience
-Last edited: 2026-06-26
+Last edited: 2026-07-30
 Status: Approved
 Decision owner: Michael
 Drafted by: Pi
@@ -24,7 +24,9 @@ The MVP is a trusted-LAN, Docker-run app with no auth boundary and no internet-f
 - Wall tiles may crop photos when needed to preserve mosaic continuity, but that crop should stay modest rather than flattening every image toward one generic shape.
 - The wall should fit photos together tightly with no intentional gaps between tiles.
 - The wall should read as a column-first mosaic with vertical seams and staggered horizontal breaks rather than as obvious full-width horizontal striping.
-- The wall should support dynamic zoom in and out with a fast broad overview and progressively better image detail as the user moves closer.
+- The wall should support dynamic zoom in and out with a fast broad overview and progressively better image detail as the user moves closer. The initial frame should favor lightweight thumbnail derivatives rather than wait on wall-detail images.
+- Large-album interaction must keep cold derivative work, texture loads, texture retention, layout packing, and camera publication bounded; source changes must produce versioned media URLs so immutable browser caches do not serve stale derivatives.
+- On coarse-pointer/mobile devices, two-finger pinch must zoom the wall directly; visible zoom-in and zoom-out controls provide an additional touch fallback while preserving drag panning.
 - The wall should support true two-axis panning driven by trackpad wheel deltas, allowing simultaneous horizontal and vertical camera movement.
 - The wall must also support mouse click-drag panning as a fallback for users without a trackpad, with click activation suppressed after the drag threshold is crossed.
 - Additional photos should load dynamically as the user keeps panning the wall, so the experience does not require the entire library to load up front.
@@ -111,6 +113,9 @@ The MVP is a trusted-LAN, Docker-run app with no auth boundary and no internet-f
 - `../standards/testing.md`
 
 ## Changelog
+
+### 2026-07-30
+- Recorded the verified large-album bounds, versioned media identity, thumbnail-first initial frame, and coarse-pointer pinch/zoom-control contract.
 
 ### 2026-06-26
 - Reframed Mosaic Lab as a wall-first mock photo wall sandbox with synthetic sample albums, generated photo-like inputs, immediate production-wall rerenders, honest diagnostics, and deferred saved failure cases.

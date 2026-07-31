@@ -1,9 +1,9 @@
 # Playwright browser tests
-Last edited: 2026-07-29
+Last edited: 2026-07-30
 Status: Active
 Related files: `../docs/product/photo-wall-experience.md`, `../docs/system/photo-library-source-and-runtime.md`, `../src/client/README.md`
 
-Browser regression coverage for the wall interaction contract lives here.
+Browser regression coverage for the wall interaction contract and Mosaic Lab entry seam lives here.
 
 ## What this harness does
 
@@ -31,7 +31,7 @@ npm run test:browser
 - HTML report: `playwright-report/`
 - failure screenshots and traces: `test-results/playwright/`
 
-## Protected wall contracts
+## Protected browser contracts
 
 - `wall-layout-modes.spec.ts` — protects the single-stream versus grouped wall-mode contract and the album-area diagnostics the shell exposes for that distinction
 - `single-stream-wrap-continuity.spec.ts` — protects seamless wrap travel and verifies that the Pixi wall does not reinitialize during full-period travel
@@ -42,6 +42,9 @@ npm run test:browser
 - `mosaic-lab-entry-seam.spec.ts` — protects the explicit wall-to-lab entry/return seam, the production-wall renderer contract, the session-local sample-album flow, and the synthetic-media guardrail that keeps `lab:*` ids out of backend `/api/media` requests
 
 ## Changelog
+
+### 2026-07-30
+- Generalized the protected-contract index to include the Mosaic Lab browser seam alongside wall behavior.
 
 ### 2026-07-29
 
