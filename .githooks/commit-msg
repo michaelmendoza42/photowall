@@ -1,0 +1,181 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+msg_file="${1:-}"
+script_dir="$(cd "$(dirname "$0")" && pwd -P)"
+repo_root="$(cd "$script_dir/.." && pwd -P)"
+cd "$repo_root"
+
+fail() {
+  printf 'commit-msg guardrail: %s\n' "$*" >&2
+  exit 1
+}
+
+trim() {
+  local value="$1"
+  value="${value#${value%%[![:space:]]*}}"
+  value="${value%${value##*[![:space:]]}}"
+  printf '%s' "$value"
+}
+
+field_value() {
+  local key="$1"
+  local raw
+  raw="$(grep -E "^${key}:" "$msg_file" | head -n 1 | cut -d: -f2- || true)"
+  trim "$raw"
+}
+
+is_placeholder() {
+  case "$1" in
+    ""|*"<"*">"*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+is_product_doc_path() {
+  [[ "$1" =~ ^docs/product/.+\.md$ ]] || return 1
+  case "$1" in
+    docs/product/README.md|docs/product/glossary.md) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
+index_has_regular_file() {
+  local path="$1"
+  local mode object_type
+  object_type="$(git cat-file -t ":$path" 2>/dev/null || true)"
+  [[ "$object_type" == 'blob' ]] || return 1
+  mode="$(git ls-files -s -- ":(literal)$path" | awk 'NR == 1 { print $1 }')"
+  [[ "$mode" == '100644' || "$mode" == '100755' ]]
+}
+
+is_test_path() {
+  local path="$1"
+  case "$path" in
+    *.test.*|*.spec.*) ;;
+    *) return 1 ;;
+  esac
+  case "$path" in
+    *.c|*.cc|*.cpp|*.cs|*.go|*.java|*.js|*.jsx|*.mjs|*.cjs|*.php|*.py|*.rb|*.rs|*.sh|*.swift|*.ts|*.tsx) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+subject="$(grep -v '^#' "$msg_file" | sed '/^$/d' | head -n 1 || true)"
+[[ -n "$subject" ]] || fail 'commit subject cannot be empty'
+
+change_type="$(field_value 'Change-Type')"
+behavior_doc="$(field_value 'Behavior-Doc')"
+tests_updated="$(field_value 'Tests-Updated')"
+approval="$(field_value 'Approval')"
+approval_source="$(field_value 'Approval-Source')"
+
+is_placeholder "$change_type" && fail 'fill in Change-Type in the commit template'
+is_placeholder "$behavior_doc" && fail 'fill in Behavior-Doc in the commit template'
+is_placeholder "$tests_updated" && fail 'fill in Tests-Updated in the commit template'
+is_placeholder "$approval" && fail 'fill in Approval in the commit template'
+is_placeholder "$approval_source" && fail 'fill in Approval-Source in the commit template'
+
+case "$change_type" in
+  behavior|internal|docs|refactor) ;;
+  *) fail 'Change-Type must be one of: behavior, internal, docs, refactor' ;;
+esac
+
+case "$tests_updated" in
+  yes|no|n/a) ;;
+  *) fail 'Tests-Updated must be one of: yes, no, n/a' ;;
+esac
+
+case "$approval" in
+  explicit|n/a) ;;
+  *) fail 'Approval must be one of: explicit, n/a' ;;
+esac
+
+approval_source_exists() {
+  local source="$1"
+  [[ "$source" == 'n/a' ]] && return 1
+  case "$source" in
+    chat:*|note:*|task:*) return 0 ;;
+    /*|../*|*/../*) return 1 ;;
+  esac
+  index_has_regular_file "$source"
+}
+
+has_product_doc_change=0
+has_test_change=0
+changed_behavior_doc=0
+approved_behavior_doc_change=0
+
+while IFS= read -r -d '' path; do
+  [[ -z "$path" ]] && continue
+  if is_product_doc_path "$path"; then
+    has_product_doc_change=1
+    if [[ "$path" == "$behavior_doc" ]]; then
+      changed_behavior_doc=1
+    fi
+
+    previous_content="$(git show "HEAD:$path" 2>/dev/null || true)"
+    staged_content="$(git show ":$path" 2>/dev/null || true)"
+    if git cat-file -e ":$path" 2>/dev/null; then
+      index_has_regular_file "$path" || fail "$path must remain a regular file when staged"
+      grep -q '^Status:' <<<"$staged_content" || fail "$path is missing required metadata: Status"
+      grep -q '^Approved by:' <<<"$staged_content" || fail "$path is missing required metadata: Approved by"
+      grep -q '^Change policy:' <<<"$staged_content" || fail "$path is missing required metadata: Change policy"
+      if grep -q '^Status: Approved\b' <<<"$staged_content"; then
+        grep -q '^Approved by: Pending human approval$' <<<"$staged_content" && fail "$path cannot be Status: Approved while Approved by is still Pending human approval"
+      fi
+    fi
+    if grep -q '^Status: Approved\b' <<<"$previous_content" || grep -q '^Status: Approved\b' <<<"$staged_content"; then
+      approved_behavior_doc_change=1
+    fi
+  fi
+  if is_test_path "$path" && index_has_regular_file "$path"; then
+    has_test_change=1
+  fi
+# --no-renames exposes both sides of a move. -z preserves Unicode, whitespace,
+# quotes, and backslashes exactly so path parsing cannot bypass policy checks.
+done < <(git diff --cached --no-renames --name-only --diff-filter=ACMRTD -z)
+
+if [[ "$change_type" == "behavior" ]]; then
+  [[ "$behavior_doc" != "n/a" ]] || fail 'behavior commits must set Behavior-Doc to a docs/product/... path'
+  is_product_doc_path "$behavior_doc" || fail 'Behavior-Doc must point to a product behavior doc under docs/product/'
+  [[ -n "$(git diff --cached --name-only -- "$behavior_doc")" ]] || fail 'behavior commits must stage the referenced Behavior-Doc in the same change'
+  git cat-file -e ":$behavior_doc" 2>/dev/null || fail 'behavior commits cannot delete the referenced Behavior-Doc'
+  [[ "$changed_behavior_doc" -eq 1 ]] || fail 'behavior commits must stage the referenced Behavior-Doc in the same change'
+  [[ "$has_product_doc_change" -eq 1 ]] || fail 'behavior commits must include a docs/product/ change'
+  [[ "$has_test_change" -eq 1 ]] || fail 'behavior commits must include a test change'
+  [[ "$tests_updated" == 'yes' ]] || fail 'behavior commits must set Tests-Updated: yes'
+  [[ "$approval" == 'explicit' ]] || fail 'behavior commits must set Approval: explicit'
+  [[ "$approval_source" != 'n/a' ]] || fail 'behavior commits must set Approval-Source'
+  approval_source_exists "$approval_source" || fail 'Approval-Source must point to an existing file or use chat:/note:/task: notation'
+else
+  if [[ "$behavior_doc" != 'n/a' ]]; then
+    is_product_doc_path "$behavior_doc" || fail 'Behavior-Doc must be n/a or a docs/product/... path'
+  fi
+fi
+
+if [[ "$approved_behavior_doc_change" -eq 1 ]]; then
+  [[ "$approval" == 'explicit' ]] || fail 'editing an approved behavior doc requires Approval: explicit'
+  [[ "$approval_source" != 'n/a' ]] || fail 'editing an approved behavior doc requires Approval-Source'
+  approval_source_exists "$approval_source" || fail 'Approval-Source must point to an existing file or use chat:/note:/task: notation'
+else
+  [[ "$approval" == 'n/a' || "$change_type" == 'behavior' ]] || fail 'Approval: explicit is reserved for behavior commits or approved behavior doc edits'
+fi
+
+if [[ "$approval" == 'n/a' && "$approval_source" != 'n/a' ]]; then
+  fail 'Approval-Source must be n/a when Approval is n/a'
+fi
+
+if [[ "$approval" == 'explicit' && "$approval_source" == 'n/a' ]]; then
+  fail 'Approval: explicit requires Approval-Source'
+fi
+
+if [[ "$tests_updated" == 'yes' && "$has_test_change" -ne 1 ]]; then
+  fail 'Tests-Updated is yes, but no staged test files were found'
+fi
+
+if [[ "$tests_updated" == 'n/a' && "$has_test_change" -eq 1 && "$change_type" == 'behavior' ]]; then
+  fail 'behavior commits cannot mark Tests-Updated as n/a when tests changed'
+fi
+
+exit 0

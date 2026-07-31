@@ -1,4 +1,5 @@
 # `src/server/`
+Last edited: 2026-07-30
 
 Current Fastify + TypeScript backend.
 
@@ -12,3 +13,8 @@ Current Fastify + TypeScript backend.
 - `routes/` — HTTP routes for health, library status/facets, photos, playlists, and media
 - `services/` — production static-client mounting
 - `version.ts` — service version metadata
+
+## Changelog
+
+### 2026-07-30
+- Aligned this server reference with the repository documentation schema.

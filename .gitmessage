@@ -1,0 +1,21 @@
+# Write a short imperative summary on the first line.
+# Then fill the declaration fields below.
+#
+# Allowed values:
+# - Change-Type: behavior | internal | docs | refactor
+# - Behavior-Doc: docs/product/... | n/a
+# - Tests-Updated: yes | no | n/a
+# - Approval: explicit | n/a
+# - Approval-Source: path-or-note | n/a
+#
+# Notes:
+# - Use Change-Type: behavior only when implementing or changing human-approved behavior.
+# - Behavior commits must reference the canonical behavior doc and update tests in the same change.
+# - Use Approval: explicit only when a human explicitly approved the behavior change.
+# - When Approval is explicit, Approval-Source must point to the approval artifact or note.
+
+Change-Type: <behavior|internal|docs|refactor>
+Behavior-Doc: <docs/product/...|n/a>
+Tests-Updated: <yes|no|n/a>
+Approval: <explicit|n/a>
+Approval-Source: <path-or-note|n/a>

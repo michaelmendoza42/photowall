@@ -1,4 +1,5 @@
 # `fixtures/`
+Last edited: 2026-07-30
 
 Scanner and integration test fixtures.
 
@@ -13,3 +14,8 @@ Scanner and integration test fixtures.
 
 Today both directories are intentionally empty placeholders so the runtime
 boots and the contract is in place; the scanner task fills them in.
+
+## Changelog
+
+### 2026-07-30
+- Aligned this fixture reference with the repository documentation schema.

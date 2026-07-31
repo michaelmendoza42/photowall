@@ -1,7 +1,7 @@
 # Glossary
-Last edited: 2026-07-29
+Last edited: 2026-07-30
 Status: Active
-Scope: Shared behavioral and technical terminology for repositories created from this template
+Scope: Shared behavioral and technical terminology for this repository
 Related files: `README.md`, `product/README.md`, `workshop-ideas/README.md`, `system/README.md`, `standards/documentation-model.md`, `standards/documentation-schema.md`
 
 Use this glossary for terms that should mean the same thing across the repo.
@@ -34,11 +34,8 @@ A draft policy, decision, convention, or durable suggestion written down by an A
 ### AI implicit decision
 A temporary assumption, default, local implementation choice, or inferred convention made by an AI agent without explicit human approval. AI implicit decisions are disposable and may change at any time unless they conflict with human decisions.
 
-### Bootstrap-empty target
-A destination directory that only contains bootstrap-local state such as `.git/`, `.pi/`, or `.DS_Store`, with no real project files yet. Template scaffolding may treat this as a fresh repo target without requiring `--force`.
-
 ### Canonical docs
-Durable source-of-truth documentation that humans and agents can rely on repeatedly. In this template, canonical docs are the home for approved durable policy and, when clearly marked, formal proposals under review.
+Durable source-of-truth documentation that humans and agents can rely on repeatedly. In this repository, canonical docs are the home for approved durable policy and, when clearly marked, formal proposals under review.
 
 ### Product docs
 Documentation in `docs/product/` that records intended product behavior, shared language, rules, and invariants.
@@ -313,7 +310,7 @@ The contextual directional label that appears only on navigational intent in gro
 A durable idea packet stored in `docs/workshop-ideas/` for a concept, problem statement, or discussion outcome that is worth preserving even though it is not approved product behavior or active execution work yet.
 
 ### Ephemeral work artifacts
-Temporary documents that capture active work state, such as plans, task notes, migration slices, and disposable scratch notes. In this template they belong in `work/` and `scratch/`.
+Temporary documents that capture active work state, such as plans, task notes, migration slices, and disposable scratch notes. In this repository they belong in `work/` and `scratch/`.
 
 ### Human explicit decision
 A direction, policy, or decision explicitly approved by a human. These decisions are binding until superseded by a newer human-approved decision.
@@ -331,7 +328,7 @@ The rule that temporary or inferred knowledge must be promoted into a canonical 
 A repeatable operational procedure stored in `docs/runbooks/`. A runbook should be usable by someone who was not part of the original discussion.
 
 ### Scoped operational docs
-Explicit instructions that apply only to a specific subtree or workflow rather than the whole repository. A nested `AGENTS.md` is the main example in this template.
+Explicit instructions that apply only to a specific subtree or workflow rather than the whole repository. A nested `AGENTS.md` is the main example in this repository.
 
 ### Standards docs
 Documentation in `docs/standards/` for repository-wide policy, conventions, testing rules, and structural guidance.
@@ -674,6 +671,9 @@ Short definition.
 
 ## Changelog
 
+### 2026-07-30
+- Localized the glossary scope and governance terminology to this repository and removed the reusable scaffold-target term.
+
 ### 2026-07-29
 - Added `Media diagnostics` as the shared name for the bounded server/browser photo-loading evidence.
 
@@ -738,5 +738,5 @@ Short definition.
 - Added `Warp Pipe` as the canonical term for the repo's AI-assisted asset intake workflow.
 
 ### 2026-05-04
-- Added the initial glossary covering the template repo’s core documentation and workflow terms.
+- Added the initial glossary covering the repository’s core documentation and workflow terms.
 - Added the initial technical glossary for internal implementation terms, AI-built abstractions, and hidden repo mechanics.
