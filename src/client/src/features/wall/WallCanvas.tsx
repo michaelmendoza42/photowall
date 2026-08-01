@@ -28,7 +28,13 @@ import { PixiWallSurface } from './PixiWallSurface.js';
 import { WallZoomControls } from './WallZoomControls.js';
 import { useTouchPinchZoom } from './useTouchPinchZoom.js';
 import { useRafCameraPublisher } from './useRafCameraPublisher.js';
-import { useWheelMomentumPan } from './useWheelMomentumPan.js';
+import { usePanMomentum } from './usePanMomentum.js';
+import {
+  createDragMomentumSample,
+  dragMomentumAtRelease,
+  sampleDragMomentum,
+  type DragMomentumSample,
+} from './dragMomentum.js';
 import { computeWrapAwareCameraTarget, easeOutCubic } from './signpostNavigation.js';
 import {
   detectEdgeIntent,
@@ -120,11 +126,13 @@ export interface WallCanvasProps {
 
 interface ActiveDrag {
   pointerId: number;
+  pointerType: string;
   origin: DragOrigin;
   /** Last pointer coords that have been applied to camera panning. */
   lastX: number;
   lastY: number;
   crossedThreshold: boolean;
+  momentum: DragMomentumSample;
 }
 
 interface RenderedTileInstance {
@@ -193,9 +201,10 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
 
   const { publish: publishCamera, flush: flushCamera } = useRafCameraPublisher(onCameraChange);
   const {
-    start: startWheelMomentum,
-    cancel: cancelWheelMomentum,
-  } = useWheelMomentumPan({ cameraRef, publishCamera, flushCamera });
+    startWheel: startWheelMomentum,
+    startDrag: startDragMomentum,
+    cancel: cancelPanMomentum,
+  } = usePanMomentum({ cameraRef, publishCamera, flushCamera });
 
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
   // Mirror the live drag flag into React state so the `data-dragging`
@@ -211,7 +220,23 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
   useEffect(() => {
     zoomRef.current = zoom;
   }, [zoom]);
-  useTouchPinchZoom(containerRef, zoomRef, setZoom, MIN_WALL_ZOOM, MAX_WALL_ZOOM);
+  const handlePinchStart = useCallback(() => {
+    cancelPanMomentum();
+    const drag = dragRef.current;
+    if (!drag) return;
+    drag.crossedThreshold = true;
+    drag.momentum = createDragMomentumSample(performance.now());
+    pressedPhotoIdRef.current = null;
+    setHoverPreview(null);
+  }, [cancelPanMomentum]);
+  useTouchPinchZoom(
+    containerRef,
+    zoomRef,
+    setZoom,
+    MIN_WALL_ZOOM,
+    MAX_WALL_ZOOM,
+    handlePinchStart,
+  );
 
   const dragStateChangeRef = useRef(onDragStateChange);
   useEffect(() => {
@@ -443,9 +468,9 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
         signpostHideTimeoutRef.current = null;
       }
       cancelActiveGlide();
-      cancelWheelMomentum();
+      cancelPanMomentum();
     }
-  }, [dragActive, isModalOpen, cancelActiveGlide, cancelWheelMomentum]);
+  }, [dragActive, isModalOpen, cancelActiveGlide, cancelPanMomentum]);
 
   // Dynamic loading: fire whenever the absolute travel position says we
   // are within the frontier threshold. Wrapped render position is
@@ -517,7 +542,7 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
       // deltaX and deltaY for 2D gestures.
       event.preventDefault();
       cancelActiveGlide();
-      cancelWheelMomentum();
+      cancelPanMomentum();
       if (signpostsEnabled) {
         revealSignposts();
       }
@@ -552,7 +577,7 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
     };
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
-  }, [cancelActiveGlide, cancelWheelMomentum, revealSignposts, signpostsEnabled, startWheelMomentum]);
+  }, [cancelActiveGlide, cancelPanMomentum, revealSignposts, signpostsEnabled, startWheelMomentum]);
 
   const changeZoom = useCallback((factor: number) => {
     const nextZoom = clamp(zoomRef.current * factor, MIN_WALL_ZOOM, MAX_WALL_ZOOM);
@@ -566,11 +591,12 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
     (event: React.PointerEvent<HTMLDivElement>) => {
       // Only react to the primary pointer (mouse left button / single
       // touch / pen). Right-click and middle-click should not pan.
+      if (!event.isPrimary) return;
       if (event.button !== 0 && event.pointerType === 'mouse') return;
       if (dragRef.current) return;
 
       cancelActiveGlide();
-      cancelWheelMomentum();
+      cancelPanMomentum();
       setHoverPreview(null);
 
       const target = event.target as HTMLElement | null;
@@ -580,10 +606,12 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
 
       dragRef.current = {
         pointerId: event.pointerId,
+        pointerType: event.pointerType,
         origin: { startX: event.clientX, startY: event.clientY },
         lastX: event.clientX,
         lastY: event.clientY,
         crossedThreshold: false,
+        momentum: createDragMomentumSample(event.timeStamp),
       };
       // Pointer capture keeps move/up flowing if the pointer leaves the
       // canvas mid-drag. Guard against environments where the pointer
@@ -600,7 +628,7 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
         crossedThreshold: false,
       });
     },
-    [cancelActiveGlide],
+    [cancelActiveGlide, cancelPanMomentum],
   );
 
   const handlePointerMove = useCallback(
@@ -660,10 +688,12 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
       // crossed, which keeps minor click jitter from shifting the wall
       // out from under the click target. At higher zoom levels, a given
       // screen-space drag should cover less world distance.
-      const next = panBy(cameraRef.current, {
+      const panDelta = {
         dx: -dx / zoomRef.current,
         dy: -dy / zoomRef.current,
-      });
+      };
+      drag.momentum = sampleDragMomentum(drag.momentum, panDelta, event.timeStamp);
+      const next = panBy(cameraRef.current, panDelta);
       if (next !== cameraRef.current) {
         cameraRef.current = next;
         publishCamera(next);
@@ -687,6 +717,12 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
         !drag.crossedThreshold && event.type === 'pointerup'
           ? pressedPhotoIdRef.current
           : null;
+      const releaseMomentum =
+        drag.pointerType === 'touch'
+        && drag.crossedThreshold
+        && event.type === 'pointerup'
+          ? dragMomentumAtRelease(drag.momentum, event.timeStamp)
+          : null;
 
       flushCamera();
       dragRef.current = null;
@@ -696,6 +732,9 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
         active: false,
         crossedThreshold: false,
       });
+      if (releaseMomentum) {
+        startDragMomentum(releaseMomentum);
+      }
 
       if (!shouldOpenPhoto) return;
       const photo = photosById.get(shouldOpenPhoto);
@@ -703,7 +742,7 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
       setHoverPreview(null);
       photoOpenRef.current?.(photo);
     },
-    [flushCamera, photosById],
+    [flushCamera, photosById, startDragMomentum],
   );
 
   const updateHoverPreview = useCallback(
@@ -774,7 +813,7 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
   const handleSignpostActivate = useCallback((targetX: number, targetY: number) => {
     if (isModalOpen) return;
     cancelActiveGlide();
-    cancelWheelMomentum();
+    cancelPanMomentum();
     revealSignposts();
     const startCamera = cameraRef.current;
     const target = computeWrapAwareCameraTarget({
@@ -802,7 +841,7 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
     };
 
     glideFrameRef.current = requestAnimationFrame(tick);
-  }, [cancelActiveGlide, cancelWheelMomentum, flushCamera, isModalOpen, publishCamera, revealSignposts]);
+  }, [cancelActiveGlide, cancelPanMomentum, flushCamera, isModalOpen, publishCamera, revealSignposts]);
 
   const pixiTiles = useMemo(
     () =>

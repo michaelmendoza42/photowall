@@ -6,6 +6,7 @@ export function useTouchPinchZoom(
   setZoom: (zoom: number) => void,
   minZoom: number,
   maxZoom: number,
+  onPinchStart?: () => void,
 ): void {
   useEffect(() => {
     const element = containerRef.current;
@@ -20,6 +21,9 @@ export function useTouchPinchZoom(
       if (event.touches.length !== 2) return;
       event.preventDefault();
       const nextDistance = distance(event.touches);
+      if (previousDistance === null) {
+        onPinchStart?.();
+      }
       if (previousDistance && nextDistance > 0) {
         const nextZoom = Math.min(maxZoom, Math.max(minZoom, zoomRef.current * (nextDistance / previousDistance)));
         if (nextZoom !== zoomRef.current) {
@@ -38,5 +42,5 @@ export function useTouchPinchZoom(
       element.removeEventListener('touchend', reset);
       element.removeEventListener('touchcancel', reset);
     };
-  }, [containerRef, maxZoom, minZoom, setZoom, zoomRef]);
+  }, [containerRef, maxZoom, minZoom, onPinchStart, setZoom, zoomRef]);
 }

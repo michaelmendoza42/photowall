@@ -1,9 +1,10 @@
 # Photo Wall Experience
+
 Last edited: 2026-07-31
 Status: Approved
 Decision owner: Michael
 Drafted by: Pi
-Approved by: Michael via mission /plan handoff on 2026-06-02, follow-up implementation approval for wrap-around navigation on 2026-06-03, anchored hover-preview approval plus midpoint sizing clarification on 2026-06-04, grouped multi-album area/signpost approval during the 2026-06-06 mission kickoff, normal-build Mosaic Lab entry-seam approval during the 2026-06-14 mission kickoff, the 2026-06-26 clarification that Mosaic Lab is a mock photo wall sandbox with sample albums, synthetic photo-like inputs, production-wall reuse, immediate rerender, and deferred saved failure cases, and direct user approval on 2026-07-31 for subtle wheel momentum plus sharper configurable thumbnails
+Approved by: Michael via mission /plan handoff on 2026-06-02, follow-up implementation approval for wrap-around navigation on 2026-06-03, anchored hover-preview approval plus midpoint sizing clarification on 2026-06-04, grouped multi-album area/signpost approval during the 2026-06-06 mission kickoff, normal-build Mosaic Lab entry-seam approval during the 2026-06-14 mission kickoff, the 2026-06-26 clarification that Mosaic Lab is a mock photo wall sandbox with sample albums, synthetic photo-like inputs, production-wall reuse, immediate rerender, and deferred saved failure cases, and direct user approval on 2026-07-31 for subtle wheel momentum, sharper configurable thumbnails, mobile drag-release momentum, and reliable tap-to-focus activation
 Change policy: Do not change without explicit human approval
 Related files: `../../README.md`, `../glossary.md`, `../system/photo-library-source-and-runtime.md`, `README.md`
 
@@ -28,6 +29,7 @@ The MVP is a trusted-LAN, Docker-run app with no auth boundary and no internet-f
 - Initial and overview thumbnails should use a 512px long-edge target so the wall remains sharp enough to enjoy while browsing; that target must live at one shared tuning point so it is easy to adjust later.
 - Large-album interaction must keep cold derivative work, texture loads, texture retention, layout packing, and camera publication bounded; source changes must produce versioned media URLs so immutable browser caches do not serve stale derivatives.
 - On coarse-pointer/mobile devices, two-finger pinch must zoom the wall directly; visible zoom-in and zoom-out controls provide an additional touch fallback while preserving drag panning.
+- Single-finger mobile drag panning should carry a short inertial tail after release when the recent gesture still has velocity; pausing before release, starting new input, or requesting reduced motion must suppress or cancel that tail.
 - The wall should support true two-axis panning driven by trackpad wheel deltas, allowing simultaneous horizontal and vertical camera movement.
 - Ordinary wheel and trackpad panning should carry a short, subtle inertial tail after input ends. New wheel, pointer, modal, or signpost-glide activity must cancel that tail, and reduced-motion preference must suppress it without removing direct two-axis panning.
 - The wall must also support mouse click-drag panning as a fallback for users without a trackpad, with click activation suppressed after the drag threshold is crossed.
@@ -36,7 +38,7 @@ The MVP is a trusted-LAN, Docker-run app with no auth boundary and no internet-f
 - On desktop fine-pointer devices, hovering a photo should open an anchored hover preview for that same photo without destabilizing the surrounding wall layout.
 - The anchored hover preview should render at about the midpoint between that tile’s current rendered size and the eventual focused-photo modal render size for the same photo, stay anchored to the source tile instead of centering in the viewport, and remain preview-only.
 - A photo may softly fade in the first time it becomes visible during the current session to suggest progressive loading, but the same photo should not repeatedly re-fade on every later revisit.
-- Clicking a non-dragged photo must open a simple focused-photo modal sized to the browser viewport, with an explicit visible `X` control to close.
+- Clicking or tapping a non-dragged photo must reliably open a simple focused-photo modal sized to the browser viewport, with an explicit visible `X` control to close; layout-only row wrappers must never create dead tap regions over visible tiles.
 - Closing the focused-photo modal must return the user to the same wall context they came from.
 - The default interface should stay minimal: just the photo wall plus a small circular menu button.
 - The normal build must open on the real photo wall by default rather than in the Mosaic Lab.
@@ -72,7 +74,8 @@ The MVP is a trusted-LAN, Docker-run app with no auth boundary and no internet-f
 
 - With no filter or playlist active, the wall should show the default broad view of the configured photo library in a deterministic order derived from discovered library structure so browsing follows the expected year/event/path flow.
 - A portrait photo should usually still read as portrait-ish in the wall, and a panorama should usually still read as wide-ish, but moderate crop is preferable to exposed voids or pathological strip artifacts.
-- The user should be able to pan in any direction with a trackpad or by click-dragging with a mouse; releasing ordinary wheel/trackpad input should continue briefly with restrained momentum, while reversing direction should cancel that continuation and remain smooth without changing the model from 2D panning to vertical scrolling.
+- The user should be able to pan in any direction with a trackpad, a single-finger touch drag, or click-dragging with a mouse; releasing active wheel/trackpad or touch-drag input should continue briefly with restrained momentum, while reversing direction should cancel that continuation and remain smooth without changing the model from 2D panning to vertical scrolling.
+- Every visibly exposed photo tile should remain tappable even where staggered layout-row bounds overlap; controls layered above the wall remain intentional exceptions.
 - Zooming out should favor a fast readable overview over full-detail loading everywhere at once, and zooming in should refine image detail progressively rather than waiting for the whole wall to repopulate.
 - Minor pointer jitter that stays below the drag threshold should still resolve as a click on the hovered photo rather than shifting the wall first.
 - The anchored hover preview should be suppressed while the user is actively dragging the wall and while the focused-photo modal is open.
@@ -117,58 +120,72 @@ The MVP is a trusted-LAN, Docker-run app with no auth boundary and no internet-f
 ## Changelog
 
 ### 2026-07-31
+
 - Added the approved subtle two-axis wheel-momentum behavior, cancellation rules, and reduced-motion exception.
+- Extended restrained momentum to single-finger mobile drag release and required reliable tap-to-focus behavior across overlapping layout rows.
 - Raised the approved overview-thumbnail target to a centrally configurable 512px long edge.
 
 ### 2026-07-30
+
 - Recorded the verified large-album bounds, versioned media identity, thumbnail-first initial frame, and coarse-pointer pinch/zoom-control contract.
 
 ### 2026-06-26
+
 - Reframed Mosaic Lab as a wall-first mock photo wall sandbox with synthetic sample albums, generated photo-like inputs, immediate production-wall rerenders, honest diagnostics, and deferred saved failure cases.
 - Added the approved single-versus-grouped sample-album flow, camera reset/recenter expectation, and uniform-input structure examples.
 
 ### 2026-06-20
+
 - Recorded the approved Mosaic Lab behavior as a synthetic Pixi/camera-based experiment bench with starter recipes, editable recipe comparisons, and explicit anti-grid expectations for uniform-input studies.
 
 ### 2026-06-14
+
 - Documented the normal-build Mosaic Lab entry seam while keeping the real photo wall as the default first surface.
 - Clarified that Mosaic Lab is synthetic/mockup-only content with an explicit return path and no implied promise of unfinished lab capabilities.
 
 ### 2026-06-09
+
 - Added the grouped-view persistence and completeness rules: active year/folder selection should survive reload, grouped multi-album views should keep fetching until each selected album area has photos, and the initial grouped overview should stay near the selected album cluster instead of large empty stretches.
 
 ### 2026-06-07
+
 - Added the dominant-album suppression rule for grouped signposts: when one album already occupies most of the current view, its signpost stays hidden and only other destinations are suggested.
 - Added the dynamic zoom rule: the wall should zoom in and out while keeping a fast broad overview and progressively refining image detail as the user moves closer.
 - Clarified that overview zoom should prefer quick readability over loading full detail everywhere at once.
 
 ### 2026-06-06
+
 - Added the approved grouped multi-album browsing behavior: one loose area per album in grouped views, including year-wide views that expand into multiple albums.
 - Added the stable in-area shuffle rule and the intent-revealed signpost-label behavior, including edge-trigger reveal, modal suppression, and snap-fast glide navigation.
 - Recorded that the grouped signpost set must stay bounded so the default wall remains visually minimal.
 
 ### 2026-06-05
+
 - Replaced the temporary zero-crop wall rule with the approved priority order: flawless mosaic first, then modest crop, then tile-size preference, with gaps treated as the worst outcome.
 - Clarified that wall tiles may crop when needed to avoid dark cavities or pathological strip artifacts, while hover preview and the focused modal remain the fuller-image path.
 
 ### 2026-06-04
+
 - Replaced the old slight-hover-enlarge rule with an anchored hover preview on desktop fine pointers.
 - Defined the hover preview size target as about the midpoint between the current tile size and the eventual focused-photo modal render size for the same photo.
 - Clarified that sub-threshold pointer jitter must still click-open the photo, while true drag-threshold crossings suppress click activation.
 
 ### 2026-06-03
+
 - Updated the approved wall behavior to use seamless wrap-around navigation at all four edges within the finite loaded wall instead of hard camera clamping.
 - Added the first-appearance-only tile fade rule so newly seen photos can softly enter without repeatedly reanimating on later revisits.
 - Refined the wall composition to read as a vertical, column-first mosaic instead of a horizontal brick field.
 - Made the bounded world deliberately wider than the viewport on normal screens so 2D panning has real horizontal travel as well as vertical travel.
 
 ### 2026-06-02
+
 - Replaced the diagonal-scroll motion model with true two-axis trackpad panning and mouse click-drag panning per the approved MVP contract.
 - Reduced MVP filtering to **year** and **folder** only; explicitly listed month filtering as a non-goal.
 - Added the trusted-LAN-only assumption, the slight hover enlarge behavior, the focused-photo modal with `X` close control, and server-side saved-filter playlist persistence.
 - Refreshed approval line to record the 2026-06-02 mission /plan handoff approval continuing the 2026-06-01 baseline.
 
 ### 2026-06-01
+
 - Clarified that the photo source is a configurable root directory whose subfolders are discovered for browsing and filtering.
 - Recorded the likely year → event → photo library shape without turning it into a hardcoded product requirement.
 - Added the approved baseline behavior for the photo-wall browsing experience.

@@ -53,6 +53,7 @@ export default defineConfig({
       testMatch: [
         '**/media-diagnostics.spec.ts',
         '**/mobile-pinch-zoom.spec.ts',
+        '**/mobile-wall-gestures.spec.ts',
         '**/single-stream-wrap-continuity.spec.ts',
         '**/zoom-detail-tiers.spec.ts',
       ],

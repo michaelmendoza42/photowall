@@ -1,4 +1,5 @@
 # photo-wall
+
 Last edited: 2026-07-31
 
 Minimal Docker-run web app for browsing a configured photo library on the home LAN as a large, gapless photo wall.
@@ -49,9 +50,10 @@ playwright/   browser-driven acceptance tests (later phases)
 - keep the initial wall crisp with centrally configurable 512px long-edge thumbnails
 - support dynamic zoom in/out with a near-instant broad overview and progressively better image detail as the user moves closer
 - support true two-axis trackpad panning using browser wheel deltas with a subtle inertial tail
+- support single-finger mobile drag panning with restrained release momentum
 - support mouse click-drag panning with click suppression after the drag threshold
 - show an anchored hover preview on desktop fine pointers at about the midpoint between the current tile size and the eventual full-photo modal size without destabilizing layout
-- open a clicked photo in a simple viewport-sized modal with an explicit `X` close control
+- reliably open a tapped or clicked photo in a simple viewport-sized modal with an explicit `X` close control
 - keep the default UI minimal: photos first, with a small circular menu button for filters and playlists
 - support **year** and **folder** filters only for the MVP
 - persist server-side saved-filter playlists under the writable app-data mount
@@ -94,23 +96,29 @@ Month filtering is out of MVP scope.
 ## Changelog
 
 ### 2026-07-31
-- Documented subtle two-axis wheel momentum and the centrally configurable 512px overview-thumbnail target.
+
+- Documented subtle two-axis wheel/mobile-drag momentum, reliable tap-to-focus behavior, and the centrally configurable 512px overview-thumbnail target.
 
 ### 2026-07-30
+
 - Aligned local Vite onboarding with the repository's stable port `5176` and LAN binding contract.
 
 ### 2026-06-10
+
 - Added a discoverability link for the canonical user-intent maintenance rule from the root README.
 
 ### 2026-06-03
+
 - Added the optional dev-only `PHOTO_WALL_SCAN_TOP_LEVEL_YEARS_ONLY` escape hatch for noisy local libraries.
 - Added operator-facing troubleshooting shortcuts for startup diagnostics, LAN access, and restart-driven rescans.
 - Linked the Docker/LAN operator runbook from the canonical docs list.
 
 ### 2026-06-02
+
 - Aligned the repo overview with the approved MVP contract: trusted-LAN-only runtime, year and folder filters only, server-side saved-filter playlists, two-axis trackpad and click-drag panning, slight hover enlarge, and a focused-photo modal with `X` close.
 - Removed the diagonal-scroll motion model and month filtering from the repo overview.
 
 ### 2026-06-01
+
 - Updated the repo overview with the Docker runtime assumption, configurable library-root scanning, and the linked system note.
 - Replaced the starter scaffold README with the repo-specific photo-wall product overview and canonical doc links.

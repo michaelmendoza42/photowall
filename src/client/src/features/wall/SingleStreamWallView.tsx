@@ -13,7 +13,13 @@ import { PixiWallSurface } from './PixiWallSurface.js';
 import { WallZoomControls } from './WallZoomControls.js';
 import { useTouchPinchZoom } from './useTouchPinchZoom.js';
 import { useRafCameraPublisher } from './useRafCameraPublisher.js';
-import { useWheelMomentumPan } from './useWheelMomentumPan.js';
+import { usePanMomentum } from './usePanMomentum.js';
+import {
+  createDragMomentumSample,
+  dragMomentumAtRelease,
+  sampleDragMomentum,
+  type DragMomentumSample,
+} from './dragMomentum.js';
 import {
   DRAG_THRESHOLD_PX,
   hasCrossedThreshold,
@@ -60,10 +66,12 @@ export interface SingleStreamWallViewProps {
 
 interface ActiveDrag {
   pointerId: number;
+  pointerType: string;
   origin: DragOrigin;
   lastX: number;
   lastY: number;
   crossedThreshold: boolean;
+  momentum: DragMomentumSample;
 }
 
 interface HoverPreviewState {
@@ -113,9 +121,10 @@ export function SingleStreamWallView(props: SingleStreamWallViewProps): JSX.Elem
 
   const { publish: publishCamera, flush: flushCamera } = useRafCameraPublisher(onCameraChange);
   const {
-    start: startWheelMomentum,
-    cancel: cancelWheelMomentum,
-  } = useWheelMomentumPan({ cameraRef, publishCamera, flushCamera });
+    startWheel: startWheelMomentum,
+    startDrag: startDragMomentum,
+    cancel: cancelPanMomentum,
+  } = usePanMomentum({ cameraRef, publishCamera, flushCamera });
 
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
   const [dragActive, setDragActive] = useState(false);
@@ -126,7 +135,23 @@ export function SingleStreamWallView(props: SingleStreamWallViewProps): JSX.Elem
   useEffect(() => {
     zoomRef.current = zoom;
   }, [zoom]);
-  useTouchPinchZoom(containerRef, zoomRef, setZoom, MIN_WALL_ZOOM, MAX_WALL_ZOOM);
+  const handlePinchStart = useCallback(() => {
+    cancelPanMomentum();
+    const drag = dragRef.current;
+    if (!drag) return;
+    drag.crossedThreshold = true;
+    drag.momentum = createDragMomentumSample(performance.now());
+    pressedPhotoIdRef.current = null;
+    setHoverPreview(null);
+  }, [cancelPanMomentum]);
+  useTouchPinchZoom(
+    containerRef,
+    zoomRef,
+    setZoom,
+    MIN_WALL_ZOOM,
+    MAX_WALL_ZOOM,
+    handlePinchStart,
+  );
 
   const dragStateChangeRef = useRef(onDragStateChange);
   useEffect(() => {
@@ -228,9 +253,9 @@ export function SingleStreamWallView(props: SingleStreamWallViewProps): JSX.Elem
       setHoverPreview(null);
     }
     if (isModalOpen) {
-      cancelWheelMomentum();
+      cancelPanMomentum();
     }
-  }, [dragActive, isModalOpen, cancelWheelMomentum]);
+  }, [dragActive, isModalOpen, cancelPanMomentum]);
 
   useEffect(() => {
     if (
@@ -283,7 +308,7 @@ export function SingleStreamWallView(props: SingleStreamWallViewProps): JSX.Elem
     if (!el) return undefined;
     const onWheel = (event: WheelEvent): void => {
       event.preventDefault();
-      cancelWheelMomentum();
+      cancelPanMomentum();
       setHoverPreview(null);
 
       if (event.ctrlKey || event.metaKey) {
@@ -312,7 +337,7 @@ export function SingleStreamWallView(props: SingleStreamWallViewProps): JSX.Elem
     };
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
-  }, [cancelWheelMomentum, publishCamera, startWheelMomentum]);
+  }, [cancelPanMomentum, publishCamera, startWheelMomentum]);
 
   const changeZoom = useCallback((factor: number) => {
     const nextZoom = clamp(zoomRef.current * factor, MIN_WALL_ZOOM, MAX_WALL_ZOOM);
@@ -323,10 +348,11 @@ export function SingleStreamWallView(props: SingleStreamWallViewProps): JSX.Elem
   }, []);
 
   const handlePointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (!event.isPrimary) return;
     if (event.button !== 0 && event.pointerType === 'mouse') return;
     if (dragRef.current) return;
 
-    cancelWheelMomentum();
+    cancelPanMomentum();
     setHoverPreview(null);
 
     const target = event.target as HTMLElement | null;
@@ -335,10 +361,12 @@ export function SingleStreamWallView(props: SingleStreamWallViewProps): JSX.Elem
 
     dragRef.current = {
       pointerId: event.pointerId,
+      pointerType: event.pointerType,
       origin: { startX: event.clientX, startY: event.clientY },
       lastX: event.clientX,
       lastY: event.clientY,
       crossedThreshold: false,
+      momentum: createDragMomentumSample(event.timeStamp),
     };
 
     try {
@@ -352,7 +380,7 @@ export function SingleStreamWallView(props: SingleStreamWallViewProps): JSX.Elem
       active: true,
       crossedThreshold: false,
     });
-  }, [cancelWheelMomentum]);
+  }, [cancelPanMomentum]);
 
   const handlePointerMove = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
@@ -384,10 +412,12 @@ export function SingleStreamWallView(props: SingleStreamWallViewProps): JSX.Elem
       drag.lastX = event.clientX;
       drag.lastY = event.clientY;
 
-      const next = panBy(cameraRef.current, {
+      const panDelta = {
         dx: -dx / zoomRef.current,
         dy: -dy / zoomRef.current,
-      });
+      };
+      drag.momentum = sampleDragMomentum(drag.momentum, panDelta, event.timeStamp);
+      const next = panBy(cameraRef.current, panDelta);
       if (next !== cameraRef.current) {
         cameraRef.current = next;
         publishCamera(next);
@@ -411,6 +441,12 @@ export function SingleStreamWallView(props: SingleStreamWallViewProps): JSX.Elem
         !drag.crossedThreshold && event.type === 'pointerup'
           ? pressedPhotoIdRef.current
           : null;
+      const releaseMomentum =
+        drag.pointerType === 'touch'
+        && drag.crossedThreshold
+        && event.type === 'pointerup'
+          ? dragMomentumAtRelease(drag.momentum, event.timeStamp)
+          : null;
 
       flushCamera();
       dragRef.current = null;
@@ -420,6 +456,9 @@ export function SingleStreamWallView(props: SingleStreamWallViewProps): JSX.Elem
         active: false,
         crossedThreshold: false,
       });
+      if (releaseMomentum) {
+        startDragMomentum(releaseMomentum);
+      }
 
       if (!shouldOpenPhoto) return;
       const photo = photosById.get(shouldOpenPhoto);
@@ -427,7 +466,7 @@ export function SingleStreamWallView(props: SingleStreamWallViewProps): JSX.Elem
       setHoverPreview(null);
       photoOpenRef.current?.(photo);
     },
-    [flushCamera, photosById],
+    [flushCamera, photosById, startDragMomentum],
   );
 
   const updateHoverPreview = useCallback(

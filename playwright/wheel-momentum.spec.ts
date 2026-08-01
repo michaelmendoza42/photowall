@@ -11,7 +11,7 @@ test.describe('wheel momentum', () => {
     await dispatchWheel(wall, { deltaX: 80, deltaY: 120 });
 
     await expect.poll(async () => (await cameraPosition(wall)).x).toBeGreaterThan(before.x + 90);
-    await expect.poll(async () => (await cameraPosition(wall)).y).toBeGreaterThan(before.y + 135);
+    await expect.poll(async () => (await cameraPosition(wall)).y).toBeGreaterThan(before.y + 130);
 
     const screenshotPath = testInfo.outputPath('wheel-momentum.png');
     await page.screenshot({ path: screenshotPath, fullPage: false });

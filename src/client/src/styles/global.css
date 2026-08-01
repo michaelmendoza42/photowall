@@ -265,11 +265,14 @@ body {
   position: absolute;
   top: 0;
   left: 0;
+  /* Overlapping row bounds are layout-only; only actual tiles receive taps. */
+  pointer-events: none;
   will-change: transform;
 }
 
 .wall-canvas__tile {
   position: absolute;
+  pointer-events: auto;
   top: 0;
   left: 0;
   overflow: hidden;
