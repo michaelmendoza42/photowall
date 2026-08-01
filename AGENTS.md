@@ -88,6 +88,9 @@ This repo uses four tiers:
 
 - Keep the browser development server on this repository's stable port from `/home/michael/Projects/Code/pi-mods/bin/dev-ports ensure .`; do not replace it with a framework default or hard-coded shared port.
 - Bind browser development servers to `0.0.0.0`. Use `http://127.0.0.1:<port>` locally, `http://mmdebian.local:<port>` from the LAN, and `http://mmdebian.mendoza.home:<port>` from authorized Tailscale devices.
+- After completed implementation work, rebuild the local app with `npm run build`, then restart its local production server with `npm start`.
+- Do not build, start, or redeploy photo-wall through Docker, Docker Compose, or Portainer unless the user explicitly requests a Docker deployment.
+- Resolve the stable port first, run the server with `PHOTO_WALL_BIND_HOST=0.0.0.0` and that port as `PHOTO_WALL_PORT`, then verify `/healthz`. Documentation-only work does not require an app rebuild or restart.
 - Preserve this contract when changing package scripts, Vite/Next/Flask configuration, Docker development settings, or onboarding docs.
 
 ## Convergence maintenance
