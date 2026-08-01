@@ -28,6 +28,7 @@ import { PixiWallSurface } from './PixiWallSurface.js';
 import { WallZoomControls } from './WallZoomControls.js';
 import { useTouchPinchZoom } from './useTouchPinchZoom.js';
 import { useRafCameraPublisher } from './useRafCameraPublisher.js';
+import { useWheelMomentumPan } from './useWheelMomentumPan.js';
 import { computeWrapAwareCameraTarget, easeOutCubic } from './signpostNavigation.js';
 import {
   detectEdgeIntent,
@@ -191,6 +192,10 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
   }, [camera]);
 
   const { publish: publishCamera, flush: flushCamera } = useRafCameraPublisher(onCameraChange);
+  const {
+    start: startWheelMomentum,
+    cancel: cancelWheelMomentum,
+  } = useWheelMomentumPan({ cameraRef, publishCamera, flushCamera });
 
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
   // Mirror the live drag flag into React state so the `data-dragging`
@@ -438,8 +443,9 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
         signpostHideTimeoutRef.current = null;
       }
       cancelActiveGlide();
+      cancelWheelMomentum();
     }
-  }, [dragActive, isModalOpen, cancelActiveGlide]);
+  }, [dragActive, isModalOpen, cancelActiveGlide, cancelWheelMomentum]);
 
   // Dynamic loading: fire whenever the absolute travel position says we
   // are within the frontier threshold. Wrapped render position is
@@ -511,6 +517,7 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
       // deltaX and deltaY for 2D gestures.
       event.preventDefault();
       cancelActiveGlide();
+      cancelWheelMomentum();
       if (signpostsEnabled) {
         revealSignposts();
       }
@@ -529,21 +536,23 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
         return;
       }
 
-      const next = panBy(cameraRef.current, {
+      const panDelta = {
         dx: event.deltaX / zoomRef.current,
         dy: event.deltaY / zoomRef.current,
-      });
+      };
+      const next = panBy(cameraRef.current, panDelta);
       if (next !== cameraRef.current) {
         // Update the ref optimistically so a burst of wheel events
         // between React renders compounds off the latest value rather
         // than a stale snapshot.
         cameraRef.current = next;
         publishCamera(next);
+        startWheelMomentum(panDelta);
       }
     };
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
-  }, [cancelActiveGlide, revealSignposts, signpostsEnabled]);
+  }, [cancelActiveGlide, cancelWheelMomentum, revealSignposts, signpostsEnabled, startWheelMomentum]);
 
   const changeZoom = useCallback((factor: number) => {
     const nextZoom = clamp(zoomRef.current * factor, MIN_WALL_ZOOM, MAX_WALL_ZOOM);
@@ -561,6 +570,7 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
       if (dragRef.current) return;
 
       cancelActiveGlide();
+      cancelWheelMomentum();
       setHoverPreview(null);
 
       const target = event.target as HTMLElement | null;
@@ -764,6 +774,7 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
   const handleSignpostActivate = useCallback((targetX: number, targetY: number) => {
     if (isModalOpen) return;
     cancelActiveGlide();
+    cancelWheelMomentum();
     revealSignposts();
     const startCamera = cameraRef.current;
     const target = computeWrapAwareCameraTarget({
@@ -791,7 +802,7 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
     };
 
     glideFrameRef.current = requestAnimationFrame(tick);
-  }, [cancelActiveGlide, flushCamera, isModalOpen, publishCamera, revealSignposts]);
+  }, [cancelActiveGlide, cancelWheelMomentum, flushCamera, isModalOpen, publishCamera, revealSignposts]);
 
   const pixiTiles = useMemo(
     () =>

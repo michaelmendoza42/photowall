@@ -15,6 +15,9 @@ test.describe('single-stream wrap continuity', () => {
       consoleErrors.push(error.message);
     });
 
+    // Isolate exact full-period wrap projection from the separately tested
+    // wheel-momentum tail.
+    await page.emulateMedia({ reducedMotion: 'reduce' });
     await openReadyWall(page);
   });
 
@@ -25,7 +28,6 @@ test.describe('single-stream wrap continuity', () => {
   test('keeps the same render window after full-period wrap travel without reinitializing Pixi', async ({
     page,
   }, testInfo: TestInfo) => {
-    const shell = page.getByTestId('wall-shell');
     const wall = page.getByTestId('wall-canvas');
     const pixi = page.getByTestId('wall-pixi-surface');
 

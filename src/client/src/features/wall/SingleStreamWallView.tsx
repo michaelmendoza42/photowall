@@ -13,6 +13,7 @@ import { PixiWallSurface } from './PixiWallSurface.js';
 import { WallZoomControls } from './WallZoomControls.js';
 import { useTouchPinchZoom } from './useTouchPinchZoom.js';
 import { useRafCameraPublisher } from './useRafCameraPublisher.js';
+import { useWheelMomentumPan } from './useWheelMomentumPan.js';
 import {
   DRAG_THRESHOLD_PX,
   hasCrossedThreshold,
@@ -111,6 +112,10 @@ export function SingleStreamWallView(props: SingleStreamWallViewProps): JSX.Elem
   }, [camera]);
 
   const { publish: publishCamera, flush: flushCamera } = useRafCameraPublisher(onCameraChange);
+  const {
+    start: startWheelMomentum,
+    cancel: cancelWheelMomentum,
+  } = useWheelMomentumPan({ cameraRef, publishCamera, flushCamera });
 
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
   const [dragActive, setDragActive] = useState(false);
@@ -222,7 +227,10 @@ export function SingleStreamWallView(props: SingleStreamWallViewProps): JSX.Elem
     if (dragActive || isModalOpen) {
       setHoverPreview(null);
     }
-  }, [dragActive, isModalOpen]);
+    if (isModalOpen) {
+      cancelWheelMomentum();
+    }
+  }, [dragActive, isModalOpen, cancelWheelMomentum]);
 
   useEffect(() => {
     if (
@@ -275,6 +283,7 @@ export function SingleStreamWallView(props: SingleStreamWallViewProps): JSX.Elem
     if (!el) return undefined;
     const onWheel = (event: WheelEvent): void => {
       event.preventDefault();
+      cancelWheelMomentum();
       setHoverPreview(null);
 
       if (event.ctrlKey || event.metaKey) {
@@ -290,18 +299,20 @@ export function SingleStreamWallView(props: SingleStreamWallViewProps): JSX.Elem
         return;
       }
 
-      const next = panBy(cameraRef.current, {
+      const panDelta = {
         dx: event.deltaX / zoomRef.current,
         dy: event.deltaY / zoomRef.current,
-      });
+      };
+      const next = panBy(cameraRef.current, panDelta);
       if (next !== cameraRef.current) {
         cameraRef.current = next;
         publishCamera(next);
+        startWheelMomentum(panDelta);
       }
     };
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
-  }, []);
+  }, [cancelWheelMomentum, publishCamera, startWheelMomentum]);
 
   const changeZoom = useCallback((factor: number) => {
     const nextZoom = clamp(zoomRef.current * factor, MIN_WALL_ZOOM, MAX_WALL_ZOOM);
@@ -315,6 +326,7 @@ export function SingleStreamWallView(props: SingleStreamWallViewProps): JSX.Elem
     if (event.button !== 0 && event.pointerType === 'mouse') return;
     if (dragRef.current) return;
 
+    cancelWheelMomentum();
     setHoverPreview(null);
 
     const target = event.target as HTMLElement | null;
@@ -340,7 +352,7 @@ export function SingleStreamWallView(props: SingleStreamWallViewProps): JSX.Elem
       active: true,
       crossedThreshold: false,
     });
-  }, []);
+  }, [cancelWheelMomentum]);
 
   const handlePointerMove = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {

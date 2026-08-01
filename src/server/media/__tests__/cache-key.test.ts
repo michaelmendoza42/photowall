@@ -56,6 +56,10 @@ describe('cache-key', () => {
     expect(a).not.toBe(b);
   });
 
+  it('uses the cache generation that invalidates legacy low-resolution thumbnails', () => {
+    expect(CACHE_LAYOUT_VERSION).toBe('v2');
+  });
+
   it('shards files under cacheRoot/<layout-version>/<2-char-prefix>/', () => {
     const file = cacheFilePath('/tmp/photo-wall-cache', baseInput);
     const parts = file.split(path.sep);

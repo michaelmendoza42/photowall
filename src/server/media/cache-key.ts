@@ -12,7 +12,8 @@ import {
  * wrong. Existing files under earlier prefixes are harmless on disk and
  * simply become unreachable.
  */
-export const CACHE_LAYOUT_VERSION = 'v1';
+// v2 invalidates pre-512px thumbnail derivatives created under v1.
+export const CACHE_LAYOUT_VERSION = 'v2';
 
 export interface CacheKeyInput {
   photoId: string;

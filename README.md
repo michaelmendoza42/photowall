@@ -1,5 +1,5 @@
 # photo-wall
-Last edited: 2026-07-30
+Last edited: 2026-07-31
 
 Minimal Docker-run web app for browsing a configured photo library on the home LAN as a large, gapless photo wall.
 
@@ -46,8 +46,9 @@ playwright/   browser-driven acceptance tests (later phases)
 - recursively discover photos under that root, including likely `year/event/photo` shapes
 - render photos large in a tightly packed, gapless wall
 - dynamically load more photos as the user keeps browsing the wall
+- keep the initial wall crisp with centrally configurable 512px long-edge thumbnails
 - support dynamic zoom in/out with a near-instant broad overview and progressively better image detail as the user moves closer
-- support true two-axis trackpad panning using browser wheel deltas
+- support true two-axis trackpad panning using browser wheel deltas with a subtle inertial tail
 - support mouse click-drag panning with click suppression after the drag threshold
 - show an anchored hover preview on desktop fine pointers at about the midpoint between the current tile size and the eventual full-photo modal size without destabilizing layout
 - open a clicked photo in a simple viewport-sized modal with an explicit `X` close control
@@ -91,6 +92,9 @@ Month filtering is out of MVP scope.
 - refine saved-filter playlist authoring once the minimal menu UI is in place
 
 ## Changelog
+
+### 2026-07-31
+- Documented subtle two-axis wheel momentum and the centrally configurable 512px overview-thumbnail target.
 
 ### 2026-07-30
 - Aligned local Vite onboarding with the repository's stable port `5176` and LAN binding contract.

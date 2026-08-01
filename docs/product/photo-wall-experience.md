@@ -1,9 +1,9 @@
 # Photo Wall Experience
-Last edited: 2026-07-30
+Last edited: 2026-07-31
 Status: Approved
 Decision owner: Michael
 Drafted by: Pi
-Approved by: Michael via mission /plan handoff on 2026-06-02, follow-up implementation approval for wrap-around navigation on 2026-06-03, anchored hover-preview approval plus midpoint sizing clarification on 2026-06-04, grouped multi-album area/signpost approval during the 2026-06-06 mission kickoff, normal-build Mosaic Lab entry-seam approval during the 2026-06-14 mission kickoff, and the 2026-06-26 clarification that Mosaic Lab is a mock photo wall sandbox with sample albums, synthetic photo-like inputs, production-wall reuse, immediate rerender, and deferred saved failure cases
+Approved by: Michael via mission /plan handoff on 2026-06-02, follow-up implementation approval for wrap-around navigation on 2026-06-03, anchored hover-preview approval plus midpoint sizing clarification on 2026-06-04, grouped multi-album area/signpost approval during the 2026-06-06 mission kickoff, normal-build Mosaic Lab entry-seam approval during the 2026-06-14 mission kickoff, the 2026-06-26 clarification that Mosaic Lab is a mock photo wall sandbox with sample albums, synthetic photo-like inputs, production-wall reuse, immediate rerender, and deferred saved failure cases, and direct user approval on 2026-07-31 for subtle wheel momentum plus sharper configurable thumbnails
 Change policy: Do not change without explicit human approval
 Related files: `../../README.md`, `../glossary.md`, `../system/photo-library-source-and-runtime.md`, `README.md`
 
@@ -25,9 +25,11 @@ The MVP is a trusted-LAN, Docker-run app with no auth boundary and no internet-f
 - The wall should fit photos together tightly with no intentional gaps between tiles.
 - The wall should read as a column-first mosaic with vertical seams and staggered horizontal breaks rather than as obvious full-width horizontal striping.
 - The wall should support dynamic zoom in and out with a fast broad overview and progressively better image detail as the user moves closer. The initial frame should favor lightweight thumbnail derivatives rather than wait on wall-detail images.
+- Initial and overview thumbnails should use a 512px long-edge target so the wall remains sharp enough to enjoy while browsing; that target must live at one shared tuning point so it is easy to adjust later.
 - Large-album interaction must keep cold derivative work, texture loads, texture retention, layout packing, and camera publication bounded; source changes must produce versioned media URLs so immutable browser caches do not serve stale derivatives.
 - On coarse-pointer/mobile devices, two-finger pinch must zoom the wall directly; visible zoom-in and zoom-out controls provide an additional touch fallback while preserving drag panning.
 - The wall should support true two-axis panning driven by trackpad wheel deltas, allowing simultaneous horizontal and vertical camera movement.
+- Ordinary wheel and trackpad panning should carry a short, subtle inertial tail after input ends. New wheel, pointer, modal, or signpost-glide activity must cancel that tail, and reduced-motion preference must suppress it without removing direct two-axis panning.
 - The wall must also support mouse click-drag panning as a fallback for users without a trackpad, with click activation suppressed after the drag threshold is crossed.
 - Additional photos should load dynamically as the user keeps panning the wall, so the experience does not require the entire library to load up front.
 - The wall should wrap seamlessly at its left/right and top/bottom edges within the currently loaded finite world instead of stopping at hard camera clamps.
@@ -70,7 +72,7 @@ The MVP is a trusted-LAN, Docker-run app with no auth boundary and no internet-f
 
 - With no filter or playlist active, the wall should show the default broad view of the configured photo library in a deterministic order derived from discovered library structure so browsing follows the expected year/event/path flow.
 - A portrait photo should usually still read as portrait-ish in the wall, and a panorama should usually still read as wide-ish, but moderate crop is preferable to exposed voids or pathological strip artifacts.
-- The user should be able to pan in any direction with a trackpad or by click-dragging with a mouse; reversing direction should remain smooth without changing the model from 2D panning to vertical scrolling.
+- The user should be able to pan in any direction with a trackpad or by click-dragging with a mouse; releasing ordinary wheel/trackpad input should continue briefly with restrained momentum, while reversing direction should cancel that continuation and remain smooth without changing the model from 2D panning to vertical scrolling.
 - Zooming out should favor a fast readable overview over full-detail loading everywhere at once, and zooming in should refine image detail progressively rather than waiting for the whole wall to repopulate.
 - Minor pointer jitter that stays below the drag threshold should still resolve as a click on the hovered photo rather than shifting the wall first.
 - The anchored hover preview should be suppressed while the user is actively dragging the wall and while the focused-photo modal is open.
@@ -113,6 +115,10 @@ The MVP is a trusted-LAN, Docker-run app with no auth boundary and no internet-f
 - `../standards/testing.md`
 
 ## Changelog
+
+### 2026-07-31
+- Added the approved subtle two-axis wheel-momentum behavior, cancellation rules, and reduced-motion exception.
+- Raised the approved overview-thumbnail target to a centrally configurable 512px long edge.
 
 ### 2026-07-30
 - Recorded the verified large-album bounds, versioned media identity, thumbnail-first initial frame, and coarse-pointer pinch/zoom-control contract.

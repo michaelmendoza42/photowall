@@ -33,6 +33,9 @@ export const MEDIA_FORMAT_VALUES: readonly MediaFormat[] = ['webp', 'jpeg'];
 
 export const DEFAULT_MEDIA_FORMAT: MediaFormat = 'webp';
 
+/** Single tuning point for initial/overview thumbnail sharpness. */
+export const THUMBNAIL_LONG_EDGE_PX = 512;
+
 /**
  * Variant specification used by the server pipeline.
  *
@@ -47,14 +50,14 @@ export interface MediaVariantSpec {
 }
 
 /**
- * Wall tiles render dense in the justified-row layout, so the long-edge
- * target is sized for typical row heights on a 1× to 2× display without
- * paying the bandwidth cost of a near-original asset. The modal variant
- * targets the larger lightbox view; it stays under 2k on the long edge
- * because the modal frame itself caps usable area on common displays.
+ * Thumbnail and wall variants render dense in the justified-row layout, so
+ * their long-edge targets balance typical 1× to 2× display sizes against
+ * initial bandwidth. Keep thumbnail resolution changes centralized through
+ * `THUMBNAIL_LONG_EDGE_PX`. The modal variant stays under 2k because its frame
+ * caps usable area on common displays.
  */
 export const MEDIA_VARIANT_SPECS: Record<MediaVariant, MediaVariantSpec> = {
-  thumb: { variant: 'thumb', longEdge: 256, quality: 72 },
+  thumb: { variant: 'thumb', longEdge: THUMBNAIL_LONG_EDGE_PX, quality: 72 },
   wall: { variant: 'wall', longEdge: 640, quality: 80 },
   modal: { variant: 'modal', longEdge: 1800, quality: 85 },
 };
