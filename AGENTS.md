@@ -91,6 +91,7 @@ This repo uses four tiers:
 - After completed implementation work, rebuild the local app with `npm run build`, then restart its local production server with `npm start`.
 - Do not build, start, or redeploy photo-wall through Docker, Docker Compose, or Portainer unless the user explicitly requests a Docker deployment.
 - Resolve the stable port first, run the server with `PHOTO_WALL_BIND_HOST=0.0.0.0` and that port as `PHOTO_WALL_PORT`, then verify `/healthz`. Documentation-only work does not require an app rebuild or restart.
+- This repository opts into the project-admin LAN catalog through `config/lan-services.json`. Keep its `id` stable; set `enabled`, `priority`, and `manageable` deliberately. The manifest never stores a port or executable command.
 - Preserve this contract when changing package scripts, Vite/Next/Flask configuration, Docker development settings, or onboarding docs.
 
 ## Convergence maintenance

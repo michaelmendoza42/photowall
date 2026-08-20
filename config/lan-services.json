@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "id": "photo-wall",
+  "name": "photo-wall",
+  "enabled": true,
+  "priority": true,
+  "manageable": true,
+  "healthPath": "/"
+}
