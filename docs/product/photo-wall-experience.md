@@ -6,7 +6,7 @@ Decision owner: Michael
 Drafted by: Pi
 Approved by: Michael via mission /plan handoff on 2026-06-02, follow-up implementation approval for wrap-around navigation on 2026-06-03, anchored hover-preview approval plus midpoint sizing clarification on 2026-06-04, grouped multi-album area/signpost approval during the 2026-06-06 mission kickoff, normal-build Mosaic Lab entry-seam approval during the 2026-06-14 mission kickoff, the 2026-06-26 clarification that Mosaic Lab is a mock photo wall sandbox with sample albums, synthetic photo-like inputs, production-wall reuse, immediate rerender, and deferred saved failure cases, and direct user approval on 2026-07-31 for subtle wheel momentum, sharper configurable thumbnails, mobile drag-release momentum, and reliable tap-to-focus activation; native-style mobile fling approved on 2026-08-01 and further mobile drag/fling improvements explicitly authorized in the 2026-09-15 survey-context follow-up; full-coverage stable looping mosaic, adjoining irregular album regions, center-anchored navigation, and bounded overview approved in the 2026-09-19 elaborate-spec dialogue ("yep sounds good"); removal of Mosaic Lab approved on 2026-10-02 ("i never wanted mosaic lab")
 Change policy: Do not change without explicit human approval
-Related files: `../../README.md`, `../glossary.md`, `../system/photo-library-source-and-runtime.md`, `README.md`
+Related files: `../../README.md`, `../glossary.md`, `../system/photo-library-source-and-runtime.md`
 
 ## Behavior summary
 
@@ -101,8 +101,6 @@ The MVP is a trusted-LAN, Docker-run app with no auth boundary and no internet-f
 - `../../README.md`
 - `../glossary.md`
 - `../system/photo-library-source-and-runtime.md`
-- `../standards/documentation-model.md`
-- `../standards/testing.md`
 
 ## Changelog
 

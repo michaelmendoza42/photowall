@@ -2,7 +2,7 @@
 Last edited: 2026-07-30
 Status: Active
 Scope: Docker runtime, configurable photo-library root, trusted-LAN deployment model, and filesystem discovery assumptions
-Related files: `../../README.md`, `../product/photo-wall-experience.md`, `../glossary.md`, `README.md`
+Related files: `../../README.md`, `../product/photo-wall-experience.md`, `../glossary.md`
 
 This note records the current technical shape the project should preserve while implementation is still being designed.
 
@@ -54,7 +54,6 @@ The MVP is explicitly a trusted-LAN-only app: it is intended to run on the opera
 - `../../README.md`
 - `../product/photo-wall-experience.md`
 - `../glossary.md`
-- `README.md`
 
 ## Changelog
 

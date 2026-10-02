@@ -60,15 +60,13 @@ playwright/   browser-driven acceptance tests (later phases)
 
 Month filtering is out of MVP scope.
 
-## Canonical docs
+## Docs
 
 - `docs/product/photo-wall-experience.md` — approved baseline product behavior
 - `docs/system/photo-library-source-and-runtime.md` — Docker runtime and library-discovery constraints
 - `docs/runbooks/photo-wall-docker-lan.md` — operator setup, startup diagnostics, and troubleshooting flow
 - `docs/glossary.md` — shared project language
-- `docs/standards/documentation-model.md` — authority and documentation rules
-- `docs/standards/canonical-user-intent-maintenance.md` — convergence and current-truth maintenance rule
-- `AGENTS.md` — repo-wide agent instructions
+- `AGENTS.md` — agent rules; `CLAUDE.md` — commands and architecture
 
 ## Current focus
 
