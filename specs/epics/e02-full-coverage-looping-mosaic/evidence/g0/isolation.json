@@ -1,0 +1,18 @@
+{
+  "createdAt": "2026-09-25T08:27:22.316Z",
+  "productionFilesChecked": 186,
+  "productionFilesChanged": [],
+  "node": "v22.23.1",
+  "prototypeFiles": {
+    "scratch/mosaic-g0/candidate-column-slices.ts": "07e0daed50ed1f17fc5f8a2a55569370bb005034d900150f56569055f3c6efe0",
+    "scratch/mosaic-g0/candidate.ts": "edae81233fee244f6ab35abc4102da438ad5358fb2d73b9c39d36208a9fa0570",
+    "scratch/mosaic-g0/geometryChecks.ts": "32fc3b2b906cb298e6d3ce4c180e9cc0f3e85aad9d717fbe99f41afb96e9ba15",
+    "scratch/mosaic-g0/index.html": "2855bc5198f74fe758c1bf63c8700acf583859e897f32aa150b1baaee8036fb7",
+    "scratch/mosaic-g0/measure.ts": "3da40cf740307eef9a2490d00294b9ca0b97b78dc64dfb71a70cba3cb3941430",
+    "scratch/mosaic-g0/preview.tsx": "0314e628c841f54fb2b2fba614b360245b19bab3b82eacf07bbac45357beeaa7",
+    "scratch/mosaic-g0/topology.ts": "a019de82028b7d6efc746c133c3e0570144f18f168a4a7cec25eab102490286b",
+    "scratch/mosaic-g0/verify-browser.ts": "da460b544c2a2e100c5f576cbd991937f4df08134ea5093fe3d82b4a3f0d66c4",
+    "scratch/mosaic-g0/verify-topology.ts": "946c6ed753d848c330b78eef1dd6d6669380701c60dfe04f7f8fd3630ee50334"
+  },
+  "note": "Prototype files remain ignored and unshipped for pending human review. Captured source/config files include the pre-existing dirty gesture work."
+}

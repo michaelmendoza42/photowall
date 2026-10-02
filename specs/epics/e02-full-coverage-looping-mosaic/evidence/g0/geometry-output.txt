@@ -1,0 +1,13 @@
+{
+  "oraclePass": true,
+  "cases": 24,
+  "passing": 24,
+  "projectionCases": 1080,
+  "baselineGapFractionRange": [
+    0.00487273451876737,
+    0.7792632022882119
+  ],
+  "maxCandidateCrop": 2.220446049250313e-16,
+  "maxDuplication": 1,
+  "failures": []
+}

@@ -1,24 +1,53 @@
-active_flow: build_epic
-active_epic: e01
-epic_cycle:
-  step: 8
-  current_story: e01s04
-  completed_steps: "1,2,3,4,5,6,7"
-  audit_result: pass
+active_flow: spike_prototype
+active_epic: e02
+planning:
+  feature: full-coverage-looping-mosaic
+  status: layout-prototype-awaiting-composition-review
+  spike_started_at: "2026-09-25T07:34:40Z"
+  spike_deadline: "2026-09-25T09:04:40Z"
+  spike_finished_at: "2026-09-25T08:27:22Z"
+  spike_result: geometry-and-isolated-runtime-evidence-recorded-not-G0-passed
+  layout_proof: specs/epics/e02-full-coverage-looping-mosaic/LAYOUT-PROOF.md
+  spike_findings: specs/archive/spikes/SPIKE-full-coverage-looping-mosaic.md
+  spike_approval: 'Michael: "k do it" after the proposed 90-minute prototype.'
+  thresholds: G0 table frozen at start; failures must be reported without relaxing thresholds.
+  execution_mode: Standard
+  scope_source: specs/planning-context.yaml
+  implementation_started: false
+  implementation_gate: layout-proof-and-plan-approval
+  plan: specs/epics/e02-full-coverage-looping-mosaic/PLAN.md
+  prior_state: specs/epics/e01-large-album-performance/handoff-before-e02.yaml
 git:
-  branch: mission/phase1-task1-docs-alignment
-  hash: 841178c55f1d4e2447b21b0e218f1a37040f736f
+  branch: fix/mobile-fling-response
+  hash: 443a9e9306d2d0c92fcc0e1451721b0b989ad9e7
+  working_tree: existing-uncommitted-gesture-changes-plus-planning
 handoff:
-  last_step_completed: "e01 commit prepared as one verified wall runtime-hardening unit"
-  open_decisions: []
+  last_step_completed: Isolated layout proof recorded with 24 numeric cases, 600 topology cases, 176 browser checks, and independent review.
+  next_action: Michael reviews the pictured regions and overview density; production remains gated.
+  next_skill: plan-work
   required_reading:
-    - specs/requirements/LARGE_ALBUM_PERFORMANCE.yaml
-    - specs/epics/e01-large-album-performance/epic.yaml
-    - .pi/troubleshooting/pixi-wall-flicker-performance.md
-  next_skill: release-branch
+    - specs/planning-context.yaml
+    - specs/product/SCOPE_LATEST.yaml
+    - specs/IMPACT_LATEST.md
+    - specs/epics/e02-full-coverage-looping-mosaic/PLAN.md
+    - specs/epics/e02-full-coverage-looping-mosaic/epic.yaml
+    - specs/epics/e02-full-coverage-looping-mosaic/REVIEW.md
+    - specs/epics/e02-full-coverage-looping-mosaic/LAYOUT-PROOF.md
+    - specs/archive/spikes/SPIKE-full-coverage-looping-mosaic.md
+  open_decisions:
+    - Accept or reject the experimental cyclic adjoining-region composition and overview readability.
+    - Incorporate the selected design into plan-work and approve the implementation plan before production edits.
+    - Verify actual production frontier/completeness ownership, row-band budgets, and small/degenerate fallbacks during integration.
+    - Tune the shared overview policy without turning the experimental two-period guard into a fixed 2x/4x product promise.
   context: >-
-    e01 and media diagnostics share Pixi/media-delivery seams and were prepared as one runtime-hardening commit.
-    The staged snapshot passed typecheck, 50 Vitest files / 339 tests, production build,
-    and full Playwright with 20 passed / 1 intentional skip.
-metrics:
-  story_start: "2026-07-28T23:31:31-07:00"
+    The isolated experiment finished within its 90-minute bound; G0 is not passed and
+    production implementation remains gated. Aspect-exact equal-height columns close the
+    period without added canonical duplicates or crop on tested fixtures. Neighbor-run
+    alignment and bounded column reduction fixed the reviewed six-album connectivity failure.
+    Actual Pixi, DOM, query-hook adapter, seams, anchors, and overview checks passed in scratch;
+    unmodified production WallShell/loading/culling integration is not proven. All 186 captured
+    production/source/config files remained byte-identical and the user's dev services remained
+    running. Scratch code is ignored/unshipped and retained only for pending visual review;
+    discard it after the plan handoff. Preserve existing dirty gesture/planning changes and
+    establish a safe implementation branch/checkpoint after approval. No production mosaic
+    code or planned production regression tests exist yet; all twelve task checks remain failing.

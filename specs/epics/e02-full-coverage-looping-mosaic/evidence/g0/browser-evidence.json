@@ -1,0 +1,5864 @@
+{
+  "createdAt": "2026-09-25T08:27:03.783Z",
+  "command": "npx tsx scratch/mosaic-g0/verify-browser.ts",
+  "fixtureSeed": 9025,
+  "targetUrl": "http://127.0.0.1:5176/@fs/home/michael/Projects/Code/photo-wall/scratch/mosaic-g0/index.html",
+  "runtime": {
+    "stablePortCommand": "/home/michael/Projects/Code/pi-mods/bin/dev-ports ensure .",
+    "viteStartupIfAbsent": "VITE_DEV_PROXY_TARGET=http://127.0.0.1:3002 npm run dev:client -- --host 0.0.0.0 --port 5176",
+    "backendPrerequisite": "Existing authorized read-only photo API at http://127.0.0.1:3002; real-photo smoke requires the two recorded folders.",
+    "safety": "Use existing owned services; do not stop another server. No production test-server reuse flag; fixture GETs intercepted only inside isolated preview contexts."
+  },
+  "results": [
+    {
+      "label": "desktop-50-minimum-origin",
+      "zoom": 0.4,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 150,
+      "instanceCap": 800,
+      "periodExposure": [
+        2,
+        1.4365743424234858
+      ],
+      "intersectingPeriods": 4,
+      "collision": false,
+      "layout": [
+        1800,
+        1670.641002783904
+      ],
+      "packs": 2,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-50-minimum-horizontal",
+      "zoom": 0.4,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 173,
+      "instanceCap": 800,
+      "periodExposure": [
+        2,
+        1.4365743424234858
+      ],
+      "intersectingPeriods": 6,
+      "collision": false,
+      "layout": [
+        1800,
+        1670.641002783904
+      ],
+      "packs": 2,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-50-minimum-vertical",
+      "zoom": 0.4,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 181,
+      "instanceCap": 800,
+      "periodExposure": [
+        2,
+        1.4365743424234858
+      ],
+      "intersectingPeriods": 9,
+      "collision": false,
+      "layout": [
+        1800,
+        1670.641002783904
+      ],
+      "packs": 2,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-50-minimum-corner",
+      "zoom": 0.4,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 175,
+      "instanceCap": 800,
+      "periodExposure": [
+        2,
+        1.4365743424234858
+      ],
+      "intersectingPeriods": 9,
+      "collision": false,
+      "layout": [
+        1800,
+        1670.641002783904
+      ],
+      "packs": 2,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-50-default-origin",
+      "zoom": 1,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 28,
+      "instanceCap": 450,
+      "periodExposure": [
+        0.8,
+        0.5746297369693943
+      ],
+      "intersectingPeriods": 1,
+      "collision": false,
+      "layout": [
+        1800,
+        1670.641002783904
+      ],
+      "packs": 2,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-50-default-horizontal",
+      "zoom": 1,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 39,
+      "instanceCap": 450,
+      "periodExposure": [
+        0.8,
+        0.5746297369693943
+      ],
+      "intersectingPeriods": 2,
+      "collision": false,
+      "layout": [
+        1800,
+        1670.641002783904
+      ],
+      "packs": 2,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-50-default-vertical",
+      "zoom": 1,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 38,
+      "instanceCap": 450,
+      "periodExposure": [
+        0.8,
+        0.5746297369693943
+      ],
+      "intersectingPeriods": 4,
+      "collision": false,
+      "layout": [
+        1800,
+        1670.641002783904
+      ],
+      "packs": 2,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-50-default-corner",
+      "zoom": 1,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 38,
+      "instanceCap": 450,
+      "periodExposure": [
+        0.8,
+        0.5746297369693943
+      ],
+      "intersectingPeriods": 4,
+      "collision": false,
+      "layout": [
+        1800,
+        1670.641002783904
+      ],
+      "packs": 2,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-50-maximum-origin",
+      "zoom": 2.4,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 6,
+      "instanceCap": 450,
+      "periodExposure": [
+        0.3333333333333333,
+        0.239429057070581
+      ],
+      "intersectingPeriods": 1,
+      "collision": false,
+      "layout": [
+        1800,
+        1670.641002783904
+      ],
+      "packs": 2,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-50-maximum-horizontal",
+      "zoom": 2.4,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 13,
+      "instanceCap": 450,
+      "periodExposure": [
+        0.3333333333333333,
+        0.239429057070581
+      ],
+      "intersectingPeriods": 2,
+      "collision": false,
+      "layout": [
+        1800,
+        1670.641002783904
+      ],
+      "packs": 2,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-50-maximum-vertical",
+      "zoom": 2.4,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 12,
+      "instanceCap": 450,
+      "periodExposure": [
+        0.3333333333333333,
+        0.239429057070581
+      ],
+      "intersectingPeriods": 2,
+      "collision": false,
+      "layout": [
+        1800,
+        1670.641002783904
+      ],
+      "packs": 2,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-50-maximum-corner",
+      "zoom": 2.4,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 12,
+      "instanceCap": 450,
+      "periodExposure": [
+        0.3333333333333333,
+        0.239429057070581
+      ],
+      "intersectingPeriods": 4,
+      "collision": false,
+      "layout": [
+        1800,
+        1670.641002783904
+      ],
+      "packs": 2,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-50-loop-zoom-stability",
+      "pass": true
+    },
+    {
+      "label": "desktop-100-minimum-origin",
+      "zoom": 0.4,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 304,
+      "instanceCap": 1600,
+      "periodExposure": [
+        2,
+        1.4503036964358307
+      ],
+      "intersectingPeriods": 4,
+      "collision": false,
+      "layout": [
+        1800,
+        1654.8258174464281
+      ],
+      "packs": 3,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-100-minimum-horizontal",
+      "zoom": 0.4,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 322,
+      "instanceCap": 1600,
+      "periodExposure": [
+        2,
+        1.4503036964358307
+      ],
+      "intersectingPeriods": 6,
+      "collision": false,
+      "layout": [
+        1800,
+        1654.8258174464281
+      ],
+      "packs": 3,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-100-minimum-vertical",
+      "zoom": 0.4,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 332,
+      "instanceCap": 1600,
+      "periodExposure": [
+        2,
+        1.4503036964358307
+      ],
+      "intersectingPeriods": 9,
+      "collision": false,
+      "layout": [
+        1800,
+        1654.8258174464281
+      ],
+      "packs": 3,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-100-minimum-corner",
+      "zoom": 0.4,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 329,
+      "instanceCap": 1600,
+      "periodExposure": [
+        2,
+        1.4503036964358307
+      ],
+      "intersectingPeriods": 9,
+      "collision": false,
+      "layout": [
+        1800,
+        1654.8258174464281
+      ],
+      "packs": 3,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-100-default-origin",
+      "zoom": 1,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 57,
+      "instanceCap": 900,
+      "periodExposure": [
+        0.8,
+        0.5801214785743323
+      ],
+      "intersectingPeriods": 1,
+      "collision": false,
+      "layout": [
+        1800,
+        1654.8258174464281
+      ],
+      "packs": 3,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-100-default-horizontal",
+      "zoom": 1,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 68,
+      "instanceCap": 900,
+      "periodExposure": [
+        0.8,
+        0.5801214785743323
+      ],
+      "intersectingPeriods": 2,
+      "collision": false,
+      "layout": [
+        1800,
+        1654.8258174464281
+      ],
+      "packs": 3,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-100-default-vertical",
+      "zoom": 1,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 61,
+      "instanceCap": 900,
+      "periodExposure": [
+        0.8,
+        0.5801214785743323
+      ],
+      "intersectingPeriods": 4,
+      "collision": false,
+      "layout": [
+        1800,
+        1654.8258174464281
+      ],
+      "packs": 3,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-100-default-corner",
+      "zoom": 1,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 70,
+      "instanceCap": 900,
+      "periodExposure": [
+        0.8,
+        0.5801214785743323
+      ],
+      "intersectingPeriods": 4,
+      "collision": false,
+      "layout": [
+        1800,
+        1654.8258174464281
+      ],
+      "packs": 3,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-100-maximum-origin",
+      "zoom": 2.4,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 14,
+      "instanceCap": 900,
+      "periodExposure": [
+        0.3333333333333333,
+        0.24171728273930512
+      ],
+      "intersectingPeriods": 1,
+      "collision": false,
+      "layout": [
+        1800,
+        1654.8258174464281
+      ],
+      "packs": 3,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-100-maximum-horizontal",
+      "zoom": 2.4,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 20,
+      "instanceCap": 900,
+      "periodExposure": [
+        0.3333333333333333,
+        0.24171728273930512
+      ],
+      "intersectingPeriods": 2,
+      "collision": false,
+      "layout": [
+        1800,
+        1654.8258174464281
+      ],
+      "packs": 3,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-100-maximum-vertical",
+      "zoom": 2.4,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 19,
+      "instanceCap": 900,
+      "periodExposure": [
+        0.3333333333333333,
+        0.24171728273930512
+      ],
+      "intersectingPeriods": 2,
+      "collision": false,
+      "layout": [
+        1800,
+        1654.8258174464281
+      ],
+      "packs": 3,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-100-maximum-corner",
+      "zoom": 2.4,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 20,
+      "instanceCap": 900,
+      "periodExposure": [
+        0.3333333333333333,
+        0.24171728273930512
+      ],
+      "intersectingPeriods": 4,
+      "collision": false,
+      "layout": [
+        1800,
+        1654.8258174464281
+      ],
+      "packs": 3,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-100-loop-zoom-stability",
+      "pass": true
+    },
+    {
+      "label": "desktop-200-minimum-origin",
+      "zoom": 0.4,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 582,
+      "instanceCap": 3200,
+      "periodExposure": [
+        2,
+        1.4155083260752794
+      ],
+      "intersectingPeriods": 4,
+      "collision": false,
+      "layout": [
+        1800,
+        1695.503979587587
+      ],
+      "packs": 4,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-200-minimum-horizontal",
+      "zoom": 0.4,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 605,
+      "instanceCap": 3200,
+      "periodExposure": [
+        2,
+        1.4155083260752794
+      ],
+      "intersectingPeriods": 6,
+      "collision": false,
+      "layout": [
+        1800,
+        1695.503979587587
+      ],
+      "packs": 4,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-200-minimum-vertical",
+      "zoom": 0.4,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 631,
+      "instanceCap": 3200,
+      "periodExposure": [
+        2,
+        1.4155083260752794
+      ],
+      "intersectingPeriods": 9,
+      "collision": false,
+      "layout": [
+        1800,
+        1695.503979587587
+      ],
+      "packs": 4,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-200-minimum-corner",
+      "zoom": 0.4,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 622,
+      "instanceCap": 3200,
+      "periodExposure": [
+        2,
+        1.4155083260752794
+      ],
+      "intersectingPeriods": 9,
+      "collision": false,
+      "layout": [
+        1800,
+        1695.503979587587
+      ],
+      "packs": 4,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-200-default-origin",
+      "zoom": 1,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 108,
+      "instanceCap": 1800,
+      "periodExposure": [
+        0.8,
+        0.5662033304301117
+      ],
+      "intersectingPeriods": 1,
+      "collision": false,
+      "layout": [
+        1800,
+        1695.503979587587
+      ],
+      "packs": 4,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-200-default-horizontal",
+      "zoom": 1,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 122,
+      "instanceCap": 1800,
+      "periodExposure": [
+        0.8,
+        0.5662033304301117
+      ],
+      "intersectingPeriods": 2,
+      "collision": false,
+      "layout": [
+        1800,
+        1695.503979587587
+      ],
+      "packs": 4,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-200-default-vertical",
+      "zoom": 1,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 109,
+      "instanceCap": 1800,
+      "periodExposure": [
+        0.8,
+        0.5662033304301117
+      ],
+      "intersectingPeriods": 4,
+      "collision": false,
+      "layout": [
+        1800,
+        1695.503979587587
+      ],
+      "packs": 4,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-200-default-corner",
+      "zoom": 1,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 126,
+      "instanceCap": 1800,
+      "periodExposure": [
+        0.8,
+        0.5662033304301117
+      ],
+      "intersectingPeriods": 4,
+      "collision": false,
+      "layout": [
+        1800,
+        1695.503979587587
+      ],
+      "packs": 4,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-200-maximum-origin",
+      "zoom": 2.4,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 27,
+      "instanceCap": 1800,
+      "periodExposure": [
+        0.3333333333333333,
+        0.2359180543458799
+      ],
+      "intersectingPeriods": 1,
+      "collision": false,
+      "layout": [
+        1800,
+        1695.503979587587
+      ],
+      "packs": 4,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-200-maximum-horizontal",
+      "zoom": 2.4,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 36,
+      "instanceCap": 1800,
+      "periodExposure": [
+        0.3333333333333333,
+        0.2359180543458799
+      ],
+      "intersectingPeriods": 2,
+      "collision": false,
+      "layout": [
+        1800,
+        1695.503979587587
+      ],
+      "packs": 4,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-200-maximum-vertical",
+      "zoom": 2.4,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 28,
+      "instanceCap": 1800,
+      "periodExposure": [
+        0.3333333333333333,
+        0.2359180543458799
+      ],
+      "intersectingPeriods": 2,
+      "collision": false,
+      "layout": [
+        1800,
+        1695.503979587587
+      ],
+      "packs": 4,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-200-maximum-corner",
+      "zoom": 2.4,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 36,
+      "instanceCap": 1800,
+      "periodExposure": [
+        0.3333333333333333,
+        0.2359180543458799
+      ],
+      "intersectingPeriods": 4,
+      "collision": false,
+      "layout": [
+        1800,
+        1695.503979587587
+      ],
+      "packs": 4,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-200-loop-zoom-stability",
+      "pass": true
+    },
+    {
+      "label": "desktop-50-50-minimum-origin",
+      "zoom": 0.4,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 298,
+      "instanceCap": 1600,
+      "periodExposure": [
+        2,
+        1.4402678924276968
+      ],
+      "intersectingPeriods": 4,
+      "collision": false,
+      "layout": [
+        1800,
+        1666.3566636583082
+      ],
+      "packs": 5,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-50-50-minimum-horizontal",
+      "zoom": 0.4,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 326,
+      "instanceCap": 1600,
+      "periodExposure": [
+        2,
+        1.4402678924276968
+      ],
+      "intersectingPeriods": 6,
+      "collision": false,
+      "layout": [
+        1800,
+        1666.3566636583082
+      ],
+      "packs": 5,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-50-50-minimum-vertical",
+      "zoom": 0.4,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 332,
+      "instanceCap": 1600,
+      "periodExposure": [
+        2,
+        1.4402678924276968
+      ],
+      "intersectingPeriods": 9,
+      "collision": false,
+      "layout": [
+        1800,
+        1666.3566636583082
+      ],
+      "packs": 5,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-50-50-minimum-corner",
+      "zoom": 0.4,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 332,
+      "instanceCap": 1600,
+      "periodExposure": [
+        2,
+        1.4402678924276968
+      ],
+      "intersectingPeriods": 9,
+      "collision": false,
+      "layout": [
+        1800,
+        1666.3566636583082
+      ],
+      "packs": 5,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-50-50-default-origin",
+      "zoom": 1,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 55,
+      "instanceCap": 900,
+      "periodExposure": [
+        0.8,
+        0.5761071569710787
+      ],
+      "intersectingPeriods": 1,
+      "collision": false,
+      "layout": [
+        1800,
+        1666.3566636583082
+      ],
+      "packs": 5,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-50-50-default-horizontal",
+      "zoom": 1,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 63,
+      "instanceCap": 900,
+      "periodExposure": [
+        0.8,
+        0.5761071569710787
+      ],
+      "intersectingPeriods": 2,
+      "collision": false,
+      "layout": [
+        1800,
+        1666.3566636583082
+      ],
+      "packs": 5,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-50-50-default-vertical",
+      "zoom": 1,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 62,
+      "instanceCap": 900,
+      "periodExposure": [
+        0.8,
+        0.5761071569710787
+      ],
+      "intersectingPeriods": 4,
+      "collision": false,
+      "layout": [
+        1800,
+        1666.3566636583082
+      ],
+      "packs": 5,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-50-50-default-corner",
+      "zoom": 1,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 64,
+      "instanceCap": 900,
+      "periodExposure": [
+        0.8,
+        0.5761071569710787
+      ],
+      "intersectingPeriods": 4,
+      "collision": false,
+      "layout": [
+        1800,
+        1666.3566636583082
+      ],
+      "packs": 5,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-50-50-maximum-origin",
+      "zoom": 2.4,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 12,
+      "instanceCap": 900,
+      "periodExposure": [
+        0.3333333333333333,
+        0.24004464873794948
+      ],
+      "intersectingPeriods": 1,
+      "collision": false,
+      "layout": [
+        1800,
+        1666.3566636583082
+      ],
+      "packs": 5,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-50-50-maximum-horizontal",
+      "zoom": 2.4,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 19,
+      "instanceCap": 900,
+      "periodExposure": [
+        0.3333333333333333,
+        0.24004464873794948
+      ],
+      "intersectingPeriods": 2,
+      "collision": false,
+      "layout": [
+        1800,
+        1666.3566636583082
+      ],
+      "packs": 5,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-50-50-maximum-vertical",
+      "zoom": 2.4,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 13,
+      "instanceCap": 900,
+      "periodExposure": [
+        0.3333333333333333,
+        0.24004464873794948
+      ],
+      "intersectingPeriods": 2,
+      "collision": false,
+      "layout": [
+        1800,
+        1666.3566636583082
+      ],
+      "packs": 5,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-50-50-maximum-corner",
+      "zoom": 2.4,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 19,
+      "instanceCap": 900,
+      "periodExposure": [
+        0.3333333333333333,
+        0.24004464873794948
+      ],
+      "intersectingPeriods": 4,
+      "collision": false,
+      "layout": [
+        1800,
+        1666.3566636583082
+      ],
+      "packs": 5,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-50-50-loop-zoom-stability",
+      "pass": true
+    },
+    {
+      "label": "desktop-50-150-minimum-origin",
+      "zoom": 0.4,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 584,
+      "instanceCap": 3200,
+      "periodExposure": [
+        2,
+        1.4176150323908576
+      ],
+      "intersectingPeriods": 4,
+      "collision": false,
+      "layout": [
+        1800,
+        1692.9843047391473
+      ],
+      "packs": 6,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-50-150-minimum-horizontal",
+      "zoom": 0.4,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 615,
+      "instanceCap": 3200,
+      "periodExposure": [
+        2,
+        1.4176150323908576
+      ],
+      "intersectingPeriods": 6,
+      "collision": false,
+      "layout": [
+        1800,
+        1692.9843047391473
+      ],
+      "packs": 6,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-50-150-minimum-vertical",
+      "zoom": 0.4,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 624,
+      "instanceCap": 3200,
+      "periodExposure": [
+        2,
+        1.4176150323908576
+      ],
+      "intersectingPeriods": 9,
+      "collision": false,
+      "layout": [
+        1800,
+        1692.9843047391473
+      ],
+      "packs": 6,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-50-150-minimum-corner",
+      "zoom": 0.4,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 626,
+      "instanceCap": 3200,
+      "periodExposure": [
+        2,
+        1.4176150323908576
+      ],
+      "intersectingPeriods": 9,
+      "collision": false,
+      "layout": [
+        1800,
+        1692.9843047391473
+      ],
+      "packs": 6,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-50-150-default-origin",
+      "zoom": 1,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 95,
+      "instanceCap": 1800,
+      "periodExposure": [
+        0.8,
+        0.567046012956343
+      ],
+      "intersectingPeriods": 1,
+      "collision": false,
+      "layout": [
+        1800,
+        1692.9843047391473
+      ],
+      "packs": 6,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-50-150-default-horizontal",
+      "zoom": 1,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 111,
+      "instanceCap": 1800,
+      "periodExposure": [
+        0.8,
+        0.567046012956343
+      ],
+      "intersectingPeriods": 2,
+      "collision": false,
+      "layout": [
+        1800,
+        1692.9843047391473
+      ],
+      "packs": 6,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-50-150-default-vertical",
+      "zoom": 1,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 109,
+      "instanceCap": 1800,
+      "periodExposure": [
+        0.8,
+        0.567046012956343
+      ],
+      "intersectingPeriods": 4,
+      "collision": false,
+      "layout": [
+        1800,
+        1692.9843047391473
+      ],
+      "packs": 6,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-50-150-default-corner",
+      "zoom": 1,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 111,
+      "instanceCap": 1800,
+      "periodExposure": [
+        0.8,
+        0.567046012956343
+      ],
+      "intersectingPeriods": 4,
+      "collision": false,
+      "layout": [
+        1800,
+        1692.9843047391473
+      ],
+      "packs": 6,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-50-150-maximum-origin",
+      "zoom": 2.4,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 27,
+      "instanceCap": 1800,
+      "periodExposure": [
+        0.3333333333333333,
+        0.23626917206514295
+      ],
+      "intersectingPeriods": 1,
+      "collision": false,
+      "layout": [
+        1800,
+        1692.9843047391473
+      ],
+      "packs": 6,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-50-150-maximum-horizontal",
+      "zoom": 2.4,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 30,
+      "instanceCap": 1800,
+      "periodExposure": [
+        0.3333333333333333,
+        0.23626917206514295
+      ],
+      "intersectingPeriods": 2,
+      "collision": false,
+      "layout": [
+        1800,
+        1692.9843047391473
+      ],
+      "packs": 6,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-50-150-maximum-vertical",
+      "zoom": 2.4,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 24,
+      "instanceCap": 1800,
+      "periodExposure": [
+        0.3333333333333333,
+        0.23626917206514295
+      ],
+      "intersectingPeriods": 2,
+      "collision": false,
+      "layout": [
+        1800,
+        1692.9843047391473
+      ],
+      "packs": 6,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-50-150-maximum-corner",
+      "zoom": 2.4,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 28,
+      "instanceCap": 1800,
+      "periodExposure": [
+        0.3333333333333333,
+        0.23626917206514295
+      ],
+      "intersectingPeriods": 4,
+      "collision": false,
+      "layout": [
+        1800,
+        1692.9843047391473
+      ],
+      "packs": 6,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-50-150-loop-zoom-stability",
+      "pass": true
+    },
+    {
+      "label": "desktop-50-50-50-minimum-origin",
+      "zoom": 0.4,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 426,
+      "instanceCap": 2400,
+      "periodExposure": [
+        2,
+        1.3975263096770247
+      ],
+      "intersectingPeriods": 4,
+      "collision": false,
+      "layout": [
+        1800,
+        1717.3200843386282
+      ],
+      "packs": 7,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-50-50-50-minimum-horizontal",
+      "zoom": 0.4,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 460,
+      "instanceCap": 2400,
+      "periodExposure": [
+        2,
+        1.3975263096770247
+      ],
+      "intersectingPeriods": 6,
+      "collision": false,
+      "layout": [
+        1800,
+        1717.3200843386282
+      ],
+      "packs": 7,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-50-50-50-minimum-vertical",
+      "zoom": 0.4,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 458,
+      "instanceCap": 2400,
+      "periodExposure": [
+        2,
+        1.3975263096770247
+      ],
+      "intersectingPeriods": 9,
+      "collision": false,
+      "layout": [
+        1800,
+        1717.3200843386282
+      ],
+      "packs": 7,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-50-50-50-minimum-corner",
+      "zoom": 0.4,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 463,
+      "instanceCap": 2400,
+      "periodExposure": [
+        2,
+        1.3975263096770247
+      ],
+      "intersectingPeriods": 9,
+      "collision": false,
+      "layout": [
+        1800,
+        1717.3200843386282
+      ],
+      "packs": 7,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-50-50-50-default-origin",
+      "zoom": 1,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 72,
+      "instanceCap": 1350,
+      "periodExposure": [
+        0.8,
+        0.5590105238708099
+      ],
+      "intersectingPeriods": 1,
+      "collision": false,
+      "layout": [
+        1800,
+        1717.3200843386282
+      ],
+      "packs": 7,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-50-50-50-default-horizontal",
+      "zoom": 1,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 86,
+      "instanceCap": 1350,
+      "periodExposure": [
+        0.8,
+        0.5590105238708099
+      ],
+      "intersectingPeriods": 2,
+      "collision": false,
+      "layout": [
+        1800,
+        1717.3200843386282
+      ],
+      "packs": 7,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-50-50-50-default-vertical",
+      "zoom": 1,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 88,
+      "instanceCap": 1350,
+      "periodExposure": [
+        0.8,
+        0.5590105238708099
+      ],
+      "intersectingPeriods": 4,
+      "collision": false,
+      "layout": [
+        1800,
+        1717.3200843386282
+      ],
+      "packs": 7,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-50-50-50-default-corner",
+      "zoom": 1,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 86,
+      "instanceCap": 1350,
+      "periodExposure": [
+        0.8,
+        0.5590105238708099
+      ],
+      "intersectingPeriods": 4,
+      "collision": false,
+      "layout": [
+        1800,
+        1717.3200843386282
+      ],
+      "packs": 7,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-50-50-50-maximum-origin",
+      "zoom": 2.4,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 14,
+      "instanceCap": 1350,
+      "periodExposure": [
+        0.3333333333333333,
+        0.23292105161283747
+      ],
+      "intersectingPeriods": 1,
+      "collision": false,
+      "layout": [
+        1800,
+        1717.3200843386282
+      ],
+      "packs": 7,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-50-50-50-maximum-horizontal",
+      "zoom": 2.4,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 21,
+      "instanceCap": 1350,
+      "periodExposure": [
+        0.3333333333333333,
+        0.23292105161283747
+      ],
+      "intersectingPeriods": 2,
+      "collision": false,
+      "layout": [
+        1800,
+        1717.3200843386282
+      ],
+      "packs": 7,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-50-50-50-maximum-vertical",
+      "zoom": 2.4,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 17,
+      "instanceCap": 1350,
+      "periodExposure": [
+        0.3333333333333333,
+        0.23292105161283747
+      ],
+      "intersectingPeriods": 2,
+      "collision": false,
+      "layout": [
+        1800,
+        1717.3200843386282
+      ],
+      "packs": 7,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-50-50-50-maximum-corner",
+      "zoom": 2.4,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 16,
+      "instanceCap": 1350,
+      "periodExposure": [
+        0.3333333333333333,
+        0.23292105161283747
+      ],
+      "intersectingPeriods": 4,
+      "collision": false,
+      "layout": [
+        1800,
+        1717.3200843386282
+      ],
+      "packs": 7,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-50-50-50-loop-zoom-stability",
+      "pass": true
+    },
+    {
+      "label": "desktop-tap-centers-append-resize",
+      "pass": true,
+      "appendAnchorDriftCSS": 1.3682791403306702e-13
+    },
+    {
+      "label": "desktop-paging-delayed-corner",
+      "zoom": 0.8,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 54,
+      "instanceCap": 450,
+      "periodExposure": [
+        1,
+        0.7182871712117429
+      ],
+      "intersectingPeriods": 4,
+      "collision": false,
+      "layout": [
+        1800,
+        1670.641002783904
+      ],
+      "packs": 11,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-paging-appended-corner",
+      "zoom": 0.8,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 91,
+      "instanceCap": 900,
+      "periodExposure": [
+        1,
+        0.7201339462138484
+      ],
+      "intersectingPeriods": 4,
+      "collision": false,
+      "layout": [
+        1800,
+        1666.3566636583082
+      ],
+      "packs": 12,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-paging-complete",
+      "zoom": 0.4,
+      "minimum": 0.4,
+      "viewport": [
+        1440,
+        960
+      ],
+      "dpr": 1,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 446,
+      "instanceCap": 2400,
+      "periodExposure": [
+        2,
+        1.3533734602704957
+      ],
+      "intersectingPeriods": 6,
+      "collision": false,
+      "layout": [
+        1800,
+        1773.3464342653192
+      ],
+      "packs": 13,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1440,
+        960
+      ],
+      "pass": true
+    },
+    {
+      "label": "desktop-cursor-ownership-and-completion",
+      "pass": true,
+      "requests": {
+        "<first>": 1,
+        "opaque-1": 1,
+        "opaque-2": 1
+      },
+      "maxInFlight": {
+        "<first>": 1,
+        "opaque-1": 1,
+        "opaque-2": 1
+      },
+      "loaded": 150,
+      "appendAnchorDriftCSS": 2.8427381581839814e-13,
+      "productionQueryHook": true,
+      "productionWallShell": false,
+      "adapterOption": "fetchNextPage({cancelRefetch:false})"
+    },
+    {
+      "label": "real-read-only-photos",
+      "pass": true,
+      "requests": [
+        {
+          "method": "GET",
+          "status": 200,
+          "received": 50
+        },
+        {
+          "method": "GET",
+          "status": 200,
+          "received": 50
+        }
+      ],
+      "textureFailures": 0
+    },
+    {
+      "label": "mobile-50-minimum-origin",
+      "zoom": 0.2525976552094629,
+      "minimum": 0.2525976552094629,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 100,
+      "instanceCap": 600,
+      "periodExposure": [
+        0.8577540693598243,
+        2
+      ],
+      "intersectingPeriods": 2,
+      "collision": false,
+      "layout": [
+        1800,
+        1670.641002783904
+      ],
+      "packs": 2,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-50-minimum-horizontal",
+      "zoom": 0.2525976552094629,
+      "minimum": 0.2525976552094629,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 120,
+      "instanceCap": 600,
+      "periodExposure": [
+        0.8577540693598243,
+        2
+      ],
+      "intersectingPeriods": 6,
+      "collision": false,
+      "layout": [
+        1800,
+        1670.641002783904
+      ],
+      "packs": 2,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-50-minimum-vertical",
+      "zoom": 0.2525976552094629,
+      "minimum": 0.2525976552094629,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 107,
+      "instanceCap": 600,
+      "periodExposure": [
+        0.8577540693598243,
+        2
+      ],
+      "intersectingPeriods": 6,
+      "collision": false,
+      "layout": [
+        1800,
+        1670.641002783904
+      ],
+      "packs": 2,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-50-minimum-corner",
+      "zoom": 0.2525976552094629,
+      "minimum": 0.2525976552094629,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 120,
+      "instanceCap": 600,
+      "periodExposure": [
+        0.8577540693598243,
+        2
+      ],
+      "intersectingPeriods": 6,
+      "collision": false,
+      "layout": [
+        1800,
+        1670.641002783904
+      ],
+      "packs": 2,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-50-default-origin",
+      "zoom": 1,
+      "minimum": 0.2525976552094629,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 8,
+      "instanceCap": 450,
+      "periodExposure": [
+        0.21666666666666667,
+        0.5051953104189258
+      ],
+      "intersectingPeriods": 1,
+      "collision": false,
+      "layout": [
+        1800,
+        1670.641002783904
+      ],
+      "packs": 2,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-50-default-horizontal",
+      "zoom": 1,
+      "minimum": 0.2525976552094629,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 16,
+      "instanceCap": 450,
+      "periodExposure": [
+        0.21666666666666667,
+        0.5051953104189258
+      ],
+      "intersectingPeriods": 2,
+      "collision": false,
+      "layout": [
+        1800,
+        1670.641002783904
+      ],
+      "packs": 2,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-50-default-vertical",
+      "zoom": 1,
+      "minimum": 0.2525976552094629,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 17,
+      "instanceCap": 450,
+      "periodExposure": [
+        0.21666666666666667,
+        0.5051953104189258
+      ],
+      "intersectingPeriods": 2,
+      "collision": false,
+      "layout": [
+        1800,
+        1670.641002783904
+      ],
+      "packs": 2,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-50-default-corner",
+      "zoom": 1,
+      "minimum": 0.2525976552094629,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 15,
+      "instanceCap": 450,
+      "periodExposure": [
+        0.21666666666666667,
+        0.5051953104189258
+      ],
+      "intersectingPeriods": 4,
+      "collision": false,
+      "layout": [
+        1800,
+        1670.641002783904
+      ],
+      "packs": 2,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-50-maximum-origin",
+      "zoom": 2.4,
+      "minimum": 0.2525976552094629,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 2,
+      "instanceCap": 450,
+      "periodExposure": [
+        0.09027777777777778,
+        0.2104980460078858
+      ],
+      "intersectingPeriods": 1,
+      "collision": false,
+      "layout": [
+        1800,
+        1670.641002783904
+      ],
+      "packs": 2,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-50-maximum-horizontal",
+      "zoom": 2.4,
+      "minimum": 0.2525976552094629,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 6,
+      "instanceCap": 450,
+      "periodExposure": [
+        0.09027777777777778,
+        0.2104980460078858
+      ],
+      "intersectingPeriods": 2,
+      "collision": false,
+      "layout": [
+        1800,
+        1670.641002783904
+      ],
+      "packs": 2,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-50-maximum-vertical",
+      "zoom": 2.4,
+      "minimum": 0.2525976552094629,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 6,
+      "instanceCap": 450,
+      "periodExposure": [
+        0.09027777777777778,
+        0.2104980460078858
+      ],
+      "intersectingPeriods": 2,
+      "collision": false,
+      "layout": [
+        1800,
+        1670.641002783904
+      ],
+      "packs": 2,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-50-maximum-corner",
+      "zoom": 2.4,
+      "minimum": 0.2525976552094629,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 6,
+      "instanceCap": 450,
+      "periodExposure": [
+        0.09027777777777778,
+        0.2104980460078858
+      ],
+      "intersectingPeriods": 4,
+      "collision": false,
+      "layout": [
+        1800,
+        1670.641002783904
+      ],
+      "packs": 2,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-50-loop-zoom-stability",
+      "pass": true
+    },
+    {
+      "label": "mobile-100-minimum-origin",
+      "zoom": 0.2550117332899669,
+      "minimum": 0.2550117332899669,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 184,
+      "instanceCap": 1200,
+      "periodExposure": [
+        0.8496341084835531,
+        2
+      ],
+      "intersectingPeriods": 2,
+      "collision": false,
+      "layout": [
+        1800,
+        1654.8258174464281
+      ],
+      "packs": 3,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-100-minimum-horizontal",
+      "zoom": 0.2550117332899669,
+      "minimum": 0.2550117332899669,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 210,
+      "instanceCap": 1200,
+      "periodExposure": [
+        0.8496341084835531,
+        2
+      ],
+      "intersectingPeriods": 6,
+      "collision": false,
+      "layout": [
+        1800,
+        1654.8258174464281
+      ],
+      "packs": 3,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-100-minimum-vertical",
+      "zoom": 0.2550117332899669,
+      "minimum": 0.2550117332899669,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 181,
+      "instanceCap": 1200,
+      "periodExposure": [
+        0.8496341084835531,
+        2
+      ],
+      "intersectingPeriods": 6,
+      "collision": false,
+      "layout": [
+        1800,
+        1654.8258174464281
+      ],
+      "packs": 3,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-100-minimum-corner",
+      "zoom": 0.2550117332899669,
+      "minimum": 0.2550117332899669,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 210,
+      "instanceCap": 1200,
+      "periodExposure": [
+        0.8496341084835531,
+        2
+      ],
+      "intersectingPeriods": 6,
+      "collision": false,
+      "layout": [
+        1800,
+        1654.8258174464281
+      ],
+      "packs": 3,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-100-default-origin",
+      "zoom": 1,
+      "minimum": 0.2550117332899669,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 20,
+      "instanceCap": 900,
+      "periodExposure": [
+        0.21666666666666667,
+        0.5100234665799338
+      ],
+      "intersectingPeriods": 1,
+      "collision": false,
+      "layout": [
+        1800,
+        1654.8258174464281
+      ],
+      "packs": 3,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-100-default-horizontal",
+      "zoom": 1,
+      "minimum": 0.2550117332899669,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 28,
+      "instanceCap": 900,
+      "periodExposure": [
+        0.21666666666666667,
+        0.5100234665799338
+      ],
+      "intersectingPeriods": 2,
+      "collision": false,
+      "layout": [
+        1800,
+        1654.8258174464281
+      ],
+      "packs": 3,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-100-default-vertical",
+      "zoom": 1,
+      "minimum": 0.2550117332899669,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 27,
+      "instanceCap": 900,
+      "periodExposure": [
+        0.21666666666666667,
+        0.5100234665799338
+      ],
+      "intersectingPeriods": 2,
+      "collision": false,
+      "layout": [
+        1800,
+        1654.8258174464281
+      ],
+      "packs": 3,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-100-default-corner",
+      "zoom": 1,
+      "minimum": 0.2550117332899669,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 29,
+      "instanceCap": 900,
+      "periodExposure": [
+        0.21666666666666667,
+        0.5100234665799338
+      ],
+      "intersectingPeriods": 4,
+      "collision": false,
+      "layout": [
+        1800,
+        1654.8258174464281
+      ],
+      "packs": 3,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-100-maximum-origin",
+      "zoom": 2.4,
+      "minimum": 0.2550117332899669,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 3,
+      "instanceCap": 900,
+      "periodExposure": [
+        0.09027777777777778,
+        0.2125097777416391
+      ],
+      "intersectingPeriods": 1,
+      "collision": false,
+      "layout": [
+        1800,
+        1654.8258174464281
+      ],
+      "packs": 3,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-100-maximum-horizontal",
+      "zoom": 2.4,
+      "minimum": 0.2550117332899669,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 6,
+      "instanceCap": 900,
+      "periodExposure": [
+        0.09027777777777778,
+        0.2125097777416391
+      ],
+      "intersectingPeriods": 2,
+      "collision": false,
+      "layout": [
+        1800,
+        1654.8258174464281
+      ],
+      "packs": 3,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-100-maximum-vertical",
+      "zoom": 2.4,
+      "minimum": 0.2550117332899669,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 8,
+      "instanceCap": 900,
+      "periodExposure": [
+        0.09027777777777778,
+        0.2125097777416391
+      ],
+      "intersectingPeriods": 2,
+      "collision": false,
+      "layout": [
+        1800,
+        1654.8258174464281
+      ],
+      "packs": 3,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-100-maximum-corner",
+      "zoom": 2.4,
+      "minimum": 0.2550117332899669,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 6,
+      "instanceCap": 900,
+      "periodExposure": [
+        0.09027777777777778,
+        0.2125097777416391
+      ],
+      "intersectingPeriods": 4,
+      "collision": false,
+      "layout": [
+        1800,
+        1654.8258174464281
+      ],
+      "packs": 3,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-100-loop-zoom-stability",
+      "pass": true
+    },
+    {
+      "label": "mobile-200-minimum-origin",
+      "zoom": 0.31221468564447347,
+      "minimum": 0.31221468564447347,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 275,
+      "instanceCap": 2400,
+      "periodExposure": [
+        0.6939669292603049,
+        1.5943743762157585
+      ],
+      "intersectingPeriods": 2,
+      "collision": false,
+      "layout": [
+        1800,
+        1695.503979587587
+      ],
+      "packs": 4,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-200-minimum-horizontal",
+      "zoom": 0.31221468564447347,
+      "minimum": 0.31221468564447347,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 300,
+      "instanceCap": 2400,
+      "periodExposure": [
+        0.6939669292603049,
+        1.5943743762157585
+      ],
+      "intersectingPeriods": 4,
+      "collision": false,
+      "layout": [
+        1800,
+        1695.503979587587
+      ],
+      "packs": 4,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-200-minimum-vertical",
+      "zoom": 0.31221468564447347,
+      "minimum": 0.31221468564447347,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 254,
+      "instanceCap": 2400,
+      "periodExposure": [
+        0.6939669292603049,
+        1.5943743762157585
+      ],
+      "intersectingPeriods": 3,
+      "collision": false,
+      "layout": [
+        1800,
+        1695.503979587587
+      ],
+      "packs": 4,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-200-minimum-corner",
+      "zoom": 0.31221468564447347,
+      "minimum": 0.31221468564447347,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 303,
+      "instanceCap": 2400,
+      "periodExposure": [
+        0.6939669292603049,
+        1.5943743762157585
+      ],
+      "intersectingPeriods": 6,
+      "collision": false,
+      "layout": [
+        1800,
+        1695.503979587587
+      ],
+      "packs": 4,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-200-default-origin",
+      "zoom": 1,
+      "minimum": 0.31221468564447347,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 36,
+      "instanceCap": 1800,
+      "periodExposure": [
+        0.21666666666666667,
+        0.4977870946698066
+      ],
+      "intersectingPeriods": 1,
+      "collision": false,
+      "layout": [
+        1800,
+        1695.503979587587
+      ],
+      "packs": 4,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-200-default-horizontal",
+      "zoom": 1,
+      "minimum": 0.31221468564447347,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 43,
+      "instanceCap": 1800,
+      "periodExposure": [
+        0.21666666666666667,
+        0.4977870946698066
+      ],
+      "intersectingPeriods": 2,
+      "collision": false,
+      "layout": [
+        1800,
+        1695.503979587587
+      ],
+      "packs": 4,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-200-default-vertical",
+      "zoom": 1,
+      "minimum": 0.31221468564447347,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 47,
+      "instanceCap": 1800,
+      "periodExposure": [
+        0.21666666666666667,
+        0.4977870946698066
+      ],
+      "intersectingPeriods": 2,
+      "collision": false,
+      "layout": [
+        1800,
+        1695.503979587587
+      ],
+      "packs": 4,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-200-default-corner",
+      "zoom": 1,
+      "minimum": 0.31221468564447347,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 48,
+      "instanceCap": 1800,
+      "periodExposure": [
+        0.21666666666666667,
+        0.4977870946698066
+      ],
+      "intersectingPeriods": 4,
+      "collision": false,
+      "layout": [
+        1800,
+        1695.503979587587
+      ],
+      "packs": 4,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-200-maximum-origin",
+      "zoom": 2.4,
+      "minimum": 0.31221468564447347,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 7,
+      "instanceCap": 1800,
+      "periodExposure": [
+        0.09027777777777778,
+        0.20741128944575274
+      ],
+      "intersectingPeriods": 1,
+      "collision": false,
+      "layout": [
+        1800,
+        1695.503979587587
+      ],
+      "packs": 4,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-200-maximum-horizontal",
+      "zoom": 2.4,
+      "minimum": 0.31221468564447347,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 11,
+      "instanceCap": 1800,
+      "periodExposure": [
+        0.09027777777777778,
+        0.20741128944575274
+      ],
+      "intersectingPeriods": 2,
+      "collision": false,
+      "layout": [
+        1800,
+        1695.503979587587
+      ],
+      "packs": 4,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-200-maximum-vertical",
+      "zoom": 2.4,
+      "minimum": 0.31221468564447347,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 14,
+      "instanceCap": 1800,
+      "periodExposure": [
+        0.09027777777777778,
+        0.20741128944575274
+      ],
+      "intersectingPeriods": 2,
+      "collision": false,
+      "layout": [
+        1800,
+        1695.503979587587
+      ],
+      "packs": 4,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-200-maximum-corner",
+      "zoom": 2.4,
+      "minimum": 0.31221468564447347,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 14,
+      "instanceCap": 1800,
+      "periodExposure": [
+        0.09027777777777778,
+        0.20741128944575274
+      ],
+      "intersectingPeriods": 4,
+      "collision": false,
+      "layout": [
+        1800,
+        1695.503979587587
+      ],
+      "packs": 4,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-200-loop-zoom-stability",
+      "pass": true
+    },
+    {
+      "label": "mobile-50-50-minimum-origin",
+      "zoom": 0.2532471044185367,
+      "minimum": 0.2532471044185367,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 180,
+      "instanceCap": 1200,
+      "periodExposure": [
+        0.8555543691768565,
+        2
+      ],
+      "intersectingPeriods": 2,
+      "collision": false,
+      "layout": [
+        1800,
+        1666.3566636583082
+      ],
+      "packs": 5,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-50-50-minimum-horizontal",
+      "zoom": 0.2532471044185367,
+      "minimum": 0.2532471044185367,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 210,
+      "instanceCap": 1200,
+      "periodExposure": [
+        0.8555543691768565,
+        2
+      ],
+      "intersectingPeriods": 6,
+      "collision": false,
+      "layout": [
+        1800,
+        1666.3566636583082
+      ],
+      "packs": 5,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-50-50-minimum-vertical",
+      "zoom": 0.2532471044185367,
+      "minimum": 0.2532471044185367,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 185,
+      "instanceCap": 1200,
+      "periodExposure": [
+        0.8555543691768565,
+        2
+      ],
+      "intersectingPeriods": 6,
+      "collision": false,
+      "layout": [
+        1800,
+        1666.3566636583082
+      ],
+      "packs": 5,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-50-50-minimum-corner",
+      "zoom": 0.2532471044185367,
+      "minimum": 0.2532471044185367,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 210,
+      "instanceCap": 1200,
+      "periodExposure": [
+        0.8555543691768565,
+        2
+      ],
+      "intersectingPeriods": 6,
+      "collision": false,
+      "layout": [
+        1800,
+        1666.3566636583082
+      ],
+      "packs": 5,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-50-50-default-origin",
+      "zoom": 1,
+      "minimum": 0.2532471044185367,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 19,
+      "instanceCap": 900,
+      "periodExposure": [
+        0.21666666666666667,
+        0.5064942088370734
+      ],
+      "intersectingPeriods": 1,
+      "collision": false,
+      "layout": [
+        1800,
+        1666.3566636583082
+      ],
+      "packs": 5,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-50-50-default-horizontal",
+      "zoom": 1,
+      "minimum": 0.2532471044185367,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 27,
+      "instanceCap": 900,
+      "periodExposure": [
+        0.21666666666666667,
+        0.5064942088370734
+      ],
+      "intersectingPeriods": 2,
+      "collision": false,
+      "layout": [
+        1800,
+        1666.3566636583082
+      ],
+      "packs": 5,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-50-50-default-vertical",
+      "zoom": 1,
+      "minimum": 0.2532471044185367,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 20,
+      "instanceCap": 900,
+      "periodExposure": [
+        0.21666666666666667,
+        0.5064942088370734
+      ],
+      "intersectingPeriods": 2,
+      "collision": false,
+      "layout": [
+        1800,
+        1666.3566636583082
+      ],
+      "packs": 5,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-50-50-default-corner",
+      "zoom": 1,
+      "minimum": 0.2532471044185367,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 29,
+      "instanceCap": 900,
+      "periodExposure": [
+        0.21666666666666667,
+        0.5064942088370734
+      ],
+      "intersectingPeriods": 4,
+      "collision": false,
+      "layout": [
+        1800,
+        1666.3566636583082
+      ],
+      "packs": 5,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-50-50-maximum-origin",
+      "zoom": 2.4,
+      "minimum": 0.2532471044185367,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 2,
+      "instanceCap": 900,
+      "periodExposure": [
+        0.09027777777777778,
+        0.21103925368211393
+      ],
+      "intersectingPeriods": 1,
+      "collision": false,
+      "layout": [
+        1800,
+        1666.3566636583082
+      ],
+      "packs": 5,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-50-50-maximum-horizontal",
+      "zoom": 2.4,
+      "minimum": 0.2532471044185367,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 8,
+      "instanceCap": 900,
+      "periodExposure": [
+        0.09027777777777778,
+        0.21103925368211393
+      ],
+      "intersectingPeriods": 2,
+      "collision": false,
+      "layout": [
+        1800,
+        1666.3566636583082
+      ],
+      "packs": 5,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-50-50-maximum-vertical",
+      "zoom": 2.4,
+      "minimum": 0.2532471044185367,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 7,
+      "instanceCap": 900,
+      "periodExposure": [
+        0.09027777777777778,
+        0.21103925368211393
+      ],
+      "intersectingPeriods": 2,
+      "collision": false,
+      "layout": [
+        1800,
+        1666.3566636583082
+      ],
+      "packs": 5,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-50-50-maximum-corner",
+      "zoom": 2.4,
+      "minimum": 0.2532471044185367,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 6,
+      "instanceCap": 900,
+      "periodExposure": [
+        0.09027777777777778,
+        0.21103925368211393
+      ],
+      "intersectingPeriods": 4,
+      "collision": false,
+      "layout": [
+        1800,
+        1666.3566636583082
+      ],
+      "packs": 5,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-50-50-loop-zoom-stability",
+      "pass": true
+    },
+    {
+      "label": "mobile-50-150-minimum-origin",
+      "zoom": 0.2978613393295785,
+      "minimum": 0.2978613393295785,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 238,
+      "instanceCap": 2400,
+      "periodExposure": [
+        0.7274078171888185,
+        1.6736913698821416
+      ],
+      "intersectingPeriods": 2,
+      "collision": false,
+      "layout": [
+        1800,
+        1692.9843047391473
+      ],
+      "packs": 6,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-50-150-minimum-horizontal",
+      "zoom": 0.2978613393295785,
+      "minimum": 0.2978613393295785,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 266,
+      "instanceCap": 2400,
+      "periodExposure": [
+        0.7274078171888185,
+        1.6736913698821416
+      ],
+      "intersectingPeriods": 4,
+      "collision": false,
+      "layout": [
+        1800,
+        1692.9843047391473
+      ],
+      "packs": 6,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-50-150-minimum-vertical",
+      "zoom": 0.2978613393295785,
+      "minimum": 0.2978613393295785,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 258,
+      "instanceCap": 2400,
+      "periodExposure": [
+        0.7274078171888185,
+        1.6736913698821416
+      ],
+      "intersectingPeriods": 3,
+      "collision": false,
+      "layout": [
+        1800,
+        1692.9843047391473
+      ],
+      "packs": 6,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-50-150-minimum-corner",
+      "zoom": 0.2978613393295785,
+      "minimum": 0.2978613393295785,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 270,
+      "instanceCap": 2400,
+      "periodExposure": [
+        0.7274078171888185,
+        1.6736913698821416
+      ],
+      "intersectingPeriods": 6,
+      "collision": false,
+      "layout": [
+        1800,
+        1692.9843047391473
+      ],
+      "packs": 6,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-50-150-default-origin",
+      "zoom": 1,
+      "minimum": 0.2978613393295785,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 35,
+      "instanceCap": 1800,
+      "periodExposure": [
+        0.21666666666666667,
+        0.4985279530574516
+      ],
+      "intersectingPeriods": 1,
+      "collision": false,
+      "layout": [
+        1800,
+        1692.9843047391473
+      ],
+      "packs": 6,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-50-150-default-horizontal",
+      "zoom": 1,
+      "minimum": 0.2978613393295785,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 45,
+      "instanceCap": 1800,
+      "periodExposure": [
+        0.21666666666666667,
+        0.4985279530574516
+      ],
+      "intersectingPeriods": 2,
+      "collision": false,
+      "layout": [
+        1800,
+        1692.9843047391473
+      ],
+      "packs": 6,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-50-150-default-vertical",
+      "zoom": 1,
+      "minimum": 0.2978613393295785,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 35,
+      "instanceCap": 1800,
+      "periodExposure": [
+        0.21666666666666667,
+        0.4985279530574516
+      ],
+      "intersectingPeriods": 2,
+      "collision": false,
+      "layout": [
+        1800,
+        1692.9843047391473
+      ],
+      "packs": 6,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-50-150-default-corner",
+      "zoom": 1,
+      "minimum": 0.2978613393295785,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 46,
+      "instanceCap": 1800,
+      "periodExposure": [
+        0.21666666666666667,
+        0.4985279530574516
+      ],
+      "intersectingPeriods": 4,
+      "collision": false,
+      "layout": [
+        1800,
+        1692.9843047391473
+      ],
+      "packs": 6,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-50-150-maximum-origin",
+      "zoom": 2.4,
+      "minimum": 0.2978613393295785,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 7,
+      "instanceCap": 1800,
+      "periodExposure": [
+        0.09027777777777778,
+        0.20771998044060486
+      ],
+      "intersectingPeriods": 1,
+      "collision": false,
+      "layout": [
+        1800,
+        1692.9843047391473
+      ],
+      "packs": 6,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-50-150-maximum-horizontal",
+      "zoom": 2.4,
+      "minimum": 0.2978613393295785,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 14,
+      "instanceCap": 1800,
+      "periodExposure": [
+        0.09027777777777778,
+        0.20771998044060486
+      ],
+      "intersectingPeriods": 2,
+      "collision": false,
+      "layout": [
+        1800,
+        1692.9843047391473
+      ],
+      "packs": 6,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-50-150-maximum-vertical",
+      "zoom": 2.4,
+      "minimum": 0.2978613393295785,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 9,
+      "instanceCap": 1800,
+      "periodExposure": [
+        0.09027777777777778,
+        0.20771998044060486
+      ],
+      "intersectingPeriods": 2,
+      "collision": false,
+      "layout": [
+        1800,
+        1692.9843047391473
+      ],
+      "packs": 6,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-50-150-maximum-corner",
+      "zoom": 2.4,
+      "minimum": 0.2978613393295785,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 12,
+      "instanceCap": 1800,
+      "periodExposure": [
+        0.09027777777777778,
+        0.20771998044060486
+      ],
+      "intersectingPeriods": 4,
+      "collision": false,
+      "layout": [
+        1800,
+        1692.9843047391473
+      ],
+      "packs": 6,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-50-150-loop-zoom-stability",
+      "pass": true
+    },
+    {
+      "label": "mobile-50-50-50-minimum-origin",
+      "zoom": 0.25,
+      "minimum": 0.25,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 272,
+      "instanceCap": 1800,
+      "periodExposure": [
+        0.8666666666666667,
+        1.9658536756123481
+      ],
+      "intersectingPeriods": 2,
+      "collision": false,
+      "layout": [
+        1800,
+        1717.3200843386282
+      ],
+      "packs": 7,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-50-50-50-minimum-horizontal",
+      "zoom": 0.25,
+      "minimum": 0.25,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 307,
+      "instanceCap": 1800,
+      "periodExposure": [
+        0.8666666666666667,
+        1.9658536756123481
+      ],
+      "intersectingPeriods": 6,
+      "collision": false,
+      "layout": [
+        1800,
+        1717.3200843386282
+      ],
+      "packs": 7,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-50-50-50-minimum-vertical",
+      "zoom": 0.25,
+      "minimum": 0.25,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 306,
+      "instanceCap": 1800,
+      "periodExposure": [
+        0.8666666666666667,
+        1.9658536756123481
+      ],
+      "intersectingPeriods": 6,
+      "collision": false,
+      "layout": [
+        1800,
+        1717.3200843386282
+      ],
+      "packs": 7,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-50-50-50-minimum-corner",
+      "zoom": 0.25,
+      "minimum": 0.25,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 306,
+      "instanceCap": 1800,
+      "periodExposure": [
+        0.8666666666666667,
+        1.9658536756123481
+      ],
+      "intersectingPeriods": 6,
+      "collision": false,
+      "layout": [
+        1800,
+        1717.3200843386282
+      ],
+      "packs": 7,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-50-50-50-default-origin",
+      "zoom": 1,
+      "minimum": 0.25,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 16,
+      "instanceCap": 1350,
+      "periodExposure": [
+        0.21666666666666667,
+        0.49146341890308703
+      ],
+      "intersectingPeriods": 1,
+      "collision": false,
+      "layout": [
+        1800,
+        1717.3200843386282
+      ],
+      "packs": 7,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-50-50-50-default-horizontal",
+      "zoom": 1,
+      "minimum": 0.25,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 27,
+      "instanceCap": 1350,
+      "periodExposure": [
+        0.21666666666666667,
+        0.49146341890308703
+      ],
+      "intersectingPeriods": 2,
+      "collision": false,
+      "layout": [
+        1800,
+        1717.3200843386282
+      ],
+      "packs": 7,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-50-50-50-default-vertical",
+      "zoom": 1,
+      "minimum": 0.25,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 31,
+      "instanceCap": 1350,
+      "periodExposure": [
+        0.21666666666666667,
+        0.49146341890308703
+      ],
+      "intersectingPeriods": 2,
+      "collision": false,
+      "layout": [
+        1800,
+        1717.3200843386282
+      ],
+      "packs": 7,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-50-50-50-default-corner",
+      "zoom": 1,
+      "minimum": 0.25,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 28,
+      "instanceCap": 1350,
+      "periodExposure": [
+        0.21666666666666667,
+        0.49146341890308703
+      ],
+      "intersectingPeriods": 4,
+      "collision": false,
+      "layout": [
+        1800,
+        1717.3200843386282
+      ],
+      "packs": 7,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-50-50-50-maximum-origin",
+      "zoom": 2.4,
+      "minimum": 0.25,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 4,
+      "instanceCap": 1350,
+      "periodExposure": [
+        0.09027777777777778,
+        0.20477642454295295
+      ],
+      "intersectingPeriods": 1,
+      "collision": false,
+      "layout": [
+        1800,
+        1717.3200843386282
+      ],
+      "packs": 7,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-50-50-50-maximum-horizontal",
+      "zoom": 2.4,
+      "minimum": 0.25,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 8,
+      "instanceCap": 1350,
+      "periodExposure": [
+        0.09027777777777778,
+        0.20477642454295295
+      ],
+      "intersectingPeriods": 2,
+      "collision": false,
+      "layout": [
+        1800,
+        1717.3200843386282
+      ],
+      "packs": 7,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-50-50-50-maximum-vertical",
+      "zoom": 2.4,
+      "minimum": 0.25,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 6,
+      "instanceCap": 1350,
+      "periodExposure": [
+        0.09027777777777778,
+        0.20477642454295295
+      ],
+      "intersectingPeriods": 2,
+      "collision": false,
+      "layout": [
+        1800,
+        1717.3200843386282
+      ],
+      "packs": 7,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-50-50-50-maximum-corner",
+      "zoom": 2.4,
+      "minimum": 0.25,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 7,
+      "instanceCap": 1350,
+      "periodExposure": [
+        0.09027777777777778,
+        0.20477642454295295
+      ],
+      "intersectingPeriods": 4,
+      "collision": false,
+      "layout": [
+        1800,
+        1717.3200843386282
+      ],
+      "packs": 7,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-50-50-50-loop-zoom-stability",
+      "pass": true
+    },
+    {
+      "label": "mobile-tap-centers-append-resize",
+      "pass": true,
+      "appendAnchorDriftCSS": 3.604633502749287e-14
+    },
+    {
+      "label": "mobile-landscape-minimum-horizontal",
+      "zoom": 0.25,
+      "minimum": 0.25,
+      "viewport": [
+        844,
+        390
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 290,
+      "instanceCap": 1800,
+      "periodExposure": [
+        1.8755555555555556,
+        0.8796927491758222
+      ],
+      "intersectingPeriods": 6,
+      "collision": false,
+      "layout": [
+        1800,
+        1773.3464342653192
+      ],
+      "packs": 9,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1688,
+        780
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-landscape-minimum-vertical",
+      "zoom": 0.25,
+      "minimum": 0.25,
+      "viewport": [
+        844,
+        390
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 283,
+      "instanceCap": 1800,
+      "periodExposure": [
+        1.8755555555555556,
+        0.8796927491758222
+      ],
+      "intersectingPeriods": 6,
+      "collision": false,
+      "layout": [
+        1800,
+        1773.3464342653192
+      ],
+      "packs": 9,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1688,
+        780
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-landscape-minimum-corner",
+      "zoom": 0.25,
+      "minimum": 0.25,
+      "viewport": [
+        844,
+        390
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 294,
+      "instanceCap": 1800,
+      "periodExposure": [
+        1.8755555555555556,
+        0.8796927491758222
+      ],
+      "intersectingPeriods": 6,
+      "collision": false,
+      "layout": [
+        1800,
+        1773.3464342653192
+      ],
+      "packs": 9,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1688,
+        780
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-landscape-default-horizontal",
+      "zoom": 1,
+      "minimum": 0.25,
+      "viewport": [
+        844,
+        390
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 28,
+      "instanceCap": 1350,
+      "periodExposure": [
+        0.4688888888888889,
+        0.21992318729395555
+      ],
+      "intersectingPeriods": 2,
+      "collision": false,
+      "layout": [
+        1800,
+        1773.3464342653192
+      ],
+      "packs": 9,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1688,
+        780
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-landscape-default-vertical",
+      "zoom": 1,
+      "minimum": 0.25,
+      "viewport": [
+        844,
+        390
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 24,
+      "instanceCap": 1350,
+      "periodExposure": [
+        0.4688888888888889,
+        0.21992318729395555
+      ],
+      "intersectingPeriods": 2,
+      "collision": false,
+      "layout": [
+        1800,
+        1773.3464342653192
+      ],
+      "packs": 9,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1688,
+        780
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-landscape-default-corner",
+      "zoom": 1,
+      "minimum": 0.25,
+      "viewport": [
+        844,
+        390
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 27,
+      "instanceCap": 1350,
+      "periodExposure": [
+        0.4688888888888889,
+        0.21992318729395555
+      ],
+      "intersectingPeriods": 4,
+      "collision": false,
+      "layout": [
+        1800,
+        1773.3464342653192
+      ],
+      "packs": 9,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1688,
+        780
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-landscape-maximum-horizontal",
+      "zoom": 2.4,
+      "minimum": 0.25,
+      "viewport": [
+        844,
+        390
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 9,
+      "instanceCap": 1350,
+      "periodExposure": [
+        0.1953703703703704,
+        0.09163466137248147
+      ],
+      "intersectingPeriods": 2,
+      "collision": false,
+      "layout": [
+        1800,
+        1773.3464342653192
+      ],
+      "packs": 9,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1688,
+        780
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-landscape-maximum-vertical",
+      "zoom": 2.4,
+      "minimum": 0.25,
+      "viewport": [
+        844,
+        390
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 6,
+      "instanceCap": 1350,
+      "periodExposure": [
+        0.1953703703703704,
+        0.09163466137248147
+      ],
+      "intersectingPeriods": 2,
+      "collision": false,
+      "layout": [
+        1800,
+        1773.3464342653192
+      ],
+      "packs": 9,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1688,
+        780
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-landscape-maximum-corner",
+      "zoom": 2.4,
+      "minimum": 0.25,
+      "viewport": [
+        844,
+        390
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 9,
+      "instanceCap": 1350,
+      "periodExposure": [
+        0.1953703703703704,
+        0.09163466137248147
+      ],
+      "intersectingPeriods": 4,
+      "collision": false,
+      "layout": [
+        1800,
+        1773.3464342653192
+      ],
+      "packs": 9,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        1688,
+        780
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-paging-delayed-corner",
+      "zoom": 0.8,
+      "minimum": 0.2525976552094629,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 26,
+      "instanceCap": 450,
+      "periodExposure": [
+        0.2708333333333333,
+        0.6314941380236574
+      ],
+      "intersectingPeriods": 4,
+      "collision": false,
+      "layout": [
+        1800,
+        1670.641002783904
+      ],
+      "packs": 11,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-paging-appended-corner",
+      "zoom": 0.8,
+      "minimum": 0.2532471044185367,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 27,
+      "instanceCap": 900,
+      "periodExposure": [
+        0.2708333333333333,
+        0.6331177610463418
+      ],
+      "intersectingPeriods": 2,
+      "collision": false,
+      "layout": [
+        1800,
+        1666.3566636583082
+      ],
+      "packs": 12,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-paging-complete",
+      "zoom": 0.25,
+      "minimum": 0.25,
+      "viewport": [
+        390,
+        844
+      ],
+      "dpr": 2,
+      "geometry": {
+        "pass": true,
+        "uncoveredArea": 0,
+        "maxGap": 0,
+        "slits": 0
+      },
+      "instances": 298,
+      "instanceCap": 1800,
+      "periodExposure": [
+        0.8666666666666667,
+        1.9037453341138304
+      ],
+      "intersectingPeriods": 6,
+      "collision": false,
+      "layout": [
+        1800,
+        1773.3464342653192
+      ],
+      "packs": 13,
+      "failures": 0,
+      "blackPixels": 0,
+      "raster": [
+        780,
+        1688
+      ],
+      "pass": true
+    },
+    {
+      "label": "mobile-cursor-ownership-and-completion",
+      "pass": true,
+      "requests": {
+        "<first>": 1,
+        "opaque-1": 1,
+        "opaque-2": 1
+      },
+      "maxInFlight": {
+        "<first>": 1,
+        "opaque-1": 1,
+        "opaque-2": 1
+      },
+      "loaded": 150,
+      "appendAnchorDriftCSS": 1.6974316791622679e-13,
+      "productionQueryHook": true,
+      "productionWallShell": false,
+      "adapterOption": "fetchNextPage({cancelRefetch:false})"
+    }
+  ],
+  "consoleErrors": [],
+  "badResponses": [],
+  "network": {
+    "requests": 212,
+    "methods": [
+      "GET"
+    ]
+  },
+  "notTested": [
+    "Production WallShell frontier/completeness ownership and row-band culling",
+    "Production lifecycle / integration (query hook exercised only in isolated adapter)",
+    "Human composition acceptance"
+  ]
+}

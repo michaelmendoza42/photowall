@@ -1,4 +1,13 @@
 stories:
+  e02s01:
+    status: failing
+    note: Planned only; gated by layout proof and plan approval.
+  e02s02:
+    status: failing
+    note: Planned only; depends on e02s01 and layout proof.
+  e02s03:
+    status: failing
+    note: Planned only; depends on e02s01 and e02s02.
   e01s01:
     status: done
     completed_at: "2026-07-29T13:58:49-07:00"

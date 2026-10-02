@@ -1,5 +1,5 @@
 # Glossary
-Last edited: 2026-09-15
+Last edited: 2026-09-20
 Status: Active
 Scope: Shared behavioral and technical terminology for this repository
 Related files: `README.md`, `product/README.md`, `workshop-ideas/README.md`, `system/README.md`, `standards/documentation-model.md`, `standards/documentation-schema.md`
@@ -290,17 +290,17 @@ A rectilinear exact-fill layout that still shows local variation and seam-breaki
 - **Notes:** in Mosaic Lab, obvious single-footprint grid collapse for uniform-input recipes is the opposite of a structured mosaic
 
 ### Album area
-The loose wall region that belongs to exactly one album when the active view resolves to multiple albums.
+The recognizable wall region associated with one album in a grouped view. Under the approved full-coverage mosaic contract, neighboring regions touch and their irregular borders may intermix photos; individual photos retain their source album identity.
 
 - **Lives in:** `docs/product/photo-wall-experience.md`
 - **Why it exists:** gives grouped browsing a stable unit of orientation without turning the wall into hard-boxed sections
 - **Used by:** grouped wall layout, per-album shuffle, signpost targeting, and grouped-browser validation
 - **Change risk:** high — changing it alters how multi-album browsing is spatially understood
 - **Surfaced to users:** yes — users experience the regions directly even if the term stays mostly internal
-- **Notes:** album areas should feel organic/scattered rather than grid-arranged, and a year-wide grouped view still resolves to one album area per child album
+- **Notes:** album areas adjoin without blank gutters or rigid boxes. Each has a stable center anchoring directional navigation, repeated with the same finite map; panning and zooming do not move that center within the canonical arrangement. A year-wide view still has one recognizable area per child album. This is intended behavior; the e02 implementation plan remains gated.
 
 ### Signpost label
-The contextual directional label that appears only on navigational intent in grouped mode and points toward an album area.
+The contextual directional label that appears only on navigational intent in grouped mode and points toward an album area's stable center, using the appropriate repeated map instance across wrap boundaries.
 
 - **Lives in:** `docs/product/photo-wall-experience.md`
 - **Why it exists:** preserves the minimal default wall while still helping users relocate offscreen album areas when grouped browsing is active
@@ -673,6 +673,9 @@ Short definition.
 - `standards/documentation-schema.md`
 
 ## Changelog
+
+### 2026-09-20
+- Aligned Album area and Signpost label with the approved adjoining-region, irregular-border and center-anchored navigation contract; distinguished intended behavior from the gated e02 implementation.
 
 ### 2026-09-15
 - Defined mobile fling and distinguished it from desktop wheel momentum, with links to shared implementation and behavior.

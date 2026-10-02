@@ -1,0 +1,95 @@
+feature_name: full-coverage-looping-mosaic
+status: approved-problem-specification
+approved_by: Michael
+approval_source: >-
+  Elaborate-spec dialogue in this session, confirmed on 2026-09-19 with
+  "yep sounds good" after the five-point specification summary.
+implementation_status: not-started
+problem_statement: >-
+  The current wall can show a narrow vertical photo region with wide blank
+  sides. The desired experience is a full-window mosaic that repeats seamlessly
+  in both axes at every supported pan position and zoom level. This applies to
+  both single-album and grouped views, while preserving recognizable album
+  regions and navigation toward their centers. The screenshot demonstrates the
+  symptom; the packing algorithm versus repeat-rendering root cause is not yet
+  established.
+actors:
+  - Michael browsing photo albums on desktop and mobile through the local/LAN app.
+main_flow:
+  - Open a single album or a selection containing multiple albums.
+  - Browse a mosaic that covers the entire viewport without layout-created gaps.
+  - Pan in any direction through seamless horizontal and vertical repeats.
+  - Zoom out for a useful overview, stopping at a finite minimum zoom.
+  - Use directional signposts to navigate toward album-region centers.
+  - Open a photo and return to the same browsing context using existing controls.
+in_scope:
+  - Full viewport coverage in single-album and grouped multi-album views.
+  - Stable finite mosaic repeated seamlessly along both axes, including corners.
+  - Adjoining album regions with irregular, intermingled borders and no blank gutters.
+  - Album-centered directional navigation across repeated copies of the map.
+  - Repetition of existing photos when exposed viewport area exceeds the base mosaic.
+  - Bounded zoom-out that preserves a useful overview without excessive duplication.
+constraints:
+  - Optimize for friendly inputs, typically albums with at least 50 photos; this is not a new minimum-album-size validation rule.
+  - For an unchanged selection and loaded photo set, panning and zooming must not reshuffle the map or its album centers.
+  - Preserve existing dynamic loading; returning through a loop must not itself generate a new arrangement.
+  - Preserve existing photo opening, gesture navigation, signpost visibility rules, and modest cropping policy.
+  - Column-first styling is subordinate to full coverage; it must not create empty side bands.
+  - Fill layout-created empty space with repeated mosaic content, not blank gutters or background.
+  - The zoom limit must be finite and consistent across zoom inputs; an effectively unlimited or ten-copy overview is not acceptable.
+  - Exact minimum zoom and repeat-density tuning are delegated implementation choices, not a fixed 2x or 4x promise.
+out_of_scope:
+  - Rigid rectangular album boxes or perfectly bounded album borders.
+  - Reshuffling photos as the user pans, zooms, or crosses a wrap boundary.
+  - Infinite zoom-out or an infinitely generated world.
+  - Flattening selected albums into an undifferentiated mixture without recognizable regions.
+  - Unrelated redesign of controls, focused-photo view, filters, playlists, or mobile fling behavior.
+  - Special optimization for pathological inputs or very small albums in this initiative.
+key_decisions:
+  - decision: Apply full coverage to all browsing views while retaining album areas.
+    rationale: Michael explicitly selected all views with preserved album areas.
+  - decision: Album regions touch, with irregular and potentially intermingled borders.
+    rationale: Michael prefers messy boundaries over separated islands or rigid blocks.
+  - decision: Directional signposts are anchored to each album region's center.
+    rationale: Album centers provide stable destinations even when borders are irregular.
+  - decision: Repeat the same arrangement exactly in both axes.
+    rationale: Michael confirmed stable repetition to preserve spatial navigation.
+  - decision: Duplicate photos as needed to fill exposed viewport area.
+    rationale: Repeated content is preferable to black layout space at wider overviews.
+  - decision: Choose a reasonable finite zoom-out limit through implementation judgment and visual validation.
+    rationale: Michael withdrew literal copy-count and 2x/4x descriptions, delegated tuning, and rejected zooming out to ten copies.
+success_criteria:
+  - id: coverage
+    given: A loaded single-album or grouped selection with representative 50-plus-photo albums.
+    when: The user pans horizontally, vertically, and diagonally at each supported zoom, including minimum zoom.
+    then: Photo-tile geometry covers the viewport without blank side bands, gutters, or wrap-corner holes.
+  - id: stable-wrap
+    given: An unchanged selection and loaded photo set.
+    when: The user travels one full map period horizontally or vertically and returns to the equivalent location.
+    then: The same photos and album regions appear in the same arrangement, without a visible jump or reshuffle.
+  - id: album-regions
+    given: Multiple selected albums.
+    when: The user browses across an album boundary or follows a directional signpost.
+    then: Adjoining regions remain recognizable without empty separators, and navigation targets the destination album's center.
+  - id: bounded-overview
+    given: A loaded mosaic on a supported desktop or mobile viewport.
+    when: The user repeatedly attempts to zoom out beyond the supported minimum.
+    then: Zoom stops at a finite useful overview, coverage remains complete, and the map does not shrink into excessive repeated copies.
+  - id: preserved-photo-opening
+    given: A visible photo, including a repeated copy.
+    when: The user opens it and closes the focused-photo view.
+    then: The correct photo opens and the existing return-to-wall behavior is preserved.
+validation_expectations:
+  - Protect the behavior with Playwright coverage for single and grouped modes, desktop/mobile aspect ratios, minimum zoom, axis/corner wrapping, and repeated-photo activation.
+  - Distinguish unoccupied layout geometry from naturally dark pixels in photos when testing coverage.
+  - Visually review representative 50-plus-photo albums to judge border composition and the useful overview limit; geometry assertions alone cannot establish visual quality.
+references:
+  - docs/product/photo-wall-experience.md
+  - docs/glossary.md
+next_skill: spike-prototype
+planning_artifacts:
+  scope: specs/product/SCOPE_LATEST.yaml
+  impact: specs/IMPACT_LATEST.md
+  capsule: specs/epics/e02-full-coverage-looping-mosaic/epic.yaml
+  plan: specs/epics/e02-full-coverage-looping-mosaic/PLAN.md
+planning_gate: Layout proof and composition review required before production implementation.

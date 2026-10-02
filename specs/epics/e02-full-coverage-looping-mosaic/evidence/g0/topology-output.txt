@@ -1,0 +1,38 @@
+{
+  "cases": 600,
+  "passing": 600,
+  "reducedColumnCases": 24,
+  "maxColumnReduction": 2,
+  "periodHeightWidthRange": [
+    0.8737316709693354,
+    1.1993111534290957
+  ],
+  "packMilliseconds": {
+    "p95": 2.17272899999989,
+    "max": 11.384206000000177
+  },
+  "knownReviewerRegression": {
+    "counts": [
+      50,
+      50,
+      50,
+      50,
+      50,
+      50
+    ],
+    "seed": 57,
+    "pass": true,
+    "components": [
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+    ],
+    "naturalColumns": 17,
+    "columns": 17,
+    "periodAspect": 0.9466756360711356,
+    "packMilliseconds": 0.6459600000000592
+  }
+}

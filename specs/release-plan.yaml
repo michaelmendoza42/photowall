@@ -1,10 +1,20 @@
 release:
   version: "unreleased"
-  codename: "Large Album Performance"
+  codename: "Full-coverage Looping Mosaic"
   status: planning
   semantic_release: true
-  bump_hint: patch
+  bump_hint: minor
+  active_planning_epic: e02
+  note: "Planning index only; no release or e01 completion reconciliation is implied. Prior index is archived in e01/release-before-e02.yaml."
 epics:
+  - id: e02
+    title: Full-coverage Looping Mosaic
+    wsjf: 6.0
+    wsjf_basis: "Provisional sequencing score for the explicitly requested next initiative, not measured business data."
+    capsule_dir: epics/e02-full-coverage-looping-mosaic
+    total_bcps: 18
+    status: planning
+    implementation_gate: layout-proof-and-plan-approval
   - id: e01
     title: Large Album Performance
     wsjf: 5.0

@@ -1,10 +1,10 @@
 # Photo Wall Experience
 
-Last edited: 2026-09-15
+Last edited: 2026-09-19
 Status: Approved
 Decision owner: Michael
 Drafted by: Pi
-Approved by: Michael via mission /plan handoff on 2026-06-02, follow-up implementation approval for wrap-around navigation on 2026-06-03, anchored hover-preview approval plus midpoint sizing clarification on 2026-06-04, grouped multi-album area/signpost approval during the 2026-06-06 mission kickoff, normal-build Mosaic Lab entry-seam approval during the 2026-06-14 mission kickoff, the 2026-06-26 clarification that Mosaic Lab is a mock photo wall sandbox with sample albums, synthetic photo-like inputs, production-wall reuse, immediate rerender, and deferred saved failure cases, and direct user approval on 2026-07-31 for subtle wheel momentum, sharper configurable thumbnails, mobile drag-release momentum, and reliable tap-to-focus activation; native-style mobile fling approved on 2026-08-01 and further mobile drag/fling improvements explicitly authorized in the 2026-09-15 survey-context follow-up
+Approved by: Michael via mission /plan handoff on 2026-06-02, follow-up implementation approval for wrap-around navigation on 2026-06-03, anchored hover-preview approval plus midpoint sizing clarification on 2026-06-04, grouped multi-album area/signpost approval during the 2026-06-06 mission kickoff, normal-build Mosaic Lab entry-seam approval during the 2026-06-14 mission kickoff, the 2026-06-26 clarification that Mosaic Lab is a mock photo wall sandbox with sample albums, synthetic photo-like inputs, production-wall reuse, immediate rerender, and deferred saved failure cases, and direct user approval on 2026-07-31 for subtle wheel momentum, sharper configurable thumbnails, mobile drag-release momentum, and reliable tap-to-focus activation; native-style mobile fling approved on 2026-08-01 and further mobile drag/fling improvements explicitly authorized in the 2026-09-15 survey-context follow-up; full-coverage stable looping mosaic, adjoining irregular album regions, center-anchored navigation, and bounded overview approved in the 2026-09-19 elaborate-spec dialogue ("yep sounds good")
 Change policy: Do not change without explicit human approval
 Related files: `../../README.md`, `../glossary.md`, `../system/photo-library-source-and-runtime.md`, `README.md`
 
@@ -23,8 +23,8 @@ The MVP is a trusted-LAN, Docker-run app with no auth boundary and no internet-f
 - Photos should be shown large rather than as tiny thumbnail grids.
 - The wall should prioritize a dense, gapless, column-first mosaic over fully uncropped wall tiles.
 - Wall tiles may crop photos when needed to preserve mosaic continuity, but that crop should stay modest rather than flattening every image toward one generic shape.
-- The wall should fit photos together tightly with no intentional gaps between tiles.
-- The wall should read as a column-first mosaic with vertical seams and staggered horizontal breaks rather than as obvious full-width horizontal striping.
+- The wall should fit photos together tightly with no intentional gaps between tiles. In both single-album and grouped views, photo content must cover the entire viewport at every supported pan position and zoom level, without layout-created black side bands, gutters, or wrap-corner gaps.
+- The wall should read as a column-first mosaic with vertical seams and staggered horizontal breaks rather than as obvious full-width horizontal striping. This styling must not constrain content to a narrow vertical region at the expense of full viewport coverage.
 - The wall should support dynamic zoom in and out with a fast broad overview and progressively better image detail as the user moves closer. The initial frame should favor lightweight thumbnail derivatives rather than wait on wall-detail images.
 - Initial and overview thumbnails should use a 512px long-edge target so the wall remains sharp enough to enjoy while browsing; that target must live at one shared tuning point so it is easy to adjust later.
 - Large-album interaction must keep cold derivative work, texture loads, texture retention, layout packing, and camera publication bounded; source changes must produce versioned media URLs so immutable browser caches do not serve stale derivatives.
@@ -34,7 +34,9 @@ The MVP is a trusted-LAN, Docker-run app with no auth boundary and no internet-f
 - Ordinary wheel and trackpad panning should carry a short, subtle inertial tail after input ends. New wheel, pointer, modal, or signpost-glide activity must cancel that tail, and reduced-motion preference must suppress it without removing direct two-axis panning.
 - The wall must also support mouse click-drag panning as a fallback for users without a trackpad, with click activation suppressed after the drag threshold is crossed.
 - Additional photos should load dynamically as the user keeps panning the wall, so the experience does not require the entire library to load up front.
-- The wall should wrap seamlessly at its left/right and top/bottom edges within the currently loaded finite world instead of stopping at hard camera clamps.
+- The wall should wrap seamlessly at its left/right and top/bottom edges within the currently loaded finite world instead of stopping at hard camera clamps. Repeat the same stable mosaic in both axes, including album regions and their centers; panning or zooming must not reshuffle an unchanged selection and loaded photo set.
+- If the viewport exposes more area than the base mosaic occupies, render repeated copies of its photos to maintain full coverage, including while zoomed out.
+- Zoom-out must stop at a finite, useful overview that balances finding photos against tiny tiles and excessive repetition. Literal 2×/4× zoom factors or copy counts are not requirements; the exact limit is delegated tuning, but effectively unlimited zoom-out exposing ten copies is not acceptable. Optimize this experience for friendly album inputs, typically 50+ photos per album, without introducing a minimum-size admission rule.
 - On desktop fine-pointer devices, hovering a photo should open an anchored hover preview for that same photo without destabilizing the surrounding wall layout.
 - The anchored hover preview should render at about the midpoint between that tile’s current rendered size and the eventual focused-photo modal render size for the same photo, stay anchored to the source tile instead of centering in the viewport, and remain preview-only.
 - A photo may softly fade in the first time it becomes visible during the current session to suggest progressive loading, but the same photo should not repeatedly re-fade on every later revisit.
@@ -58,7 +60,8 @@ The MVP is a trusted-LAN, Docker-run app with no auth boundary and no internet-f
 - Folder filtering should reflect the discovered folder structure under the configured library root.
 - When the active view resolves to a single album, the wall should keep the simpler single-album browsing presentation.
 - When the active view resolves to multiple albums, including a year-wide view that expands into multiple child albums, the wall should group photos into one loose area per album.
-- Those album areas should feel organic and scattered rather than arranged into obvious rigid sections, but still clustered enough that the initial grouped overview does not strand the user in large empty stretches away from the selected albums.
+- Album areas must adjoin without blank separators or isolated islands. Their borders should feel organic and irregular, may intermix neighboring albums' photos, and need not form perfectly bounded or rectangular blocks. Preserve recognizable album regions rather than mixing every album throughout one undifferentiated mosaic.
+- Each album region has a stable center that anchors its directional signposts and navigation target, including across repeated map copies. Irregular borders must not make those destinations wander during panning or zooming.
 - In grouped multi-album mode, the wall should keep fetching until each selected album area has actual photos to show rather than leaving later selected albums dark just because the first page skewed toward earlier matches.
 - Photos inside one album area should be stably and thoroughly shuffled for the current view rather than shown in obvious source order.
 - In grouped mode, directional signpost labels should stay hidden by default and only appear when the user shows navigational intent by actively panning/scrolling or moving the pointer into edge-trigger zones.
@@ -79,7 +82,8 @@ The MVP is a trusted-LAN, Docker-run app with no auth boundary and no internet-f
 - Zooming out should favor a fast readable overview over full-detail loading everywhere at once, and zooming in should refine image detail progressively rather than waiting for the whole wall to repopulate.
 - Minor pointer jitter that stays below the drag threshold should still resolve as a click on the hovered photo rather than shifting the wall first.
 - The anchored hover preview should be suppressed while the user is actively dragging the wall and while the focused-photo modal is open.
-- Panning past the right edge should immediately continue from the left side of the currently loaded wall, and vice versa; the same wrap rule applies for top/bottom travel.
+- Panning past the right edge should immediately continue from the left side of the currently loaded wall, and vice versa; the same wrap rule applies for top/bottom travel. With unchanged selection and loaded photos, traveling a full horizontal or vertical period returns to exactly the same arrangement.
+- At the minimum supported zoom on desktop or mobile, additional zoom-out input must stop changing the scale while repeated photo content continues to cover the viewport. Visible repeated copies must still open the correct photo through the existing focused-photo flow.
 - Applying a year or folder filter should narrow the displayed set coherently without leaving stale mixed-result tiles onscreen and without changing the minimal overall framing of the page.
 - Active year/folder selection should persist across a browser reload so the wall reopens in the same filtered context.
 - Opening Controls and choosing Mosaic Lab in the normal build should switch to a clearly synthetic mock photo wall surface, and using the lab return path should take the user back to the real photo wall without ambiguity.
@@ -102,7 +106,7 @@ The MVP is a trusted-LAN, Docker-run app with no auth boundary and no internet-f
 - The previously sketched diagonal-scroll motion model that re-randomized on scroll-direction reversal; the MVP uses true 2D panning rather than vertical scrolling with a drifting diagonal.
 - Auth, accounts, sharing, or internet-facing deployment.
 - Hardening for hostile networks; the MVP is trusted-LAN-only.
-- A truly unbounded or infinitely generated 2D world.
+- A truly unbounded or infinitely generated 2D world, unlimited zoom-out, or reshuffling the arrangement as the user moves.
 - Chrome-heavy gallery UI with persistent panels competing with the photos.
 - Large always-visible navigation, metadata, or management surfaces.
 - A sophisticated playlist authoring model beyond saved filter presets.
@@ -118,6 +122,13 @@ The MVP is a trusted-LAN, Docker-run app with no auth boundary and no internet-f
 - `../standards/testing.md`
 
 ## Changelog
+
+### 2026-09-19
+
+- Recorded the approved full-viewport mosaic and stable horizontal/vertical repetition contract for single and grouped views.
+- Replaced separated/scattered album regions with adjoining irregular regions and center-anchored signpost navigation.
+- Required a finite useful overview limit, with repeat-density tuning delegated rather than fixed to a literal 2×/4× factor; captured the friendly 50+ photo target.
+- This records intended behavior for the next initiative, not an implementation-completion claim.
 
 ### 2026-09-15
 
