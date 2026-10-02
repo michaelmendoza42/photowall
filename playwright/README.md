@@ -1,15 +1,15 @@
 # Playwright browser tests
-Last edited: 2026-07-30
+Last edited: 2026-10-02
 Status: Active
 Related files: `../docs/product/photo-wall-experience.md`, `../docs/system/photo-library-source-and-runtime.md`, `../src/client/README.md`
 
-Browser regression coverage for the wall interaction contract and Mosaic Lab entry seam lives here.
+Browser regression coverage for the wall interaction contract lives here.
 
 ## What this harness does
 
 - regenerates the committed smoke fixtures before boot
 - builds the client and server once per run
-- starts the production-style Fastify app on `http://127.0.0.1:3110`
+- starts the production-style Fastify app on `http://127.0.0.1:5176`
 - points the app at `fixtures/library-smoke`
 - uses an isolated temporary data directory for each run
 - saves screenshots on failure and retains traces on failure
@@ -39,9 +39,11 @@ npm run test:browser
 - `grouped-signposts.spec.ts` — protects grouped signpost reveal, glide, modal suppression, and grouped-selection persistence
 - `zoom-detail-tiers.spec.ts` — protects zoom-aware derivative-tier behavior
 - `media-diagnostics.spec.ts` — proves the real wall advances through browser texture stages, the server observes media outcomes, and neither diagnostic snapshot exposes media identifiers
-- `mosaic-lab-entry-seam.spec.ts` — protects the explicit wall-to-lab entry/return seam, the production-wall renderer contract, the session-local sample-album flow, and the synthetic-media guardrail that keeps `lab:*` ids out of backend `/api/media` requests
 
 ## Changelog
+
+### 2026-10-02
+- Removed the Mosaic Lab entry-seam spec with the feature and corrected the harness port to `5176`.
 
 ### 2026-07-30
 - Generalized the protected-contract index to include the Mosaic Lab browser seam alongside wall behavior.

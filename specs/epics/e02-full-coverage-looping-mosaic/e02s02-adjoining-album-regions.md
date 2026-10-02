@@ -15,7 +15,7 @@ Michael browsing a year or multiple folders on desktop/mobile and following albu
 8 BCP; risk P0. Delivers complete grouped browsing and center navigation end to end. If G0 reveals this cannot stay within one coherent slice, split by demonstrable grouped behavior before coding rather than inventing a models-only story.
 
 ## 4. Preconditions and dependencies
-G0 passed with representative visual approval; e02s01's complete-period/copy-identity proof is available. Scope PW-MOSAIC-02/03/04/06. Album-region geometry is an internal contract shared with Mosaic Lab and signposts.
+G0 passed with representative visual approval; e02s01's complete-period/copy-identity proof is available. Scope PW-MOSAIC-02/03/04/06. Album-region geometry is an internal contract shared with signposts.
 
 ## 5. Main flow
 Select multiple albums → see touching, recognizable regions with irregular borders → browse across a boundary and map seam → reveal a destination signpost → glide toward that album's center → open and close a photo.
@@ -37,7 +37,7 @@ Unequal album sizes, a temporarily delayed album page, a region crossing the map
 **After:** wrapping repeats a complete stable grouped period, maintaining source-photo/album identity and equivalent center geometry.
 
 ## 8. Module purpose, callers, contracts
-`albumAreas.ts`/`groupedWall.ts` derive selected regions and deterministic album shuffle consumed by grouped views, wall shells and Mosaic Lab. `groupedPacker.ts` generates grouped rows for `WallCanvas`. Preserve selection/album keys while replacing separated-footprint assumptions. `signposts.ts`/`signpostNavigation.ts` consume center/world geometry; retain shortest wrapped targeting and suppression rules.
+`albumAreas.ts`/`groupedWall.ts` derive selected regions and deterministic album shuffle consumed by grouped views and wall shells. `groupedPacker.ts` generates grouped rows for `WallCanvas`. Preserve selection/album keys while replacing separated-footprint assumptions. `signposts.ts`/`signpostNavigation.ts` consume center/world geometry; retain shortest wrapped targeting and suppression rules.
 
 ## 9. Implementation direction
 Apply G0's selected shared full-period geometry and local region assignment. Retain deterministic seed/order semantics and modest cropping. Region metadata and rendered photos must share one coordinate system. A torus-crossing album's representative center must not be computed by blindly averaging opposite-edge coordinates into an unrelated album. Avoid global random mixing and independent rectangular album boxes.
@@ -46,7 +46,7 @@ Apply G0's selected shared full-period geometry and local region assignment. Ret
 Every tile keeps the correct source `photoId` and `albumKey`. Repeated source placements retain separate instance keys. Album center metadata describes the canonical region, not whichever copies are currently mounted. No server records or persisted playlist formats change.
 
 ## 11. Boundaries and compatibility
-Retain year/folder filtering, grouped completeness loading, stable shuffle for unchanged loaded inputs, signpost set bounds, dominant-region suppression and modal behavior. Keep the production-layout reuse path for Mosaic Lab; do not make a separate lab-only solution.
+Retain year/folder filtering, grouped completeness loading, stable shuffle for unchanged loaded inputs, signpost set bounds, dominant-region suppression and modal behavior.
 
 ## 12. Failure modes
 Scattered islands survive under repeated copies; one album dominates all fillers; small selected albums vanish; regions become hard stripes/boxes; centers point into unrelated content; wraps choose the wrong long route; duplicate placements inflate dominant-album coverage counts; unloaded albums stall later pages. Protect each with geometry or browser checks and visual review.

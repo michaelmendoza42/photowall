@@ -90,7 +90,7 @@ describe('buildPixiSceneSprites', () => {
           y: 4,
           width: 120,
           height: 80,
-          photoId: 'lab:photo-7',
+          photoId: 'custom:photo-7',
           sourceWidth: 900,
           sourceHeight: 600,
         },
@@ -105,7 +105,7 @@ describe('buildPixiSceneSprites', () => {
         key: 'custom',
         y: 12,
         variant: 'modal',
-        src: 'data:image/svg+xml,lab%3Aphoto-7%3Amodal%3A900x600',
+        src: 'data:image/svg+xml,custom%3Aphoto-7%3Amodal%3A900x600',
       }),
     ]);
   });

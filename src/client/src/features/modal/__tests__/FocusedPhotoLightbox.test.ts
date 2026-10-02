@@ -21,14 +21,14 @@ describe('buildFocusedPhotoLightboxSlide', () => {
     expect(
       buildFocusedPhotoLightboxSlide(
         {
-          id: 'lab:focused-1',
+          id: 'custom:focused-1',
           width: 1200,
           height: 800,
         },
         ({ photo, variant }) => `mock://${photo.id}/${variant}/${photo.width}x${photo.height}`,
       ),
     ).toEqual({
-      src: 'mock://lab:focused-1/modal/1200x800',
+      src: 'mock://custom:focused-1/modal/1200x800',
       alt: '',
       width: 1200,
       height: 800,

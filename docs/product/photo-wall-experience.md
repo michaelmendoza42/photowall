@@ -1,16 +1,16 @@
 # Photo Wall Experience
 
-Last edited: 2026-09-19
+Last edited: 2026-10-02
 Status: Approved
 Decision owner: Michael
 Drafted by: Pi
-Approved by: Michael via mission /plan handoff on 2026-06-02, follow-up implementation approval for wrap-around navigation on 2026-06-03, anchored hover-preview approval plus midpoint sizing clarification on 2026-06-04, grouped multi-album area/signpost approval during the 2026-06-06 mission kickoff, normal-build Mosaic Lab entry-seam approval during the 2026-06-14 mission kickoff, the 2026-06-26 clarification that Mosaic Lab is a mock photo wall sandbox with sample albums, synthetic photo-like inputs, production-wall reuse, immediate rerender, and deferred saved failure cases, and direct user approval on 2026-07-31 for subtle wheel momentum, sharper configurable thumbnails, mobile drag-release momentum, and reliable tap-to-focus activation; native-style mobile fling approved on 2026-08-01 and further mobile drag/fling improvements explicitly authorized in the 2026-09-15 survey-context follow-up; full-coverage stable looping mosaic, adjoining irregular album regions, center-anchored navigation, and bounded overview approved in the 2026-09-19 elaborate-spec dialogue ("yep sounds good")
+Approved by: Michael via mission /plan handoff on 2026-06-02, follow-up implementation approval for wrap-around navigation on 2026-06-03, anchored hover-preview approval plus midpoint sizing clarification on 2026-06-04, grouped multi-album area/signpost approval during the 2026-06-06 mission kickoff, normal-build Mosaic Lab entry-seam approval during the 2026-06-14 mission kickoff, the 2026-06-26 clarification that Mosaic Lab is a mock photo wall sandbox with sample albums, synthetic photo-like inputs, production-wall reuse, immediate rerender, and deferred saved failure cases, and direct user approval on 2026-07-31 for subtle wheel momentum, sharper configurable thumbnails, mobile drag-release momentum, and reliable tap-to-focus activation; native-style mobile fling approved on 2026-08-01 and further mobile drag/fling improvements explicitly authorized in the 2026-09-15 survey-context follow-up; full-coverage stable looping mosaic, adjoining irregular album regions, center-anchored navigation, and bounded overview approved in the 2026-09-19 elaborate-spec dialogue ("yep sounds good"); removal of Mosaic Lab approved on 2026-10-02 ("i never wanted mosaic lab")
 Change policy: Do not change without explicit human approval
 Related files: `../../README.md`, `../glossary.md`, `../system/photo-library-source-and-runtime.md`, `README.md`
 
 ## Behavior summary
 
-`photo-wall` is a minimal web app that turns one configured photo library on the home LAN into a large, immersive browsing wall. The page is dominated by the photos themselves. Filtering, playlist selection, and the focused-photo view exist, but they stay visually secondary to the wall. The normal build still opens on the real wall first, while the controls can also expose a clearly labeled Mosaic Lab entry seam plus a clear return path back to the wall. When opened, Mosaic Lab should behave like a lab-mode mockup of the main photo wall with extra options for synthetic sample albums, generated photo-like inputs, production-wall rerenders, and failure-focused diagnostics rather than like a dashboard-first experiment bench.
+`photo-wall` is a minimal web app that turns one configured photo library on the home LAN into a large, immersive browsing wall. The page is dominated by the photos themselves. Filtering, playlist selection, and the focused-photo view exist, but they stay visually secondary to the wall.
 
 The MVP is a trusted-LAN, Docker-run app with no auth boundary and no internet-facing exposure.
 
@@ -43,19 +43,7 @@ The MVP is a trusted-LAN, Docker-run app with no auth boundary and no internet-f
 - Clicking or tapping a non-dragged photo must reliably open a simple focused-photo modal sized to the browser viewport, with an explicit visible `X` control to close; layout-only row wrappers must never create dead tap regions over visible tiles.
 - Closing the focused-photo modal must return the user to the same wall context they came from.
 - The default interface should stay minimal: just the photo wall plus a small circular menu button.
-- The normal build must open on the real photo wall by default rather than in the Mosaic Lab.
 - Activating the small circular menu button should open a larger menu for filtering and playlist controls.
-- That controls surface must also include a clearly labeled Mosaic Lab entry for synthetic layout evaluation without replacing the wall-first framing of the product.
-- Mosaic Lab content must stay clearly labeled as synthetic/mockup-only and must not imply that full mock albums, production metrics, saved failure cases, or other unfinished lab capabilities already exist.
-- The Mosaic Lab must provide an explicit return path back to the real photo wall.
-- Mosaic Lab should behave like a lab-mode mock photo wall sandbox rather than a dashboard-first analytics page.
-- Inside Mosaic Lab, the primary interaction model should stay wall-first and reuse the production Pixi-first wall layout/rendering path where practical so lab failures map to real wall behavior.
-- Mosaic Lab should let the user create, select, and edit synthetic sample albums plus generated photo-like inputs that cover both normal and pathological cases.
-- Seed, photo count, sample-album selection, and similar geometry-changing options should rerender the lab wall immediately and reset, recenter, or clamp the camera enough to keep synthetic tiles in view.
-- Recipes, seeds, metrics, and diagnostics are support tools for the wall sandbox rather than the primary product metaphor.
-- Diagnostics should summarize actual lab state and production-wall output where available; metrics that are not yet computed from the real wall output must be labeled deferred or not yet measured rather than implied as precise.
-- Saving bad or failing Mosaic Lab cases is deferred from v1.
-- Uniform-input Mosaic Lab scenarios such as all-landscape or all-portrait sample albums should still resolve to structured mosaics rather than trivial repeated grids; obvious grid collapse counts as lab failure.
 - Filtering must support **year** and **folder** for the MVP.
 - Folder filtering should reflect the discovered folder structure under the configured library root.
 - When the active view resolves to a single album, the wall should keep the simpler single-album browsing presentation.
@@ -86,10 +74,6 @@ The MVP is a trusted-LAN, Docker-run app with no auth boundary and no internet-f
 - At the minimum supported zoom on desktop or mobile, additional zoom-out input must stop changing the scale while repeated photo content continues to cover the viewport. Visible repeated copies must still open the correct photo through the existing focused-photo flow.
 - Applying a year or folder filter should narrow the displayed set coherently without leaving stale mixed-result tiles onscreen and without changing the minimal overall framing of the page.
 - Active year/folder selection should persist across a browser reload so the wall reopens in the same filtered context.
-- Opening Controls and choosing Mosaic Lab in the normal build should switch to a clearly synthetic mock photo wall surface, and using the lab return path should take the user back to the real photo wall without ambiguity.
-- Selecting one sample album should exercise single-wall behavior, while selecting multiple sample albums should exercise grouped album-area behavior through the same production grouping path.
-- Creating, editing, or selecting a Mosaic Lab sample album — including seed, count, and mix changes — should rerender the wall immediately and leave synthetic tiles visible after the camera resets, recenters, or clamps.
-- A uniform-input Mosaic Lab scenario such as an all-landscape or all-portrait sample album should still show varied placement structure even when the generated source mix is narrow.
 - A grouped year-wide view should resolve into one album area per child album rather than one long sequential stream.
 - In grouped mode, a multi-folder selection should give each selected folder its own album area rather than blending both folders into one undifferentiated run, and reloading the page should preserve that grouped selection.
 - Signpost labels should not appear while the user is idle in the middle of the viewport, but should appear after scroll/pan intent or edge-intent pointer movement.
@@ -110,7 +94,6 @@ The MVP is a trusted-LAN, Docker-run app with no auth boundary and no internet-f
 - Chrome-heavy gallery UI with persistent panels competing with the photos.
 - Large always-visible navigation, metadata, or management surfaces.
 - A sophisticated playlist authoring model beyond saved filter presets.
-- Presenting Mosaic Lab as a finished production feature area with real-library-backed mock albums, finalized metrics, saved failure cases, or other unbuilt lab tooling before those capabilities actually exist.
 - Final visual specifics of the focused-photo modal beyond its viewport-sized framing and explicit `X` close control.
 
 ## Related docs
@@ -122,6 +105,10 @@ The MVP is a trusted-LAN, Docker-run app with no auth boundary and no internet-f
 - `../standards/testing.md`
 
 ## Changelog
+
+### 2026-10-02
+
+- Removed Mosaic Lab: its controls entry, sandbox behavior, sample-album scenarios and related non-goal. The wall is the app's only surface.
 
 ### 2026-09-19
 
