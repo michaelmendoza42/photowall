@@ -1,5 +1,5 @@
 # Glossary
-Last edited: 2026-07-30
+Last edited: 2026-09-15
 Status: Active
 Scope: Shared behavioral and technical terminology for this repository
 Related files: `README.md`, `product/README.md`, `workshop-ideas/README.md`, `system/README.md`, `standards/documentation-model.md`, `standards/documentation-schema.md`
@@ -39,6 +39,9 @@ Durable source-of-truth documentation that humans and agents can rely on repeate
 
 ### Product docs
 Documentation in `docs/product/` that records intended product behavior, shared language, rules, and invariants.
+
+### Mobile fling
+Velocity-responsive continuation after a single-finger wall drag (also called touch momentum). Slow releases stop promptly; fast flicks coast farther. The shared `dragMomentum.ts` / `usePanMomentum.ts` implementation decelerates in screen space so zoom does not change the feel. Distinct from the deliberately subtle desktop wheel tail. Governing behavior: `product/photo-wall-experience.md`.
 
 ### Photo wall
 The core product surface in this repo: a large, minimal, gapless web page of photos sourced from a configured directory.
@@ -670,6 +673,9 @@ Short definition.
 - `standards/documentation-schema.md`
 
 ## Changelog
+
+### 2026-09-15
+- Defined mobile fling and distinguished it from desktop wheel momentum, with links to shared implementation and behavior.
 
 ### 2026-07-30
 - Localized the glossary scope and governance terminology to this repository and removed the reusable scaffold-target term.
