@@ -1,11 +1,10 @@
 import { useEffect, type MutableRefObject, type RefObject } from "react";
+import { pinchZoom } from "./zoomInput.js";
 
 export function useTouchPinchZoom(
 	containerRef: RefObject<HTMLElement>,
 	zoomRef: MutableRefObject<number>,
 	setZoom: (zoom: number) => void,
-	minZoom: number,
-	maxZoom: number,
 	onPinchStart?: () => void,
 ): void {
 	useEffect(() => {
@@ -28,12 +27,9 @@ export function useTouchPinchZoom(
 				onPinchStart?.();
 			}
 			if (previousDistance && nextDistance > 0) {
-				const nextZoom = Math.min(
-					maxZoom,
-					Math.max(
-						minZoom,
-						zoomRef.current * (nextDistance / previousDistance),
-					),
+				const nextZoom = pinchZoom(
+					zoomRef.current,
+					nextDistance / previousDistance,
 				);
 				if (nextZoom !== zoomRef.current) {
 					zoomRef.current = nextZoom;
@@ -53,5 +49,5 @@ export function useTouchPinchZoom(
 			element.removeEventListener("touchend", reset);
 			element.removeEventListener("touchcancel", reset);
 		};
-	}, [containerRef, maxZoom, minZoom, onPinchStart, setZoom, zoomRef]);
+	}, [containerRef, onPinchStart, setZoom, zoomRef]);
 }

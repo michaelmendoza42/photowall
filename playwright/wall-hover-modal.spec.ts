@@ -1,3 +1,4 @@
+import { HOVER_POP_SCALE } from '../src/client/src/features/wall/hoverPreview.js';
 import { expect, test, type Locator, type Page, type TestInfo } from '@playwright/test';
 
 test.describe('photo wall hover / click / modal contract', () => {
@@ -22,7 +23,7 @@ test.describe('photo wall hover / click / modal contract', () => {
     expect(consoleErrors).toEqual([]);
   });
 
-  test('hover shows an anchored preview halfway between the current tile and focused modal sizes', async ({
+  test('hover pops the photo out slightly above its neighbors with a drop shadow', async ({
     page,
   }, testInfo: TestInfo) => {
     const shell = page.getByTestId('wall-shell');
@@ -39,8 +40,15 @@ test.describe('photo wall hover / click / modal contract', () => {
     await expect(preview).toHaveAttribute('data-photo-id', photoId);
     await expect(page.getByTestId('wall-hover-preview-image')).toHaveAttribute(
       'src',
-      new RegExp(`${encodeURIComponent(photoId)}\\?variant=modal`),
+      new RegExp(`${encodeURIComponent(photoId)}\\?variant=`),
     );
+    // Lifted above the wall: casts a shadow and sits over the canvas.
+    const lift = await preview.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return { boxShadow: style.boxShadow, zIndex: Number(style.zIndex) };
+    });
+    expect(lift.boxShadow).not.toBe('none');
+    expect(lift.zIndex).toBeGreaterThan(0);
 
     const hoverScreenshotPath = testInfo.outputPath('wall-hover-preview.png');
     await page.screenshot({ path: hoverScreenshotPath, fullPage: false });
@@ -49,6 +57,10 @@ test.describe('photo wall hover / click / modal contract', () => {
       contentType: 'image/png',
     });
 
+    // Wait for the pop animation to settle before measuring.
+    await expect
+      .poll(() => preview.evaluate((element) => element.getAnimations().length))
+      .toBe(0);
     const previewBox = await requiredBox(preview);
     const tileBox = await requiredBox(tile);
 
@@ -62,7 +74,6 @@ test.describe('photo wall hover / click / modal contract', () => {
 
     const modalImage = page.getByTestId('focused-photo-image');
     await expect(modalImage).toBeVisible();
-    const modalBox = await requiredBox(modalImage);
 
     const focusedScreenshotPath = testInfo.outputPath('focused-photo-open.png');
     await page.screenshot({ path: focusedScreenshotPath, fullPage: false });
@@ -71,8 +82,14 @@ test.describe('photo wall hover / click / modal contract', () => {
       contentType: 'image/png',
     });
 
-    expect(Math.abs(previewBox.width - (tileBox.width + modalBox.width) / 2)).toBeLessThanOrEqual(8);
-    expect(Math.abs(previewBox.height - (tileBox.height + modalBox.height) / 2)).toBeLessThanOrEqual(8);
+    // A small pop around the tile's own center, not an enlarged preview.
+    expect(previewBox.width / tileBox.width).toBeCloseTo(HOVER_POP_SCALE, 1);
+    expect(previewBox.height / tileBox.height).toBeCloseTo(HOVER_POP_SCALE, 1);
+    // It grows over the tile (nudged inward at viewport edges), never away from it.
+    expect(previewBox.x).toBeLessThanOrEqual(tileBox.x + 1);
+    expect(previewBox.y).toBeLessThanOrEqual(tileBox.y + 1);
+    expect(previewBox.x + previewBox.width).toBeGreaterThanOrEqual(tileBox.x + tileBox.width - 1);
+    expect(previewBox.y + previewBox.height).toBeGreaterThanOrEqual(tileBox.y + tileBox.height - 1);
   });
 
   test('sub-threshold pointer jitter still opens the correct focused-photo modal', async ({

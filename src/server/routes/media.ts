@@ -20,7 +20,7 @@ import {
 import { registerMediaDiagnosticsRoute } from './media-diagnostics.js';
 
 const QuerySchema = z.object({
-  variant: z.enum(['thumb', 'wall', 'modal']).default('wall'),
+  variant: z.enum(['thumb', 'wall', 'modal', 'detail']).default('wall'),
   format: z.enum(['webp', 'jpeg']).default(DEFAULT_MEDIA_FORMAT),
 });
 
@@ -138,6 +138,10 @@ export async function registerMediaRoutes(
         outcome.fromCache ? 'hit' : 'miss',
       );
       reply.header('X-Photo-Wall-Variant', variant);
+      reply.header(
+        'Server-Timing',
+        `media;dur=${(performance.now() - startedAt).toFixed(1)};desc="${outcome.fromCache ? 'hit' : 'miss'}"`,
+      );
       reply.code(200);
 
       const stream = createReadStream(outcome.filePath);

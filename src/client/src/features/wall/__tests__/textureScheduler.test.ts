@@ -90,3 +90,45 @@ describe('TextureLoadScheduler', () => {
     expect(destroyed).toEqual(['old', 'new']);
   });
 });
+
+describe('TextureLoadScheduler.dropQueuedExcept', () => {
+  it('rejects queued loads that are no longer wanted and never starts them', async () => {
+    const scheduler = new TextureLoadScheduler<string>(1);
+    let releaseFirst!: () => void;
+    const first = scheduler.load('running', () => new Promise<string>((resolve) => {
+      releaseFirst = () => resolve('running');
+    }));
+    const started: string[] = [];
+    const stale = scheduler.load('stale', async () => { started.push('stale'); return 'stale'; });
+    const kept = scheduler.load('kept', async () => { started.push('kept'); return 'kept'; });
+
+    scheduler.dropQueuedExcept(new Set(['running', 'kept']));
+    await expect(stale).rejects.toThrow(/superseded/);
+
+    releaseFirst();
+    await expect(first).resolves.toBe('running');
+    await expect(kept).resolves.toBe('kept');
+    expect(started).toEqual(['kept']);
+    expect(scheduler.getMetrics()).toEqual({ active: 0, queued: 0, pending: 0 });
+  });
+});
+
+describe('evictInactiveTextures byte budget', () => {
+  it('evicts least-recently-used inactive textures until under the byte budget', () => {
+    const destroyed: string[] = [];
+    const texture = (name: string, bytes: number) => ({ name, bytes, destroy: () => destroyed.push(name) });
+    const cache = new Map([
+      ['old-big', texture('old-big', 60)],
+      ['active-big', texture('active-big', 60)],
+      ['new-small', texture('new-small', 10)],
+    ]);
+
+    evictInactiveTextures(cache, new Set(['active-big']), 10, (t) => t.destroy(), {
+      maxBytes: 100,
+      sizeOf: (t) => t.bytes,
+    });
+
+    expect([...cache.keys()]).toEqual(['active-big', 'new-small']);
+    expect(destroyed).toEqual(['old-big']);
+  });
+});

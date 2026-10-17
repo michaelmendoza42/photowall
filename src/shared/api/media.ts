@@ -21,10 +21,10 @@ export function mediaResourcePath(
   return sourceVersion === undefined ? base : `${base}&v=${encodeURIComponent(String(sourceVersion))}`;
 }
 
-/** Variants the MVP exposes. Keep narrow — broader variants are deferred. */
-export type MediaVariant = 'thumb' | 'wall' | 'modal';
+/** Variants, smallest to largest. `detail` serves zoomed-in wall tiles. */
+export type MediaVariant = 'thumb' | 'wall' | 'modal' | 'detail';
 
-export const MEDIA_VARIANT_VALUES: readonly MediaVariant[] = ['thumb', 'wall', 'modal'];
+export const MEDIA_VARIANT_VALUES: readonly MediaVariant[] = ['thumb', 'wall', 'modal', 'detail'];
 
 /** Output formats. webp is the default; jpeg is the universal fallback. */
 export type MediaFormat = 'webp' | 'jpeg';
@@ -54,12 +54,14 @@ export interface MediaVariantSpec {
  * their long-edge targets balance typical 1× to 2× display sizes against
  * initial bandwidth. Keep thumbnail resolution changes centralized through
  * `THUMBNAIL_LONG_EDGE_PX`. The modal variant stays under 2k because its frame
- * caps usable area on common displays.
+ * caps usable area on common displays. The detail variant covers the largest
+ * tile at maximum wall zoom on a 2× display.
  */
 export const MEDIA_VARIANT_SPECS: Record<MediaVariant, MediaVariantSpec> = {
   thumb: { variant: 'thumb', longEdge: THUMBNAIL_LONG_EDGE_PX, quality: 72 },
   wall: { variant: 'wall', longEdge: 640, quality: 80 },
   modal: { variant: 'modal', longEdge: 1800, quality: 85 },
+  detail: { variant: 'detail', longEdge: 3200, quality: 82 },
 };
 
 export function mediaContentType(format: MediaFormat): string {

@@ -21,10 +21,12 @@ import {
 } from "./appearanceTracking.js";
 import type { PackerResult } from "./packer.js";
 import { buildWallLayout, type GroupedWallFoundation } from "./groupedWall.js";
-import { computeAnchoredHoverPreviewRect } from "./hoverPreview.js";
+import { computeHoverPopRect } from "./hoverPreview.js";
+import { WallHoverPop } from "./WallHoverPop.js";
 import { PixiWallSurface } from "./PixiWallSurface.js";
 import { WallZoomControls } from "./WallZoomControls.js";
 import { useTouchPinchZoom } from "./useTouchPinchZoom.js";
+import { stepZoom, wheelZoom } from "./zoomInput.js";
 import { useRafCameraPublisher } from "./useRafCameraPublisher.js";
 import { usePanMomentum } from "./usePanMomentum.js";
 import {
@@ -56,6 +58,8 @@ import {
 } from "./mediaSourceResolver.js";
 import {
 	panBy,
+	withViewport,
+	withWorldBounds,
 	panTo,
 	wrapTravelOffset,
 	type CameraState,
@@ -65,9 +69,6 @@ import {
 const FRONTIER_THRESHOLD_PX = 800;
 const SIGNPOST_LINGER_MS = 900;
 const SIGNPOST_GLIDE_MS = 240;
-const MIN_WALL_ZOOM = 0.55;
-const MAX_WALL_ZOOM = 2.4;
-const ZOOM_SENSITIVITY = 0.0036;
 
 export interface WallStats {
 	totalRows: number;
@@ -195,18 +196,31 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
 
 	// Mirror props into refs so wheel/pointer handlers always read the
 	// latest callbacks without forcing rebinds on every state tick.
-	const cameraRef = useRef(camera);
-	useEffect(() => {
-		cameraRef.current = camera;
-	}, [camera]);
 
-	const { publish: publishCamera, flush: flushCamera } =
-		useRafCameraPublisher(onCameraChange);
+	const cameraRef = useRef(camera);
+	const {
+		publish: publishCamera,
+		flush: flushCamera,
+		isEcho: isPublishedCamera,
+	} = useRafCameraPublisher(onCameraChange);
 	const {
 		startWheel: startWheelMomentum,
 		startDrag: startDragMomentum,
 		cancel: cancelPanMomentum,
+		isActive: isPanMomentumActive,
 	} = usePanMomentum({ cameraRef, publishCamera, flushCamera });
+	useEffect(() => {
+		// Our own publishes reach React a frame late; the live ref is already
+		// ahead of them. While a drag or glide is moving the camera, outside
+		// updates (resize, newly loaded rows) only bring new bounds; rebasing
+		// the live position onto them avoids rewinding a frame.
+		if (isPublishedCamera(camera)) return;
+		const live = cameraRef.current;
+		cameraRef.current =
+			dragRef.current || isPanMomentumActive()
+				? withWorldBounds(withViewport(live, camera.viewport), camera.world)
+				: camera;
+	}, [camera, isPanMomentumActive, isPublishedCamera]);
 
 	const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
 	// Mirror the live drag flag into React state so the `data-dragging`
@@ -237,8 +251,6 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
 		containerRef,
 		zoomRef,
 		setZoom,
-		MIN_WALL_ZOOM,
-		MAX_WALL_ZOOM,
 		handlePinchStart,
 	);
 
@@ -583,11 +595,7 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
 			setHoverPreview(null);
 
 			if (event.ctrlKey || event.metaKey) {
-				const nextZoom = clamp(
-					zoomRef.current * Math.exp(-event.deltaY * ZOOM_SENSITIVITY),
-					MIN_WALL_ZOOM,
-					MAX_WALL_ZOOM,
-				);
+				const nextZoom = wheelZoom(zoomRef.current, event.deltaY);
 				if (nextZoom !== zoomRef.current) {
 					zoomRef.current = nextZoom;
 					setZoom(nextZoom);
@@ -620,11 +628,7 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
 	]);
 
 	const changeZoom = useCallback((factor: number) => {
-		const nextZoom = clamp(
-			zoomRef.current * factor,
-			MIN_WALL_ZOOM,
-			MAX_WALL_ZOOM,
-		);
+		const nextZoom = stepZoom(zoomRef.current, factor);
 		if (nextZoom !== zoomRef.current) {
 			zoomRef.current = nextZoom;
 			setZoom(nextZoom);
@@ -815,14 +819,14 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
 			if (!photo) return;
 
 			const tileRect = tileEl.getBoundingClientRect();
-			// Use the real browser viewport here so hover sizing matches the
-			// focused-photo modal contract exactly. The canvas box can diverge
-			// from window dimensions once overlays/debug surfaces enter the page.
+			// Use the real browser viewport so the pop stays on screen. The
+			// canvas box can diverge from window dimensions once overlays or
+			// debug surfaces enter the page.
 			const previewViewport =
 				typeof window === "undefined"
 					? { width: viewportWidth, height: viewportHeight }
 					: { width: window.innerWidth, height: window.innerHeight };
-			const previewRect = computeAnchoredHoverPreviewRect({
+			const previewRect = computeHoverPopRect({
 				viewport: previewViewport,
 				tile: {
 					left: tileRect.left,
@@ -830,7 +834,6 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
 					width: tileRect.width,
 					height: tileRect.height,
 				},
-				photo: { width: photo.width, height: photo.height },
 			});
 
 			if (previewRect.width <= 0 || previewRect.height <= 0) return;
@@ -1023,25 +1026,10 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
 			))}
 
 			{hoverPreview && (
-				<div
-					className="wall-hover-preview"
-					data-testid="wall-hover-preview"
-					data-photo-id={hoverPreview.photo.id}
-					style={hoverPreviewStyle(hoverPreview)}
-				>
-					<img
-						className="wall-hover-preview__img"
-						data-testid="wall-hover-preview-image"
-						data-media-variant="modal"
-						src={resolveWallMediaSource(
-							hoverPreview.photo,
-							"modal",
-							mediaSourceResolver,
-						)}
-						alt=""
-						draggable={false}
-					/>
-				</div>
+				<WallHoverPop
+					preview={hoverPreview}
+					mediaSourceResolver={mediaSourceResolver}
+				/>
 			)}
 		</div>
 	);
@@ -1118,14 +1106,6 @@ function signpostStyle(signpost: VisibleSignpost): React.CSSProperties {
 	return style as React.CSSProperties;
 }
 
-function hoverPreviewStyle(preview: HoverPreviewState): React.CSSProperties {
-	return {
-		width: preview.width,
-		height: preview.height,
-		"--hover-preview-left": `${preview.left}px`,
-		"--hover-preview-top": `${preview.top}px`,
-	} as unknown as React.CSSProperties;
-}
 
 function supportsFinePointerHover(): boolean {
 	if (

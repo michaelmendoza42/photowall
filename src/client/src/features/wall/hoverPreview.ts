@@ -11,8 +11,8 @@ export interface PreviewRect extends PreviewSize {
 export const FOCUSED_PHOTO_PADDING_MIN_PX = 16;
 export const FOCUSED_PHOTO_PADDING_MAX_PX = 40;
 export const FOCUSED_PHOTO_PADDING_VIEWPORT_RATIO = 0.03;
-export const HOVER_PREVIEW_INTERPOLATION = 0.5;
-export const HOVER_PREVIEW_VIEWPORT_MARGIN_PX = 16;
+/** How much a hovered photo pops out of the wall. */
+export const HOVER_POP_SCALE = 1.08;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
@@ -68,38 +68,28 @@ export function computeFocusedPhotoRenderSize(input: {
   );
 }
 
-export function computeAnchoredHoverPreviewRect(input: {
+/**
+ * The hovered photo grows slightly around its own center (2026-10-16: "just
+ * pop out the image a little"). It is nudged back inside the viewport when
+ * the tile fits there, so edge tiles don't pop off-screen.
+ */
+export function computeHoverPopRect(input: {
   viewport: PreviewSize;
   tile: PreviewRect;
-  photo: PreviewSize;
-  interpolation?: number;
-  viewportMarginPx?: number;
+  scale?: number;
 }): PreviewRect {
-  const {
-    viewport,
-    tile,
-    photo,
-    interpolation = HOVER_PREVIEW_INTERPOLATION,
-    viewportMarginPx = HOVER_PREVIEW_VIEWPORT_MARGIN_PX,
-  } = input;
+  const { viewport, tile, scale = HOVER_POP_SCALE } = input;
+  const width = tile.width * scale;
+  const height = tile.height * scale;
+  const left = tile.left - (width - tile.width) / 2;
+  const top = tile.top - (height - tile.height) / 2;
 
-  const modalSize = computeFocusedPhotoRenderSize({ viewport, photo });
-  // 2026-06-04: hover preview size is the midpoint between the tile's
-  // current rendered size and the eventual focused-photo modal size for
-  // the same photo. This prevents regressions back to the earlier
-  // "50% of modal" interpretation, which felt too small on large tiles.
-  const width = tile.width + (modalSize.width - tile.width) * interpolation;
-  const height = tile.height + (modalSize.height - tile.height) * interpolation;
-
-  const idealLeft = tile.left + tile.width / 2 - width / 2;
-  const idealTop = tile.top + tile.height / 2 - height / 2;
-
-  const maxLeft = Math.max(viewportMarginPx, viewport.width - viewportMarginPx - width);
-  const maxTop = Math.max(viewportMarginPx, viewport.height - viewportMarginPx - height);
+  const keepInside = (start: number, size: number, limit: number): number =>
+    size <= limit ? clamp(start, 0, limit - size) : start;
 
   return {
-    left: clamp(idealLeft, viewportMarginPx, maxLeft),
-    top: clamp(idealTop, viewportMarginPx, maxTop),
+    left: keepInside(left, width, viewport.width),
+    top: keepInside(top, height, viewport.height),
     width,
     height,
   };

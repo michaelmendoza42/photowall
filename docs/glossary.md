@@ -82,14 +82,14 @@ The MVP fallback navigation gesture for mice without trackpad wheel input: press
 - **Change risk:** medium — affects both panning feel and accidental-modal-open behavior
 - **Surfaced to users:** yes — directly experienced when click-dragging
 
-### Anchored hover preview
-The larger hover-only photo preview shown on desktop fine-pointer devices. It stays anchored to the source tile, targets about the midpoint between that tile’s current rendered size and that photo’s eventual focused-photo modal render size, and disappears during drag or while the modal is open.
+### Hover pop
+On desktop fine-pointer devices, the hovered photo lifts slightly (about 8% larger) in place over its own tile and casts a drop shadow above its neighbors. It is nudged inward at viewport edges, and it disappears during drag or while the modal is open.
 
 - **Lives in:** `docs/product/photo-wall-experience.md`
-- **Why it exists:** distinguishes the approved hover behavior from both a tiny tile-scale effect and a centered lightbox-like hover overlay
-- **Used by:** wall interaction logic, hover-preview sizing, and browser regression coverage
-- **Change risk:** medium — changing it affects hover sizing, layering, and the click-vs-drag interaction contract
-- **Alias:** hover preview
+- **Why it exists:** gives the flat wall depth on hover without covering neighbors the way a large preview does
+- **Used by:** `WallHoverPop.tsx` (shared by both wall views), `computeHoverPopRect` in `hoverPreview.ts`, and browser regression coverage
+- **Change risk:** low — changing it affects hover feel and layering, not layout
+- **Alias:** hover preview; replaces the earlier anchored hover preview
 - **Surfaced to users:** yes — directly experienced while browsing the wall
 
 ### Focused-photo modal

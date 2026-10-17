@@ -11,6 +11,8 @@ export const WHEEL_MOMENTUM_STRENGTH = 0.08;
 const WHEEL_MOMENTUM_DECAY_PER_FRAME = 0.78;
 const MOMENTUM_MIN_SPEED = 0.12;
 const MOMENTUM_MAX_INITIAL_SPEED = 32;
+/** Touch fling cap in screen px per 60Hz frame (~3.4 px/ms): hard flicks travel a few screens. */
+const FLING_MAX_INITIAL_SPEED = 56;
 
 interface PanMomentumOptions {
 	cameraRef: MutableRefObject<CameraState>;
@@ -22,6 +24,8 @@ interface PanMomentum {
 	startWheel: (delta: CameraDelta) => void;
 	startDrag: (velocityPerFrame: CameraDelta, zoom: number) => void;
 	cancel: () => void;
+	/** True while a wheel tail or touch fling is still moving the camera. */
+	isActive: () => boolean;
 }
 
 /**
@@ -47,7 +51,7 @@ export function usePanMomentum(options: PanMomentumOptions): PanMomentum {
 			if (prefersReducedMotion()) return;
 
 			// Touch caps total screen speed, preserving both direction and zoom feel.
-			const dragScale = Math.min(1, MOMENTUM_MAX_INITIAL_SPEED / (Math.hypot(velocity.dx, velocity.dy) * zoom || 1));
+			const dragScale = Math.min(1, FLING_MAX_INITIAL_SPEED / (Math.hypot(velocity.dx, velocity.dy) * zoom || 1));
 			velocityRef.current = source === "drag" ? {
 				dx: velocity.dx * dragScale, dy: velocity.dy * dragScale,
 			} : {
@@ -116,7 +120,9 @@ export function usePanMomentum(options: PanMomentumOptions): PanMomentum {
 		};
 	}, [cancel]);
 
-	return { startWheel, startDrag, cancel };
+	const isActive = useCallback(() => frameRef.current !== null, []);
+
+	return { startWheel, startDrag, cancel, isActive };
 }
 
 function prefersReducedMotion(): boolean {

@@ -14,7 +14,7 @@ export const BROWSER_MEDIA_DIAGNOSTIC_EVENTS = [
 export type BrowserMediaDiagnosticEvent =
   (typeof BROWSER_MEDIA_DIAGNOSTIC_EVENTS)[number];
 
-const VARIANTS = ['thumb', 'wall', 'modal', 'unknown'] as const;
+const VARIANTS = ['thumb', 'wall', 'modal', 'detail', 'unknown'] as const;
 type DiagnosticVariant = MediaVariant | 'unknown';
 
 export class BrowserMediaDiagnostics {
@@ -139,7 +139,7 @@ export function mediaVariantFromSource(src: string): DiagnosticVariant {
   try {
     const variant = new URL(src, globalThis.location?.origin ?? 'http://localhost')
       .searchParams.get('variant');
-    return variant === 'thumb' || variant === 'wall' || variant === 'modal'
+    return variant === 'thumb' || variant === 'wall' || variant === 'modal' || variant === 'detail'
       ? variant
       : 'unknown';
   } catch {

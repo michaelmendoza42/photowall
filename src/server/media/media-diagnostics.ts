@@ -39,7 +39,7 @@ export class MediaDiagnostics {
   private readonly startedAt: string;
   private requestsTotal = 0;
   private readonly byReason = zeroRecord(MEDIA_DIAGNOSTIC_REASONS);
-  private readonly byVariant = zeroRecord(['thumb', 'wall', 'modal', 'unknown'] as const);
+  private readonly byVariant = zeroRecord(['thumb', 'wall', 'modal', 'detail', 'unknown'] as const);
   private readonly byFormat = zeroRecord(['webp', 'jpeg', 'unknown'] as const);
   private readonly byStatus = zeroRecord(['200', '400', '404', '500', '503'] as const);
   private readonly latencyMs = zeroRecord(LATENCY_BUCKETS);

@@ -1,5 +1,7 @@
 interface QueuedTextureLoad {
+  key: string;
   start: () => void;
+  cancel: () => void;
   priority: number;
   order: number;
 }
@@ -33,7 +35,8 @@ export class TextureLoadScheduler<T> {
       if (this.active < this.maxConcurrentLoads) {
         start();
       } else {
-        this.queued.push({ start, priority, order: this.nextOrder });
+        const cancel = () => reject(new Error('Media texture load superseded'));
+        this.queued.push({ key, start, cancel, priority, order: this.nextOrder });
         this.nextOrder += 1;
         this.queued.sort((left, right) =>
           right.priority - left.priority || left.order - right.order,
@@ -42,6 +45,20 @@ export class TextureLoadScheduler<T> {
     });
     this.pending.set(key, promise);
     return promise;
+  }
+
+  /**
+   * Drop queued (not yet started) loads nobody wants any more, e.g. the
+   * intermediate tiers a pinch zoom passed through. Their promises reject.
+   */
+  dropQueuedExcept(wantedKeys: ReadonlySet<string>): void {
+    for (let index = this.queued.length - 1; index >= 0; index -= 1) {
+      const entry = this.queued[index]!;
+      if (wantedKeys.has(entry.key)) continue;
+      this.queued.splice(index, 1);
+      this.pending.delete(entry.key);
+      entry.cancel();
+    }
   }
 
   getMetrics(): { active: number; queued: number; pending: number } {
@@ -61,18 +78,28 @@ export function collectDisplayedTextureSources(
 
 /**
  * Maps retain insertion order, so touching a URL by moving it to the end makes
- * this a least-recently-used cache. Active sources are never evicted.
+ * this a least-recently-used cache. Active sources are never evicted. With a
+ * byte budget, large zoomed-in textures are also evicted once the cache holds
+ * more than `maxBytes` (as measured by `sizeOf`).
  */
 export function evictInactiveTextures<T extends { destroy: (destroyBase?: boolean) => void }>(
   cache: Map<string, T>,
   activeSources: ReadonlySet<string>,
   maxEntries: number,
   dispose: (texture: T) => void = (texture) => texture.destroy(true),
+  budget?: { maxBytes: number; sizeOf: (texture: T) => number },
 ): void {
+  let totalBytes = 0;
+  if (budget) {
+    for (const texture of cache.values()) totalBytes += budget.sizeOf(texture);
+  }
+  const overBudget = () =>
+    cache.size > maxEntries || (budget !== undefined && totalBytes > budget.maxBytes);
   for (const [src, texture] of cache) {
-    if (cache.size <= maxEntries) return;
+    if (!overBudget()) return;
     if (activeSources.has(src)) continue;
     cache.delete(src);
+    if (budget) totalBytes -= budget.sizeOf(texture);
     dispose(texture);
   }
 }

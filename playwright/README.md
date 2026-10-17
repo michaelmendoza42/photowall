@@ -35,10 +35,11 @@ npm run test:browser
 
 - `wall-layout-modes.spec.ts` — protects the single-stream versus grouped wall-mode contract and the album-area diagnostics the shell exposes for that distinction
 - `single-stream-wrap-continuity.spec.ts` — protects seamless wrap travel and verifies that the Pixi wall does not reinitialize during full-period travel
-- `wall-hover-modal.spec.ts` — protects anchored hover preview sizing, click-vs-drag suppression, and focused-photo return behavior
+- `wall-hover-modal.spec.ts` — protects the hover pop (slight in-place lift with drop shadow), click-vs-drag suppression, and focused-photo return behavior
 - `grouped-signposts.spec.ts` — protects grouped signpost reveal, glide, modal suppression, and grouped-selection persistence
-- `zoom-detail-tiers.spec.ts` — protects zoom-aware derivative-tier behavior
+- `zoom-detail-tiers.spec.ts` — protects zoom-aware derivative tiers: thumbnails at overview, then screen-resolution tiers (at 2× DPR) for on-screen photos when zoomed in, plus the focused view
 - `media-diagnostics.spec.ts` — proves the real wall advances through browser texture stages, the server observes media outcomes, and neither diagnostic snapshot exposes media identifiers
+- `mobile-wall-gestures.spec.ts` — protects mobile drag/fling: velocity-responsive glide, prompt slow-release stop, pause/reduced-motion/catch cancellation, no backward jitter while a fling settles, and tap-to-open
 
 ## Changelog
 

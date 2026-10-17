@@ -1,9 +1,12 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { Application, Container, Sprite, Texture } from 'pixi.js';
 import { Viewport } from 'pixi-viewport';
+import type { MediaVariant } from '../../../../shared/api/media.js';
 import {
   buildPixiSceneSprites,
-  selectPixiSceneVariant,
+  largestOnScreenVariant,
+  variantRank,
+  wallPixelRatio,
   type PixiSceneSprite,
   type PixiSceneTileInput,
 } from './pixiScene.js';
@@ -21,6 +24,8 @@ import {
 } from './textureScheduler.js';
 
 const MAX_TEXTURE_CACHE_ENTRIES = 128;
+/** Zoomed-in tiers are large; cap decoded texture memory, not just count. */
+const MAX_TEXTURE_CACHE_BYTES = 384 * 1024 * 1024;
 const MAX_CONCURRENT_TEXTURE_LOADS = 4;
 
 export interface PixiWallSurfaceProps {
@@ -37,6 +42,7 @@ interface SpriteEntry {
   sprite: Sprite;
   src: string;
   displayedSrc: string | null;
+  displayedVariant: MediaVariant | null;
 }
 
 export const PixiWallSurface = memo(function PixiWallSurface(
@@ -72,11 +78,19 @@ export const PixiWallSurface = memo(function PixiWallSurface(
     [textureScheduler],
   );
 
+  // Draw at the device pixel ratio so high-DPI screens aren't upscaled 2×.
+  const pixelRatio = wallPixelRatio();
   const sprites = useMemo(
-    () => buildPixiSceneSprites(tiles, zoom, mediaSourceResolver),
-    [tiles, zoom, mediaSourceResolver],
+    () =>
+      buildPixiSceneSprites(
+        tiles,
+        zoom,
+        { width: viewportWidth, height: viewportHeight, pixelRatio },
+        mediaSourceResolver,
+      ),
+    [tiles, zoom, viewportWidth, viewportHeight, pixelRatio, mediaSourceResolver],
   );
-  const activeVariant = useMemo(() => selectPixiSceneVariant(zoom), [zoom]);
+  const activeVariant = useMemo(() => largestOnScreenVariant(sprites), [sprites]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -91,6 +105,7 @@ export const PixiWallSurface = memo(function PixiWallSurface(
         backgroundAlpha: 0,
         antialias: true,
         autoDensity: true,
+        resolution: pixelRatio,
         resizeTo: host,
       });
       if (disposed) {
@@ -148,6 +163,7 @@ export const PixiWallSurface = memo(function PixiWallSurface(
     app.renderer.resize(
       Math.max(1, Math.round(viewportWidth || 1)),
       Math.max(1, Math.round(viewportHeight || 1)),
+      pixelRatio,
     );
     viewport.resize(
       Math.max(1, Math.round(viewportWidth || 1)),
@@ -157,7 +173,7 @@ export const PixiWallSurface = memo(function PixiWallSurface(
     );
     viewport.scale.set(zoom, zoom);
     viewport.position.set(0, 0);
-  }, [viewportWidth, viewportHeight, worldWidth, worldHeight, zoom]);
+  }, [viewportWidth, viewportHeight, worldWidth, worldHeight, zoom, pixelRatio]);
 
   useEffect(() => {
     const scene = sceneRef.current;
@@ -186,17 +202,14 @@ export const PixiWallSurface = memo(function PixiWallSurface(
         getActiveSources,
         isDisposed: () => surfaceDisposedRef.current,
         spriteData,
-        priority: -index,
         zIndex: index,
       });
     }
 
-    evictInactiveTextures(
-      textureCacheRef.current,
-      getActiveSources(),
-      MAX_TEXTURE_CACHE_ENTRIES,
-      destroyTextureAfterRender,
-    );
+    const wantedSources = new Set<string>();
+    for (const entry of spriteEntries.values()) wantedSources.add(entry.src);
+    textureScheduler.dropQueuedExcept(wantedSources);
+    evictTextures(textureCacheRef.current, getActiveSources());
     return undefined;
   }, [sceneReady, sprites, textureScheduler]);
 
@@ -220,7 +233,6 @@ function syncSprite(args: {
   getActiveSources: () => Set<string>;
   isDisposed: () => boolean;
   spriteData: PixiSceneSprite;
-  priority: number;
   zIndex: number;
 }): void {
   const {
@@ -231,14 +243,25 @@ function syncSprite(args: {
     getActiveSources,
     isDisposed,
     spriteData,
-    priority,
     zIndex,
   } = args;
+  const { priority } = spriteData;
 
   const current = spriteEntries.get(spriteData.key);
   if (current) {
     applySpriteLayout(current.sprite, spriteData, zIndex);
     if (current.src === spriteData.src) {
+      return;
+    }
+    // Zooming out a little shouldn't swap a sharp on-screen photo for a
+    // softer one; off-screen tiles drop back to thumbnails to free memory.
+    if (
+      spriteData.onScreen &&
+      current.displayedSrc &&
+      current.displayedVariant &&
+      variantRank(current.displayedVariant) >= variantRank(spriteData.variant)
+    ) {
+      current.src = current.displayedSrc;
       return;
     }
 
@@ -248,6 +271,7 @@ function syncSprite(args: {
       touchTexture(textureCache, spriteData.src, cachedTexture);
       current.sprite.texture = cachedTexture;
       current.displayedSrc = spriteData.src;
+      current.displayedVariant = spriteData.variant;
       current.sprite.visible = true;
       browserMediaDiagnostics.record('sprite_applied', spriteData.variant);
       return;
@@ -269,14 +293,10 @@ function syncSprite(args: {
       }
       latest.sprite.texture = texture;
       latest.displayedSrc = spriteData.src;
+      latest.displayedVariant = spriteData.variant;
       latest.sprite.visible = true;
       browserMediaDiagnostics.record('sprite_applied', spriteData.variant);
-      evictInactiveTextures(
-        textureCache,
-        getActiveSources(),
-        MAX_TEXTURE_CACHE_ENTRIES,
-        destroyTextureAfterRender,
-      );
+      evictTextures(textureCache, getActiveSources());
     }).catch(() => undefined);
     return;
   }
@@ -289,6 +309,7 @@ function syncSprite(args: {
     sprite,
     src: spriteData.src,
     displayedSrc: null,
+    displayedVariant: null,
   });
 
   const cachedTexture = textureCache.get(spriteData.src);
@@ -296,7 +317,10 @@ function syncSprite(args: {
     touchTexture(textureCache, spriteData.src, cachedTexture);
     sprite.texture = cachedTexture;
     const entry = spriteEntries.get(spriteData.key);
-    if (entry) entry.displayedSrc = spriteData.src;
+    if (entry) {
+      entry.displayedSrc = spriteData.src;
+      entry.displayedVariant = spriteData.variant;
+    }
     sprite.visible = true;
     browserMediaDiagnostics.record('sprite_applied', spriteData.variant);
     return;
@@ -316,14 +340,10 @@ function syncSprite(args: {
     }
     latest.sprite.texture = texture;
     latest.displayedSrc = spriteData.src;
+    latest.displayedVariant = spriteData.variant;
     latest.sprite.visible = true;
     browserMediaDiagnostics.record('sprite_applied', spriteData.variant);
-    evictInactiveTextures(
-      textureCache,
-      getActiveSources(),
-      MAX_TEXTURE_CACHE_ENTRIES,
-      destroyTextureAfterRender,
-    );
+    evictTextures(textureCache, getActiveSources());
   }).catch(() => undefined);
 }
 
@@ -338,6 +358,20 @@ function applySpriteLayout(
   sprite.height = spriteData.height;
   sprite.zIndex = zIndex;
   sprite.label = `${spriteData.photoId}:${spriteData.variant}`;
+}
+
+function evictTextures(textureCache: Map<string, Texture>, activeSources: Set<string>): void {
+  evictInactiveTextures(
+    textureCache,
+    activeSources,
+    MAX_TEXTURE_CACHE_ENTRIES,
+    destroyTextureAfterRender,
+    { maxBytes: MAX_TEXTURE_CACHE_BYTES, sizeOf: textureBytes },
+  );
+}
+
+function textureBytes(texture: Texture): number {
+  return texture.source.pixelWidth * texture.source.pixelHeight * 4;
 }
 
 function destroyTextureAfterRender(texture: Texture): void {

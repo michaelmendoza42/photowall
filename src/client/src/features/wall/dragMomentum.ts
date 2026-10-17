@@ -4,8 +4,9 @@ const FRAME_MS = 1000 / 60;
 const RELEASE_FRESHNESS_MS = 160;
 const RECENT_SAMPLE_WEIGHT = 0.65;
 const MAX_MOMENTUM_FRAME_DELTA = 4;
-// Screen px/ms²: a 0.1 px/ms drag stops in 40ms; a 1 px/ms flick in 400ms.
-const DRAG_DECELERATION = 0.0025;
+// Screen px/ms²: a 0.1 px/ms drag stops in 50ms (2.5px); a 1 px/ms flick
+// glides 250px over 0.5s; a hard 3.4 px/ms flick ~2,900px over 1.7s.
+const DRAG_DECELERATION = 0.002;
 const SUSPENDED_FRAME_MS = 250;
 
 export interface MomentumStep {

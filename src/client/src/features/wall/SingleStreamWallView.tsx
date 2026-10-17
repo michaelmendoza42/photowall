@@ -15,10 +15,12 @@ import {
 	collectFirstAppearancePhotoIds,
 	rememberSeenPhotoIds,
 } from "./appearanceTracking.js";
-import { computeAnchoredHoverPreviewRect } from "./hoverPreview.js";
+import { computeHoverPopRect } from "./hoverPreview.js";
+import { WallHoverPop } from "./WallHoverPop.js";
 import { PixiWallSurface } from "./PixiWallSurface.js";
 import { WallZoomControls } from "./WallZoomControls.js";
 import { useTouchPinchZoom } from "./useTouchPinchZoom.js";
+import { stepZoom, wheelZoom } from "./zoomInput.js";
 import { useRafCameraPublisher } from "./useRafCameraPublisher.js";
 import { usePanMomentum } from "./usePanMomentum.js";
 import {
@@ -44,14 +46,16 @@ import {
 	resolveWallMediaSource,
 	type WallMediaSourceResolver,
 } from "./mediaSourceResolver.js";
-import { panBy, type CameraState } from "../../state/camera.js";
+import {
+	panBy,
+	withViewport,
+	withWorldBounds,
+	type CameraState,
+} from "../../state/camera.js";
 import type { WallDragState, WallStats } from "./WallCanvas.js";
 
 /** How close the bottom edge must get to the frontier before we fetch. */
 const FRONTIER_THRESHOLD_PX = 800;
-const MIN_WALL_ZOOM = 0.55;
-const MAX_WALL_ZOOM = 2.4;
-const ZOOM_SENSITIVITY = 0.0036;
 
 export interface SingleStreamWallViewProps {
 	photos: readonly PhotoQueryRecord[];
@@ -123,18 +127,31 @@ export function SingleStreamWallView(
 	const pressedPhotoIdRef = useRef<string | null>(null);
 	const seenPhotoIdsRef = useRef<Set<string>>(new Set());
 
-	const cameraRef = useRef(camera);
-	useEffect(() => {
-		cameraRef.current = camera;
-	}, [camera]);
 
-	const { publish: publishCamera, flush: flushCamera } =
-		useRafCameraPublisher(onCameraChange);
+	const cameraRef = useRef(camera);
+	const {
+		publish: publishCamera,
+		flush: flushCamera,
+		isEcho: isPublishedCamera,
+	} = useRafCameraPublisher(onCameraChange);
 	const {
 		startWheel: startWheelMomentum,
 		startDrag: startDragMomentum,
 		cancel: cancelPanMomentum,
+		isActive: isPanMomentumActive,
 	} = usePanMomentum({ cameraRef, publishCamera, flushCamera });
+	useEffect(() => {
+		// Our own publishes reach React a frame late; the live ref is already
+		// ahead of them. While a drag or glide is moving the camera, outside
+		// updates (resize, newly loaded rows) only bring new bounds; rebasing
+		// the live position onto them avoids rewinding a frame.
+		if (isPublishedCamera(camera)) return;
+		const live = cameraRef.current;
+		cameraRef.current =
+			dragRef.current || isPanMomentumActive()
+				? withWorldBounds(withViewport(live, camera.viewport), camera.world)
+				: camera;
+	}, [camera, isPanMomentumActive, isPublishedCamera]);
 
 	const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
 	const [dragActive, setDragActive] = useState(false);
@@ -160,8 +177,6 @@ export function SingleStreamWallView(
 		containerRef,
 		zoomRef,
 		setZoom,
-		MIN_WALL_ZOOM,
-		MAX_WALL_ZOOM,
 		handlePinchStart,
 	);
 
@@ -329,11 +344,7 @@ export function SingleStreamWallView(
 			setHoverPreview(null);
 
 			if (event.ctrlKey || event.metaKey) {
-				const nextZoom = clamp(
-					zoomRef.current * Math.exp(-event.deltaY * ZOOM_SENSITIVITY),
-					MIN_WALL_ZOOM,
-					MAX_WALL_ZOOM,
-				);
+				const nextZoom = wheelZoom(zoomRef.current, event.deltaY);
 				if (nextZoom !== zoomRef.current) {
 					zoomRef.current = nextZoom;
 					setZoom(nextZoom);
@@ -357,11 +368,7 @@ export function SingleStreamWallView(
 	}, [cancelPanMomentum, publishCamera, startWheelMomentum]);
 
 	const changeZoom = useCallback((factor: number) => {
-		const nextZoom = clamp(
-			zoomRef.current * factor,
-			MIN_WALL_ZOOM,
-			MAX_WALL_ZOOM,
-		);
+		const nextZoom = stepZoom(zoomRef.current, factor);
 		if (nextZoom !== zoomRef.current) {
 			zoomRef.current = nextZoom;
 			setZoom(nextZoom);
@@ -517,7 +524,7 @@ export function SingleStreamWallView(
 				typeof window === "undefined"
 					? { width: viewportSize.width, height: viewportSize.height }
 					: { width: window.innerWidth, height: window.innerHeight };
-			const previewRect = computeAnchoredHoverPreviewRect({
+			const previewRect = computeHoverPopRect({
 				viewport: previewViewport,
 				tile: {
 					left: tileRect.left,
@@ -525,7 +532,6 @@ export function SingleStreamWallView(
 					width: tileRect.width,
 					height: tileRect.height,
 				},
-				photo: { width: photo.width, height: photo.height },
 			});
 
 			if (previewRect.width <= 0 || previewRect.height <= 0) return;
@@ -636,25 +642,10 @@ export function SingleStreamWallView(
 			</div>
 
 			{hoverPreview && (
-				<div
-					className="wall-hover-preview"
-					data-testid="wall-hover-preview"
-					data-photo-id={hoverPreview.photo.id}
-					style={hoverPreviewStyle(hoverPreview)}
-				>
-					<img
-						className="wall-hover-preview__img"
-						data-testid="wall-hover-preview-image"
-						data-media-variant="modal"
-						src={resolveWallMediaSource(
-							hoverPreview.photo,
-							"modal",
-							mediaSourceResolver,
-						)}
-						alt=""
-						draggable={false}
-					/>
-				</div>
+				<WallHoverPop
+					preview={hoverPreview}
+					mediaSourceResolver={mediaSourceResolver}
+				/>
 			)}
 		</div>
 	);
@@ -703,14 +694,6 @@ function tileStyle(
 	} as unknown as React.CSSProperties;
 }
 
-function hoverPreviewStyle(preview: HoverPreviewState): React.CSSProperties {
-	return {
-		width: preview.width,
-		height: preview.height,
-		"--hover-preview-left": `${preview.left}px`,
-		"--hover-preview-top": `${preview.top}px`,
-	} as unknown as React.CSSProperties;
-}
 
 function supportsFinePointerHover(): boolean {
 	if (

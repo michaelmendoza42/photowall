@@ -126,6 +126,36 @@ test.describe("mobile wall gestures", () => {
 		});
 	}
 
+	for (const grouped of [false, true]) {
+		test(`fling glides forward without backward jitter (${grouped ? "grouped" : "stream"})`, async ({ page }) => {
+			if (grouped) {
+				await page.getByTestId("controls-trigger").click();
+				await page.getByTestId("controls-year-2024").click();
+				await page.getByTestId("controls-trigger").click();
+			}
+			const wall = page.getByTestId("wall-canvas");
+			await expect(wall).toHaveAttribute("data-layout-mode", grouped ? "grouped" : "single");
+			// Sample the rendered camera every frame through the glide.
+			await wall.evaluate((element) => {
+				const samples: number[] = [];
+				(window as unknown as { __flingSamples: number[] }).__flingSamples = samples;
+				const sample = () => {
+					samples.push(Number(element.getAttribute("data-camera-x")));
+					if (samples.length < 240) requestAnimationFrame(sample);
+				};
+				requestAnimationFrame(sample);
+			});
+			const release = await performTouchDrag(page, { x: 280, y: 180 }, { x: 80, y: 180 });
+			await expect.poll(async () => (await cameraPosition(wall)).x).toBeGreaterThan(release.x + 20);
+			await page.waitForTimeout(1500);
+			const samples = await page.evaluate(
+				() => (window as unknown as { __flingSamples: number[] }).__flingSamples,
+			);
+			const backwardSteps = samples.filter((x, index) => index > 0 && x < samples[index - 1]!);
+			expect(backwardSteps).toEqual([]);
+		});
+	}
+
 	test("does not open or fling a photo gesture that becomes a pinch", async ({
 		page,
 	}) => {
