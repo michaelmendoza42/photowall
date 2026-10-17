@@ -50,6 +50,7 @@ export async function registerPhotoRoutes(
       request: FastifyRequest,
       reply: FastifyReply,
     ): Promise<PhotosQueryResponse> => {
+      const startedAt = performance.now();
       const parsed = PhotosQuerySchema.safeParse(request.query ?? {});
       if (!parsed.success) {
         reply.code(400);
@@ -100,6 +101,10 @@ export async function registerPhotoRoutes(
         afterId,
         limit: params.limit,
       });
+      reply.header(
+        'Server-Timing',
+        `photos;dur=${(performance.now() - startedAt).toFixed(1)}`,
+      );
 
       const nextCursor =
         slice.exhausted || slice.lastTuple === null

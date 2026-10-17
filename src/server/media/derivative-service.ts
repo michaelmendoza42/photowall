@@ -38,6 +38,12 @@ export interface DerivativeRequest {
   format: MediaFormat;
 }
 
+/**
+ * Browser requests are interactive. Background warming only takes a render
+ * permit when no interactive request is waiting for one.
+ */
+export type RenderPriority = 'interactive' | 'background';
+
 export type DerivativeOutcome =
   | {
       ok: true;
@@ -80,7 +86,8 @@ export class DerivativeService {
   private readonly inFlight = new Map<string, Promise<DerivativeOutcome>>();
   private activeRenders = 0;
   private queuedRenders = 0;
-  private readonly renderWaiters: Array<() => void> = [];
+  private readonly interactiveWaiters: Array<() => void> = [];
+  private readonly backgroundWaiters: Array<() => void> = [];
 
   constructor(options: DerivativeServiceOptions) {
     this.cacheRoot = options.cacheRoot;
@@ -107,6 +114,7 @@ export class DerivativeService {
   async generate(
     snapshot: PersistedSnapshot,
     request: DerivativeRequest,
+    priority: RenderPriority = 'interactive',
   ): Promise<DerivativeOutcome> {
     const resolved = await resolveSafeSourcePath(snapshot, request.photoId);
     if (!resolved.ok) {
@@ -179,7 +187,7 @@ export class DerivativeService {
         sourceMtimeMs: resolved.mtimeMs,
         sourceFileSize: resolved.fileSize,
       };
-    });
+    }, priority);
     this.inFlight.set(cacheKey, render);
     try {
       return await render;
@@ -188,18 +196,27 @@ export class DerivativeService {
     }
   }
 
-  protected async renderWithPermit<T>(work: () => Promise<T>): Promise<T> {
+  protected async renderWithPermit<T>(
+    work: () => Promise<T>,
+    priority: RenderPriority = 'interactive',
+  ): Promise<T> {
     if (this.activeRenders >= this.maxConcurrentRenders) {
+      const waiters =
+        priority === 'interactive' ? this.interactiveWaiters : this.backgroundWaiters;
       this.queuedRenders += 1;
-      await new Promise<void>((resolve) => this.renderWaiters.push(resolve));
+      await new Promise<void>((resolve) => waiters.push(resolve));
       this.queuedRenders -= 1;
+    } else {
+      this.activeRenders += 1;
     }
-    this.activeRenders += 1;
     try {
       return await work();
     } finally {
-      this.activeRenders -= 1;
-      this.renderWaiters.shift()?.();
+      // Hand the permit straight to the next waiter (interactive first) so a
+      // newly arriving request can't jump the queue between release and wake.
+      const next = this.interactiveWaiters.shift() ?? this.backgroundWaiters.shift();
+      if (next) next();
+      else this.activeRenders -= 1;
     }
   }
 }

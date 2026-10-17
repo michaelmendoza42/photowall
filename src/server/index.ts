@@ -8,11 +8,13 @@ import { registerPhotoRoutes } from './routes/photos.js';
 import { registerPlaylistRoutes } from './routes/playlists.js';
 import { registerClientStatic } from './services/static-client.js';
 import { DerivativeService } from './media/derivative-service.js';
+import { DerivativeWarmer } from './media/derivative-warmer.js';
 import { PlaylistService } from './playlists/service.js';
 import {
   LibraryRootError,
   LibraryService,
 } from './snapshots/library-service.js';
+import type { PersistedSnapshot } from './snapshots/schema.js';
 import { DataRootError } from './snapshots/storage.js';
 import { SERVICE_VERSION } from './version.js';
 
@@ -99,6 +101,20 @@ async function main(): Promise<void> {
     derivatives: derivativeService,
   });
 
+  // Pre-generate overview thumbnails in the background so panning hits the
+  // cache instead of decoding full-size originals on demand.
+  const derivativeWarmer = new DerivativeWarmer({
+    derivatives: derivativeService,
+    logger: app.log,
+  });
+  const startWarmUp = (snapshot: PersistedSnapshot) => {
+    if (!config.prewarmDerivatives) return;
+    derivativeWarmer.warm(snapshot).catch((err) => {
+      app.log.error({ err }, 'derivative warm-up failed');
+    });
+  };
+  libraryService.onSnapshotActivated(startWarmUp);
+
   const libraryRootWritable = await isWritable(libraryService.getLibraryRoot());
   if (config.nodeEnv === 'production' && libraryRootWritable) {
     app.log.warn(
@@ -131,6 +147,8 @@ async function main(): Promise<void> {
   // listen() call so a warm-loaded snapshot can serve traffic immediately
   // and a cold start still surfaces a working health endpoint while the
   // scan progresses. Errors are already captured by the service state.
+  const warmLoadedSnapshot = libraryService.getActiveSnapshot();
+  if (warmLoadedSnapshot) startWarmUp(warmLoadedSnapshot);
   libraryService.rescan().catch((err) => {
     app.log.error({ err }, 'background library scan failed');
   });

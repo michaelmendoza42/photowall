@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import sharp from 'sharp';
 import { LibraryService } from '../../snapshots/library-service.js';
 import type { PersistedSnapshot } from '../../snapshots/schema.js';
-import { DerivativeService } from '../derivative-service.js';
+import { DerivativeService, type RenderPriority } from '../derivative-service.js';
 import { computeCacheKey, sourceFingerprint } from '../cache-key.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -14,8 +14,11 @@ const repoRoot = path.resolve(here, '..', '..', '..', '..');
 const smokeRoot = path.join(repoRoot, 'fixtures', 'library-smoke');
 
 class TestDerivativeService extends DerivativeService {
-  runWithPermit<T>(work: () => Promise<T>): Promise<T> {
-    return this.renderWithPermit(work);
+  runWithPermit<T>(
+    work: () => Promise<T>,
+    priority: RenderPriority = 'interactive',
+  ): Promise<T> {
+    return this.renderWithPermit(work, priority);
   }
 }
 
@@ -122,6 +125,34 @@ describe('DerivativeService', () => {
     ]);
     expect(peakActive).toBe(2);
     expect(boundedService.getMetrics()).toEqual({
+      activeRenders: 0,
+      queuedRenders: 0,
+      inFlightRenders: 0,
+    });
+  });
+
+  it('hands a freed render permit to waiting interactive work before background work', async () => {
+    const singleRenderService = new TestDerivativeService({
+      cacheRoot: library.getCacheDir(),
+      maxConcurrentRenders: 1,
+    });
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const order: string[] = [];
+    const run = (label: string, priority: RenderPriority) =>
+      singleRenderService.runWithPermit(async () => {
+        order.push(label);
+        if (label === 'holder') await gate;
+      }, priority);
+
+    const holder = run('holder', 'background');
+    const background = run('background', 'background');
+    const interactive = run('interactive', 'interactive');
+    release();
+    await Promise.all([holder, background, interactive]);
+
+    expect(order).toEqual(['holder', 'interactive', 'background']);
+    expect(singleRenderService.getMetrics()).toEqual({
       activeRenders: 0,
       queuedRenders: 0,
       inFlightRenders: 0,

@@ -63,6 +63,7 @@ export class LibraryService {
   private resolvedLibraryRoot: string | null = null;
   private snapshotPaths: SnapshotPaths;
   private inflight: Promise<PersistedSnapshot> | null = null;
+  private readonly snapshotListeners = new Set<(snapshot: PersistedSnapshot) => void>();
   private snapshot: ServiceState = {
     active: null,
     state: 'idle',
@@ -140,6 +141,12 @@ export class LibraryService {
     return this.snapshotPaths.cacheDir;
   }
 
+  /** Called whenever a freshly scanned snapshot becomes active. */
+  onSnapshotActivated(listener: (snapshot: PersistedSnapshot) => void): () => void {
+    this.snapshotListeners.add(listener);
+    return () => this.snapshotListeners.delete(listener);
+  }
+
   getActiveSnapshot(): PersistedSnapshot | null {
     return this.snapshot.active;
   }
@@ -215,6 +222,7 @@ export class LibraryService {
         },
         'library scan completed',
       );
+      for (const listener of this.snapshotListeners) listener(snapshot);
       return snapshot;
     } catch (err) {
       this.snapshot.state = 'error';

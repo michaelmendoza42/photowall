@@ -60,6 +60,21 @@ describe('LibraryService', () => {
     expect(second.getActiveSnapshot()?.snapshotId).toBe(snapshot.snapshotId);
   });
 
+  it('notifies snapshot listeners when a scan activates a snapshot', async () => {
+    const service = new LibraryService({ libraryRoot: smokeRoot, dataRoot });
+    await service.initialize();
+    const activated: string[] = [];
+    const unsubscribe = service.onSnapshotActivated((snapshot) => {
+      activated.push(snapshot.snapshotId);
+    });
+
+    const first = await service.rescan();
+    unsubscribe();
+    await service.rescan();
+
+    expect(activated).toEqual([first.snapshotId]);
+  });
+
   it('coalesces concurrent rescan() calls onto a single in-flight scan', async () => {
     const service = new LibraryService({ libraryRoot: smokeRoot, dataRoot });
     await service.initialize();

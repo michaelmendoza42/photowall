@@ -33,6 +33,7 @@ const EnvSchema = z.object({
   PHOTO_WALL_PORT: z.coerce.number().int().min(1).max(65535).default(3001),
   PHOTO_WALL_LOG_LEVEL: LogLevelSchema.default('info'),
   PHOTO_WALL_SCAN_TOP_LEVEL_YEARS_ONLY: BooleanFromEnvSchema.default('false'),
+  PHOTO_WALL_PREWARM_DERIVATIVES: BooleanFromEnvSchema.default('true'),
 });
 
 export type AppConfig = {
@@ -43,6 +44,7 @@ export type AppConfig = {
   port: number;
   logLevel: z.infer<typeof LogLevelSchema>;
   scanTopLevelYearsOnly: boolean;
+  prewarmDerivatives: boolean;
 };
 
 export class ConfigValidationError extends Error {
@@ -70,5 +72,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     port: data.PHOTO_WALL_PORT,
     logLevel: data.PHOTO_WALL_LOG_LEVEL,
     scanTopLevelYearsOnly: data.PHOTO_WALL_SCAN_TOP_LEVEL_YEARS_ONLY,
+    prewarmDerivatives: data.PHOTO_WALL_PREWARM_DERIVATIVES,
   };
 }
