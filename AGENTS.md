@@ -14,9 +14,9 @@ Personal photo-wall app for Michael's home LAN. See `README.md` and `CLAUDE.md` 
 - Before calling work done: `npm run typecheck`, `npm test`, and the relevant Playwright specs. Report failures honestly, including pre-existing ones.
 
 ## Local server (LAN contract)
-- Port: `/home/michael/Projects/Code/pi-mods/bin/dev-ports ensure .` (5176). Bind `0.0.0.0`; LAN URL `http://mmdebian.local:<port>`, Tailscale `http://mmdebian.mendoza.home:<port>`.
-- After implementation work: `npm run build`, then restart `npm start` with `PHOTO_WALL_BIND_HOST=0.0.0.0` and `PHOTO_WALL_PORT=<port>`, and check `/healthz`. Docs-only changes skip this.
-- No Docker/Compose/Portainer unless Michael asks.
+- Docker is for deployment (`Dockerfile`, `docker-compose.yml`). Local dev runs natively; use a local container only to debug a container-only problem, and say so first.
+- Port: `/home/michael/Projects/Code/pi-mods/bin/dev-ports ensure .` (5176), bound to `0.0.0.0`.
+- The LAN Services dashboard manages the server. After implementation work: `npm run build`, then `~/Projects/Code/project-admin/scripts/portfolio-dev stop photo-wall` and `... start photo-wall`, and check `/healthz`. It serves the last build with the real library and `.photo-wall-data/`. Never start it by hand with `nohup`/`npm start`. Docs-only changes skip this.
 - Keep `config/lan-services.json` `id` stable; it never stores ports or commands.
 
 ## Commits
