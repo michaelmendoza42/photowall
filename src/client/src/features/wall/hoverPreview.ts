@@ -70,27 +70,48 @@ export function computeFocusedPhotoRenderSize(input: {
 
 /**
  * The hovered photo grows slightly around its own center (2026-10-16: "just
- * pop out the image a little"). It is nudged back inside the viewport when
- * the tile fits there, so edge tiles don't pop off-screen.
+ * pop out the image a little"). It stays centered on the photo even when that
+ * puts part of it off-screen.
  */
 export function computeHoverPopRect(input: {
-  viewport: PreviewSize;
   tile: PreviewRect;
   scale?: number;
 }): PreviewRect {
-  const { viewport, tile, scale = HOVER_POP_SCALE } = input;
+  const { tile, scale = HOVER_POP_SCALE } = input;
   const width = tile.width * scale;
   const height = tile.height * scale;
-  const left = tile.left - (width - tile.width) / 2;
-  const top = tile.top - (height - tile.height) / 2;
-
-  const keepInside = (start: number, size: number, limit: number): number =>
-    size <= limit ? clamp(start, 0, limit - size) : start;
-
   return {
-    left: keepInside(left, width, viewport.width),
-    top: keepInside(top, height, viewport.height),
+    left: tile.left - (width - tile.width) / 2,
+    top: tile.top - (height - tile.height) / 2,
     width,
     height,
   };
+}
+
+/** Smaller offsets than this aren't worth a slide. */
+export const HOVER_PAN_MIN_OFFSET_PX = 2;
+
+/**
+ * Screen-px pan that slides the hovered photo until its center is under the
+ * cursor (2026-10-17: "a hovered photo should slide slowly until the cursor is
+ * centered on it"). Only a photo partly outside the viewport slides
+ * (2026-10-18: "it shouldn't move to the cursor if the whole image is already
+ * in the viewport"); photos too large to fit are never fully in view, so they
+ * always slide. Null when the cursor is already at the center.
+ */
+export function computeHoverCursorPan(
+  pop: PreviewRect,
+  cursor: { x: number; y: number },
+  viewport: PreviewSize,
+): { dx: number; dy: number } | null {
+  const fullyVisible =
+    pop.left >= 0 &&
+    pop.top >= 0 &&
+    pop.left + pop.width <= viewport.width &&
+    pop.top + pop.height <= viewport.height;
+  if (fullyVisible) return null;
+  const dx = pop.left + pop.width / 2 - cursor.x;
+  const dy = pop.top + pop.height / 2 - cursor.y;
+  if (Math.hypot(dx, dy) < HOVER_PAN_MIN_OFFSET_PX) return null;
+  return { dx, dy };
 }

@@ -83,11 +83,11 @@ The MVP fallback navigation gesture for mice without trackpad wheel input: press
 - **Surfaced to users:** yes — directly experienced when click-dragging
 
 ### Hover pop
-On desktop fine-pointer devices, the hovered photo lifts slightly (about 8% larger) in place over its own tile and casts a drop shadow above its neighbors. It is nudged inward at viewport edges, and it disappears during drag or while the modal is open.
+On desktop fine-pointer devices, the hovered photo lifts slightly (about 8% larger) in place over its own tile and casts a drop shadow above its neighbors. It always stays centered on its photo, and if it is partly off-screen, after a brief hover the wall slides slowly until the photo's center is under the cursor (once per hover; fully visible photos stay put). It disappears during drag or while the modal is open.
 
 - **Lives in:** `docs/product/photo-wall-experience.md`
 - **Why it exists:** gives the flat wall depth on hover without covering neighbors the way a large preview does
-- **Used by:** `WallHoverPop.tsx` (shared by both wall views), `computeHoverPopRect` in `hoverPreview.ts`, and browser regression coverage
+- **Used by:** `WallHoverPop.tsx` (shared by both wall views), `computeHoverPopRect`/`computeHoverCursorPan` in `hoverPreview.ts`, `useHoverCursorPan.ts`, and browser regression coverage
 - **Change risk:** low — changing it affects hover feel and layering, not layout
 - **Alias:** hover preview; replaces the earlier anchored hover preview
 - **Surfaced to users:** yes — directly experienced while browsing the wall

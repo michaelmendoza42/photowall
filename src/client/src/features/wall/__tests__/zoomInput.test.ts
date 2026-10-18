@@ -6,6 +6,7 @@ import {
   pinchZoom,
   stepZoom,
   wheelZoom,
+  zoomAnchorDelta,
 } from '../zoomInput.js';
 
 /** Replays a trackpad pinch as the small ctrl+wheel events browsers send. */
@@ -56,5 +57,35 @@ describe('stepZoom (zoom buttons)', () => {
   it('multiplies and clamps', () => {
     expect(stepZoom(1, 1.25)).toBeCloseTo(1.25);
     expect(stepZoom(MAX_WALL_ZOOM, 1.25)).toBe(MAX_WALL_ZOOM);
+  });
+});
+
+describe('zoomAnchorDelta', () => {
+  // Screen position of a world point for a camera at `camera` and `zoom`.
+  const toScreen = (world: number, camera: number, zoom: number) => (world - camera) * zoom;
+
+  it('keeps the world point under the pinch fixed while zooming', () => {
+    const camera = { x: 100, y: 40 };
+    const anchor = { x: 300, y: 500 };
+    const worldX = camera.x + anchor.x / 1;
+    const worldY = camera.y + anchor.y / 1;
+
+    const delta = zoomAnchorDelta(1, 2.2, anchor);
+    expect(toScreen(worldX, camera.x + delta.dx, 2.2)).toBeCloseTo(anchor.x);
+    expect(toScreen(worldY, camera.y + delta.dy, 2.2)).toBeCloseTo(anchor.y);
+  });
+
+  it('follows a moving pinch midpoint so two fingers also pan', () => {
+    const camera = { x: 0, y: 0 };
+    const before = { x: 200, y: 300 };
+    const after = { x: 260, y: 280 };
+    const worldX = camera.x + before.x / 1.5;
+
+    const delta = zoomAnchorDelta(1.5, 1.8, before, after);
+    expect(toScreen(worldX, camera.x + delta.dx, 1.8)).toBeCloseTo(after.x);
+  });
+
+  it('does not move the camera when zoom and point are unchanged', () => {
+    expect(zoomAnchorDelta(1.3, 1.3, { x: 50, y: 60 })).toEqual({ dx: 0, dy: 0 });
   });
 });

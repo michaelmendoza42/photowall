@@ -1,16 +1,30 @@
 import { useEffect, type MutableRefObject, type RefObject } from "react";
-import { pinchZoom } from "./zoomInput.js";
+import { pinchZoom, type ScreenPoint } from "./zoomInput.js";
 
 export function useTouchPinchZoom(
 	containerRef: RefObject<HTMLElement>,
 	zoomRef: MutableRefObject<number>,
-	setZoom: (zoom: number) => void,
+	/**
+	 * Applies the new zoom, pivoting on the pinch midpoint: `before` and
+	 * `after` are the midpoint (container px) on the previous and current move.
+	 */
+	applyZoom: (zoom: number, before: ScreenPoint, after: ScreenPoint) => void,
 	onPinchStart?: () => void,
 ): void {
 	useEffect(() => {
 		const element = containerRef.current;
 		if (!element) return undefined;
 		let previousDistance: number | null = null;
+		let previousMidpoint: ScreenPoint | null = null;
+		const midpoint = (touches: TouchList): ScreenPoint => {
+			const rect = element.getBoundingClientRect();
+			const first = touches[0]!;
+			const second = touches[1]!;
+			return {
+				x: (first.clientX + second.clientX) / 2 - rect.left,
+				y: (first.clientY + second.clientY) / 2 - rect.top,
+			};
+		};
 		const distance = (touches: TouchList): number => {
 			const first = touches[0]!;
 			const second = touches[1]!;
@@ -23,23 +37,23 @@ export function useTouchPinchZoom(
 			if (event.touches.length !== 2) return;
 			event.preventDefault();
 			const nextDistance = distance(event.touches);
+			const nextMidpoint = midpoint(event.touches);
 			if (previousDistance === null) {
 				onPinchStart?.();
 			}
-			if (previousDistance && nextDistance > 0) {
+			if (previousDistance && previousMidpoint && nextDistance > 0) {
 				const nextZoom = pinchZoom(
 					zoomRef.current,
 					nextDistance / previousDistance,
 				);
-				if (nextZoom !== zoomRef.current) {
-					zoomRef.current = nextZoom;
-					setZoom(nextZoom);
-				}
+				applyZoom(nextZoom, previousMidpoint, nextMidpoint);
 			}
 			previousDistance = nextDistance;
+			previousMidpoint = nextMidpoint;
 		};
 		const reset = (): void => {
 			previousDistance = null;
+			previousMidpoint = null;
 		};
 		element.addEventListener("touchmove", onTouchMove, { passive: false });
 		element.addEventListener("touchend", reset);
@@ -49,5 +63,5 @@ export function useTouchPinchZoom(
 			element.removeEventListener("touchend", reset);
 			element.removeEventListener("touchcancel", reset);
 		};
-	}, [containerRef, onPinchStart, setZoom, zoomRef]);
+	}, [applyZoom, containerRef, onPinchStart, zoomRef]);
 }

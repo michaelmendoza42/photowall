@@ -17,10 +17,16 @@ import {
 } from "./appearanceTracking.js";
 import { computeHoverPopRect } from "./hoverPreview.js";
 import { WallHoverPop } from "./WallHoverPop.js";
+import { useHoverCursorPan } from "./useHoverCursorPan.js";
 import { PixiWallSurface } from "./PixiWallSurface.js";
 import { WallZoomControls } from "./WallZoomControls.js";
 import { useTouchPinchZoom } from "./useTouchPinchZoom.js";
-import { stepZoom, wheelZoom } from "./zoomInput.js";
+import {
+	stepZoom,
+	wheelZoom,
+	zoomAnchorDelta,
+	type ScreenPoint,
+} from "./zoomInput.js";
 import { useRafCameraPublisher } from "./useRafCameraPublisher.js";
 import { usePanMomentum } from "./usePanMomentum.js";
 import {
@@ -140,18 +146,6 @@ export function SingleStreamWallView(
 		cancel: cancelPanMomentum,
 		isActive: isPanMomentumActive,
 	} = usePanMomentum({ cameraRef, publishCamera, flushCamera });
-	useEffect(() => {
-		// Our own publishes reach React a frame late; the live ref is already
-		// ahead of them. While a drag or glide is moving the camera, outside
-		// updates (resize, newly loaded rows) only bring new bounds; rebasing
-		// the live position onto them avoids rewinding a frame.
-		if (isPublishedCamera(camera)) return;
-		const live = cameraRef.current;
-		cameraRef.current =
-			dragRef.current || isPanMomentumActive()
-				? withWorldBounds(withViewport(live, camera.viewport), camera.world)
-				: camera;
-	}, [camera, isPanMomentumActive, isPublishedCamera]);
 
 	const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
 	const [dragActive, setDragActive] = useState(false);
@@ -164,6 +158,43 @@ export function SingleStreamWallView(
 	useEffect(() => {
 		zoomRef.current = zoom;
 	}, [zoom]);
+
+	const hoverPreviewRef = useRef<HoverPreviewState | null>(null);
+	hoverPreviewRef.current = hoverPreview;
+	const lastPointerRef = useRef<{ x: number; y: number } | null>(null);
+	const {
+		schedule: scheduleHoverPan,
+		cancel: cancelHoverPan,
+		release: releaseHoverPan,
+		isActive: isHoverPanActive,
+	} = useHoverCursorPan({
+		cameraRef,
+		zoomRef,
+		publishCamera,
+		flushCamera,
+		getHoverRect: () => hoverPreviewRef.current,
+		getCursor: () => lastPointerRef.current,
+		shiftHoverRect: (dx, dy) =>
+			setHoverPreview((prev) =>
+				prev ? { ...prev, left: prev.left + dx, top: prev.top + dy } : prev,
+			),
+	});
+	// Losing hover (leave, drag, wheel, pinch, modal) stops any hover slide.
+	useEffect(() => {
+		if (!hoverPreview) releaseHoverPan();
+	}, [hoverPreview, releaseHoverPan]);
+	useEffect(() => {
+		// Our own publishes reach React a frame late; the live ref is already
+		// ahead of them. While a drag or glide is moving the camera, outside
+		// updates (resize, newly loaded rows) only bring new bounds; rebasing
+		// the live position onto them avoids rewinding a frame.
+		if (isPublishedCamera(camera)) return;
+		const live = cameraRef.current;
+		cameraRef.current =
+			dragRef.current || isPanMomentumActive() || isHoverPanActive()
+				? withWorldBounds(withViewport(live, camera.viewport), camera.world)
+				: camera;
+	}, [camera, isHoverPanActive, isPanMomentumActive, isPublishedCamera]);
 	const handlePinchStart = useCallback(() => {
 		cancelPanMomentum();
 		const drag = dragRef.current;
@@ -173,10 +204,31 @@ export function SingleStreamWallView(
 		pressedPhotoIdRef.current = null;
 		setHoverPreview(null);
 	}, [cancelPanMomentum]);
+	// The wall scales from its top-left, so every zoom also moves the camera
+	// to keep the world point under the pinch, cursor or screen center fixed.
+	const applyZoom = useCallback(
+		(nextZoom: number, before: ScreenPoint, after: ScreenPoint = before) => {
+			const fromZoom = zoomRef.current;
+			if (nextZoom === fromZoom && before.x === after.x && before.y === after.y) {
+				return;
+			}
+			const next = panBy(
+				cameraRef.current,
+				zoomAnchorDelta(fromZoom, nextZoom, before, after),
+			);
+			cameraRef.current = next;
+			publishCamera(next);
+			// Same React batch as the zoom, so no frame shows the unpivoted zoom.
+			flushCamera();
+			zoomRef.current = nextZoom;
+			setZoom(nextZoom);
+		},
+		[flushCamera, publishCamera],
+	);
 	useTouchPinchZoom(
 		containerRef,
 		zoomRef,
-		setZoom,
+		applyZoom,
 		handlePinchStart,
 	);
 
@@ -344,11 +396,11 @@ export function SingleStreamWallView(
 			setHoverPreview(null);
 
 			if (event.ctrlKey || event.metaKey) {
-				const nextZoom = wheelZoom(zoomRef.current, event.deltaY);
-				if (nextZoom !== zoomRef.current) {
-					zoomRef.current = nextZoom;
-					setZoom(nextZoom);
-				}
+				const rect = el.getBoundingClientRect();
+				applyZoom(wheelZoom(zoomRef.current, event.deltaY), {
+					x: event.clientX - rect.left,
+					y: event.clientY - rect.top,
+				});
 				return;
 			}
 
@@ -365,15 +417,18 @@ export function SingleStreamWallView(
 		};
 		el.addEventListener("wheel", onWheel, { passive: false });
 		return () => el.removeEventListener("wheel", onWheel);
-	}, [cancelPanMomentum, publishCamera, startWheelMomentum]);
+	}, [applyZoom, cancelPanMomentum, publishCamera, startWheelMomentum]);
 
-	const changeZoom = useCallback((factor: number) => {
-		const nextZoom = stepZoom(zoomRef.current, factor);
-		if (nextZoom !== zoomRef.current) {
-			zoomRef.current = nextZoom;
-			setZoom(nextZoom);
-		}
-	}, []);
+	const changeZoom = useCallback(
+		(factor: number) => {
+			const rect = containerRef.current?.getBoundingClientRect();
+			applyZoom(stepZoom(zoomRef.current, factor), {
+				x: (rect?.width ?? 0) / 2,
+				y: (rect?.height ?? 0) / 2,
+			});
+		},
+		[applyZoom],
+	);
 
 	const handlePointerDown = useCallback(
 		(event: React.PointerEvent<HTMLDivElement>) => {
@@ -520,12 +575,7 @@ export function SingleStreamWallView(
 			if (!photo) return;
 
 			const tileRect = tileEl.getBoundingClientRect();
-			const previewViewport =
-				typeof window === "undefined"
-					? { width: viewportSize.width, height: viewportSize.height }
-					: { width: window.innerWidth, height: window.innerHeight };
 			const previewRect = computeHoverPopRect({
-				viewport: previewViewport,
 				tile: {
 					left: tileRect.left,
 					top: tileRect.top,
@@ -543,27 +593,52 @@ export function SingleStreamWallView(
 				width: previewRect.width,
 				height: previewRect.height,
 			});
+			scheduleHoverPan(photo.id);
 		},
-		[isModalOpen, photosById, viewportSize.height, viewportSize.width],
+		[scheduleHoverPan, isModalOpen, photosById, viewportSize.height, viewportSize.width],
+	);
+
+	// During a hover slide the wall moves under a still cursor. Boundary
+	// events from that motion are ignored; real mouse movement stops the pan.
+	const pointerHeldDuringHoverPan = useCallback(
+		(event: { clientX: number; clientY: number }): boolean => {
+			const last = lastPointerRef.current;
+			lastPointerRef.current = { x: event.clientX, y: event.clientY };
+			if (!isHoverPanActive()) return false;
+			const moved =
+				!last ||
+				Math.abs(last.x - event.clientX) > 1 ||
+				Math.abs(last.y - event.clientY) > 1;
+			if (!moved) return true;
+			cancelHoverPan();
+			return false;
+		},
+		[cancelHoverPan, isHoverPanActive],
 	);
 
 	const handleTilePointerEnter = useCallback(
 		(event: React.PointerEvent<HTMLDivElement>, photoId: string) => {
+			if (pointerHeldDuringHoverPan(event)) return;
 			updateHoverPreview(event.currentTarget, photoId);
 		},
-		[updateHoverPreview],
+		[pointerHeldDuringHoverPan, updateHoverPreview],
 	);
 
 	const handleTilePointerMove = useCallback(
 		(event: React.PointerEvent<HTMLDivElement>, photoId: string) => {
+			if (pointerHeldDuringHoverPan(event)) return;
 			updateHoverPreview(event.currentTarget, photoId);
 		},
-		[updateHoverPreview],
+		[pointerHeldDuringHoverPan, updateHoverPreview],
 	);
 
-	const handleTilePointerLeave = useCallback((photoId: string) => {
-		setHoverPreview((prev) => (prev?.photo.id === photoId ? null : prev));
-	}, []);
+	const handleTilePointerLeave = useCallback(
+		(photoId: string, event: React.PointerEvent<HTMLDivElement>) => {
+			if (pointerHeldDuringHoverPan(event)) return;
+			setHoverPreview((prev) => (prev?.photo.id === photoId ? null : prev));
+		},
+		[pointerHeldDuringHoverPan],
+	);
 
 	return (
 		<div
@@ -661,7 +736,10 @@ function V2WallTile(props: {
 		event: React.PointerEvent<HTMLDivElement>,
 		photoId: string,
 	) => void;
-	onPointerLeave?: (photoId: string) => void;
+	onPointerLeave?: (
+		photoId: string,
+		event: React.PointerEvent<HTMLDivElement>,
+	) => void;
 }): JSX.Element {
 	const { tile, onPointerEnter, onPointerMove, onPointerLeave } = props;
 	const shouldFadeOnMountRef = useRef(tile.shouldFadeOnMount);
@@ -675,7 +753,7 @@ function V2WallTile(props: {
 			style={tileStyle(tile.x, tile.y, tile.width, tile.height)}
 			onPointerEnter={(event) => onPointerEnter?.(event, tile.photoId)}
 			onPointerMove={(event) => onPointerMove?.(event, tile.photoId)}
-			onPointerLeave={() => onPointerLeave?.(tile.photoId)}
+			onPointerLeave={(event) => onPointerLeave?.(tile.photoId, event)}
 		/>
 	);
 }

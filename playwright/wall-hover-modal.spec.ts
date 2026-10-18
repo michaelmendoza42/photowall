@@ -57,14 +57,36 @@ test.describe('photo wall hover / click / modal contract', () => {
       contentType: 'image/png',
     });
 
-    // Wait for the pop animation to settle before measuring.
+    // Let the pop animation and any hover center pan settle.
     await expect
       .poll(() => preview.evaluate((element) => element.getAnimations().length))
       .toBe(0);
-    const previewBox = await requiredBox(preview);
-    const tileBox = await requiredBox(tile);
+    await expect
+      .poll(async () => {
+        const first = await wall.getAttribute('data-camera-x');
+        await page.waitForTimeout(250);
+        return first === (await wall.getAttribute('data-camera-x'));
+      })
+      .toBe(true);
 
-    await tile.click();
+    // Measure the pop and the copy of the hovered photo it sits on in one frame.
+    const { pop, tileUnder } = await preview.evaluate((element, id) => {
+      const popRect = element.getBoundingClientRect();
+      const cx = popRect.left + popRect.width / 2;
+      const cy = popRect.top + popRect.height / 2;
+      const tiles = Array.from(
+        document.querySelectorAll<HTMLElement>(`[data-testid="wall-photo-tile"][data-photo-id="${id}"]`),
+      ).map((node) => node.getBoundingClientRect());
+      tiles.sort(
+        (a, b) =>
+          Math.hypot(a.left + a.width / 2 - cx, a.top + a.height / 2 - cy) -
+          Math.hypot(b.left + b.width / 2 - cx, b.top + b.height / 2 - cy),
+      );
+      const plain = (r: DOMRect) => ({ x: r.left, y: r.top, width: r.width, height: r.height });
+      return { pop: plain(popRect), tileUnder: plain(tiles[0]!) };
+    }, photoId);
+
+    await page.mouse.click(pop.x + pop.width / 2, pop.y + pop.height / 2);
 
     const modal = page.getByTestId('focused-photo-modal');
     await expect(modal).toBeVisible();
@@ -82,14 +104,11 @@ test.describe('photo wall hover / click / modal contract', () => {
       contentType: 'image/png',
     });
 
-    // A small pop around the tile's own center, not an enlarged preview.
-    expect(previewBox.width / tileBox.width).toBeCloseTo(HOVER_POP_SCALE, 1);
-    expect(previewBox.height / tileBox.height).toBeCloseTo(HOVER_POP_SCALE, 1);
-    // It grows over the tile (nudged inward at viewport edges), never away from it.
-    expect(previewBox.x).toBeLessThanOrEqual(tileBox.x + 1);
-    expect(previewBox.y).toBeLessThanOrEqual(tileBox.y + 1);
-    expect(previewBox.x + previewBox.width).toBeGreaterThanOrEqual(tileBox.x + tileBox.width - 1);
-    expect(previewBox.y + previewBox.height).toBeGreaterThanOrEqual(tileBox.y + tileBox.height - 1);
+    // A small pop always centered on the photo itself, never shifted into view.
+    expect(pop.width / tileUnder.width).toBeCloseTo(HOVER_POP_SCALE, 1);
+    expect(pop.height / tileUnder.height).toBeCloseTo(HOVER_POP_SCALE, 1);
+    expect(Math.abs(pop.x + pop.width / 2 - (tileUnder.x + tileUnder.width / 2))).toBeLessThanOrEqual(1);
+    expect(Math.abs(pop.y + pop.height / 2 - (tileUnder.y + tileUnder.height / 2))).toBeLessThanOrEqual(1);
   });
 
   test('sub-threshold pointer jitter still opens the correct focused-photo modal', async ({

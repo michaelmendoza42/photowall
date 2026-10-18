@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   HOVER_POP_SCALE,
+  computeHoverCursorPan,
   computeHoverPopRect,
   computeFocusedPhotoPaddingPx,
   computeFocusedPhotoRenderSize,
@@ -25,10 +26,7 @@ describe('hoverPreview geometry', () => {
   });
 
   it('pops the hovered photo out slightly around its own center', () => {
-    const pop = computeHoverPopRect({
-      viewport: { width: 1440, height: 960 },
-      tile: { left: 400, top: 300, width: 200, height: 100 },
-    });
+    const pop = computeHoverPopRect({ tile: { left: 400, top: 300, width: 200, height: 100 } });
 
     expect(pop.width).toBeCloseTo(200 * HOVER_POP_SCALE);
     expect(pop.height).toBeCloseTo(100 * HOVER_POP_SCALE);
@@ -36,22 +34,35 @@ describe('hoverPreview geometry', () => {
     expect(pop.top + pop.height / 2).toBeCloseTo(350);
   });
 
-  it('keeps an edge tile pop inside the viewport when the tile fits', () => {
-    const pop = computeHoverPopRect({
-      viewport: { width: 1440, height: 960 },
-      tile: { left: 1340, top: 0, width: 100, height: 80 },
-    });
+  it('stays centered on a partly off-screen photo instead of shifting into view', () => {
+    const pop = computeHoverPopRect({ tile: { left: 1340, top: -40, width: 200, height: 100 } });
 
-    expect(pop.left + pop.width).toBeCloseTo(1440);
-    expect(pop.top).toBe(0);
+    expect(pop.left + pop.width / 2).toBeCloseTo(1440);
+    expect(pop.top + pop.height / 2).toBeCloseTo(10);
+  });
+});
+
+describe('computeHoverCursorPan', () => {
+  const viewport = { width: 1440, height: 960 };
+  // Partly off the right edge; center (1450, 200).
+  const partial = { left: 1300, top: 100, width: 300, height: 200 };
+
+  it('slides a partly off-screen photo so its center ends under the cursor', () => {
+    expect(computeHoverCursorPan(partial, { x: 1340, y: 130 }, viewport)).toEqual({ dx: 110, dy: 70 });
   });
 
-  it('leaves a tile larger than the viewport centered on itself', () => {
-    const pop = computeHoverPopRect({
-      viewport: { width: 400, height: 300 },
-      tile: { left: -100, top: -50, width: 600, height: 400 },
-    });
+  it('does not slide a photo that is already fully in the viewport', () => {
+    const visible = { left: 100, top: 100, width: 300, height: 200 };
+    expect(computeHoverCursorPan(visible, { x: 140, y: 130 }, viewport)).toBeNull();
+  });
 
-    expect(pop.left).toBeCloseTo(-100 - 600 * (HOVER_POP_SCALE - 1) / 2);
+  it('does not slide when the cursor is already at the center', () => {
+    expect(computeHoverCursorPan(partial, { x: 1450, y: 201 }, viewport)).toBeNull();
+  });
+
+  it('slides photos larger than the viewport, which are never fully in view', () => {
+    expect(
+      computeHoverCursorPan({ left: -200, top: 0, width: 1600, height: 500 }, { x: 700, y: 200 }, viewport),
+    ).toEqual({ dx: 600 - 700, dy: 250 - 200 });
   });
 });

@@ -41,3 +41,27 @@ export function pinchZoom(currentZoom: number, distanceRatio: number): number {
 export function stepZoom(currentZoom: number, factor: number): number {
   return clampZoom(currentZoom * factor);
 }
+
+export interface ScreenPoint {
+  x: number;
+  y: number;
+}
+
+/**
+ * The wall scales from the screen's top-left, so zooming alone would pivot
+ * there. This is the camera move (world units) that keeps the world point
+ * under `before` (screen px, at `fromZoom`) under `after` (at `toZoom`).
+ * Passing the same point for both pivots on it; a moving pinch midpoint
+ * also pans with the fingers.
+ */
+export function zoomAnchorDelta(
+  fromZoom: number,
+  toZoom: number,
+  before: ScreenPoint,
+  after: ScreenPoint = before,
+): { dx: number; dy: number } {
+  return {
+    dx: before.x / fromZoom - after.x / toZoom,
+    dy: before.y / fromZoom - after.y / toZoom,
+  };
+}
