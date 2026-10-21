@@ -40,6 +40,7 @@ function filters(partial: Partial<ResolvedPhotoFilters>): ResolvedPhotoFilters {
   return {
     years: [],
     folders: [],
+    excludeFolders: [],
     playlistId: null,
     ...partial,
   };

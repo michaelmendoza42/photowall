@@ -1,5 +1,9 @@
 import type { LibraryFacetsResponse, FolderFacet } from '../../../../shared/api/library.js';
-import type { PhotoQueryRecord, ResolvedPhotoFilters } from '../../../../shared/api/photos.js';
+import {
+  folderSelectionIncludes,
+  type PhotoQueryRecord,
+  type ResolvedPhotoFilters,
+} from '../../../../shared/api/photos.js';
 import { hashStringToUint32, mulberry32, uniqueStable } from './seeded.js';
 
 export interface GroupedViewFilters extends ResolvedPhotoFilters {}
@@ -38,16 +42,18 @@ export function deriveAlbumAreas(input: {
   const { filters, facets, photos, snapshotId, worldWidth } = input;
   const years = [...filters.years].sort((a, b) => a - b);
   const folders = uniqueStable([...filters.folders].sort());
+  const excludeFolders = uniqueStable([...filters.excludeFolders].sort());
   const viewKey = [
     snapshotId ?? 'no-snapshot',
     `years=${years.join(',')}`,
     `folders=${folders.join(',')}`,
+    ...(excludeFolders.length > 0 ? [`exclude=${excludeFolders.join(',')}`] : []),
     `playlist=${filters.playlistId ?? 'none'}`,
   ].join('|');
 
   const albums =
     folders.length > 0
-      ? deriveFolderAlbums({ folders, facets, photos, viewKey, worldWidth })
+      ? deriveFolderAlbums({ folders, excludeFolders, facets, photos, viewKey, worldWidth })
       : years.length > 0
         ? deriveYearAlbums({ years, facets, photos, viewKey, worldWidth })
         : [];
@@ -121,29 +127,104 @@ export function bucketPhotosByAlbum(
 
 function deriveFolderAlbums(input: {
   folders: readonly string[];
+  excludeFolders: readonly string[];
   facets: LibraryFacetsResponse | null;
   photos: readonly PhotoQueryRecord[];
   viewKey: string;
   worldWidth: number;
 }): AlbumAreaDescriptor[] {
-  const { folders, facets, photos, viewKey, worldWidth } = input;
-  const raw = folders.map((folder) => {
-    const facet = facets?.folders.find((candidate) => candidate.path === folder) ?? null;
-    const loadedCount = photos.filter(
-      (photo) => photo.directoryPath === folder || photo.directoryPath.startsWith(`${folder}/`),
+  const { folders, excludeFolders, facets, photos, viewKey, worldWidth } = input;
+  const units = selectedFolderAlbumUnits(folders, excludeFolders, facets);
+  const unitPaths = units.map((unit) => unit.path);
+  const raw = units.map((unit) => {
+    const loadedCount = photos.filter((photo) =>
+      unit.directOnly
+        ? photo.directoryPath === unit.path
+        : photo.directoryPath === unit.path || photo.directoryPath.startsWith(`${unit.path}/`),
     ).length;
     return {
-      albumKey: `folder:${folder}`,
+      albumKey: `folder:${unit.path}`,
       kind: 'folder' as const,
-      label: folderLabel(folder, folders),
-      sourcePath: folder,
-      year: yearFromPath(folder),
-      photoCountEstimate: Math.max(facet?.photoCount ?? 0, loadedCount),
+      label: folderLabel(unit.path, unitPaths),
+      sourcePath: unit.path,
+      year: yearFromPath(unit.path),
+      photoCountEstimate: Math.max(unit.selectedCount, loadedCount),
     };
   });
 
   return placeAlbumAreas(raw, viewKey, worldWidth);
 }
+
+interface FolderAlbumUnit {
+  path: string;
+  /** Only the folder's own photos; its child folders are separate albums. */
+  directOnly: boolean;
+  selectedCount: number;
+}
+
+/**
+ * Resolve folder selection rules into album areas. A selected top-level
+ * folder (typically a year) expands into one album per child folder that
+ * still has selected photos, plus one for its own loose photos, the same
+ * way a year-wide view does. A deeper selected folder is one album with
+ * its descendants folded in.
+ */
+function selectedFolderAlbumUnits(
+  folders: readonly string[],
+  excludeFolders: readonly string[],
+  facets: LibraryFacetsResponse | null,
+): FolderAlbumUnit[] {
+  const facetFolders = facets?.folders ?? [];
+  const selectedDirect = (facet: FolderFacet): number =>
+    folderSelectionIncludes(facet.path, folders, excludeFolders) ? facet.directPhotoCount : 0;
+  const selectedUnder = (path: string): number =>
+    facetFolders
+      .filter((facet) => facet.path === path || facet.path.startsWith(`${path}/`))
+      .reduce((sum, facet) => sum + selectedDirect(facet), 0);
+
+  const subtreeUnits: FolderAlbumUnit[] = [];
+  const directUnits: FolderAlbumUnit[] = [];
+  for (const folder of folders) {
+    if (facets === null || folder.includes('/')) {
+      subtreeUnits.push({ path: folder, directOnly: false, selectedCount: selectedUnder(folder) });
+      continue;
+    }
+    for (const child of facetFolders.filter((facet) => isImmediateChildOfYear(facet, folder))) {
+      const selectedCount = selectedUnder(child.path);
+      if (selectedCount > 0) {
+        subtreeUnits.push({ path: child.path, directOnly: false, selectedCount });
+      }
+    }
+    const ownFacet = facetFolders.find((facet) => facet.path === folder);
+    const ownCount = ownFacet ? selectedDirect(ownFacet) : 0;
+    if (ownCount > 0) directUnits.push({ path: folder, directOnly: true, selectedCount: ownCount });
+  }
+
+  const units = deduplicateAlbums(
+    [...subtreeUnits, ...directUnits].map((unit) => ({ ...unit, albumKey: unit.path })),
+  );
+  if (facets === null) return units;
+
+  // Each photo belongs to the most specific album covering it, so count
+  // per album that way and drop albums left with nothing of their own.
+  const ownCounts = new Map<string, number>();
+  for (const facet of facetFolders) {
+    const count = selectedDirect(facet);
+    if (count === 0) continue;
+    const owner = units
+      .filter((unit) =>
+        unit.directOnly
+          ? facet.path === unit.path
+          : facet.path === unit.path || facet.path.startsWith(`${unit.path}/`),
+      )
+      .sort((a, b) => b.path.length - a.path.length)[0];
+    if (owner) ownCounts.set(owner.path, (ownCounts.get(owner.path) ?? 0) + count);
+  }
+  return units
+    .filter((unit) => (ownCounts.get(unit.path) ?? 0) > 0)
+    .map((unit) => ({ ...unit, selectedCount: ownCounts.get(unit.path) ?? 0 }));
+}
+
 
 function deriveYearAlbums(input: {
   years: readonly number[];

@@ -37,7 +37,7 @@ function makePage(
     photos: [],
     nextCursor: null,
     totalMatching: 0,
-    appliedFilters: { years: [], folders: [], playlistId: null },
+    appliedFilters: { years: [], folders: [], excludeFolders: [], playlistId: null },
     ...partial,
   };
 }
@@ -115,7 +115,7 @@ describe('deriveWallScreenState', () => {
     const page = makePage({ totalMatching: 0 });
     const state = deriveWallScreenState({
       ...baseInput,
-      filters: { years: [1999], folders: [], playlistId: null },
+      filters: { years: [1999], folders: [], excludeFolders: [], playlistId: null },
       statusQuery: { isLoading: false, error: null, data: status },
       photoPageQuery: { isLoading: false, error: null, data: page },
     });

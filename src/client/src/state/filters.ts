@@ -9,6 +9,8 @@ import type { PhotosQueryFilters } from '../../../shared/api/photos.js';
 export interface ActiveFilters {
   years: number[];
   folders: string[];
+  /** Nested folders deselected under `folders` (deepest rule wins). */
+  excludeFolders: string[];
   playlistId: string | null;
 }
 
@@ -17,6 +19,7 @@ export const ACTIVE_FILTERS_STORAGE_KEY = 'photo-wall.active-filters.v1';
 export const EMPTY_FILTERS: ActiveFilters = {
   years: [],
   folders: [],
+  excludeFolders: [],
   playlistId: null,
 };
 
@@ -24,6 +27,7 @@ export function toQueryFilters(active: ActiveFilters): PhotosQueryFilters {
   const out: PhotosQueryFilters = {};
   if (active.years.length > 0) out.years = active.years;
   if (active.folders.length > 0) out.folders = active.folders;
+  if (active.excludeFolders.length > 0) out.excludeFolders = active.excludeFolders;
   if (active.playlistId !== null) out.playlistId = active.playlistId;
   return out;
 }
@@ -32,6 +36,7 @@ export function hasAnyFilter(active: ActiveFilters): boolean {
   return (
     active.years.length > 0 ||
     active.folders.length > 0 ||
+    active.excludeFolders.length > 0 ||
     active.playlistId !== null
   );
 }
@@ -43,6 +48,9 @@ export function summarizeFilters(active: ActiveFilters): string {
   }
   if (active.folders.length > 0) {
     parts.push(`folders=${active.folders.length}`);
+  }
+  if (active.excludeFolders.length > 0) {
+    parts.push(`excluded=${active.excludeFolders.length}`);
   }
   if (active.playlistId !== null) {
     parts.push(`playlist=${active.playlistId}`);
@@ -81,6 +89,41 @@ export function toggleFolder(
   return { ...active, folders: nextFolders };
 }
 
+/** Replace the folder selection rules, e.g. after a folder-tree toggle. */
+export function setFolderSelection(
+  active: ActiveFilters,
+  selection: { folders: string[]; excludeFolders: string[] },
+): ActiveFilters {
+  return {
+    ...active,
+    folders: [...selection.folders].sort(),
+    excludeFolders: [...selection.excludeFolders].sort(),
+  };
+}
+
+/**
+ * Drop saved folder rules for folders the library no longer has. A
+ * stale rule can't be shown or cleared in the album picker, yet it
+ * would still narrow the query and add album areas. Returns the same
+ * object when nothing was dropped.
+ */
+export function pruneMissingFolders(
+  active: ActiveFilters,
+  availableFolders: readonly string[],
+): ActiveFilters {
+  const available = new Set(availableFolders);
+  const folders = active.folders.filter((f) => available.has(f));
+  const excludeFolders = active.excludeFolders.filter((f) => available.has(f));
+  if (
+    folders.length === active.folders.length &&
+    excludeFolders.length === active.excludeFolders.length
+  ) {
+    return active;
+  }
+  // Exclusions only mean something under a remaining selection.
+  return { ...active, folders, excludeFolders: folders.length > 0 ? excludeFolders : [] };
+}
+
 export function clearFilters(active: ActiveFilters): ActiveFilters {
   if (!hasAnyFilter(active)) return active;
   return EMPTY_FILTERS;
@@ -94,11 +137,12 @@ export function clearFilters(active: ActiveFilters): ActiveFilters {
  */
 export function applyPlaylistFilters(
   playlistId: string,
-  filters: { years: number[]; folders: string[] },
+  filters: { years: number[]; folders: string[]; excludeFolders?: string[] },
 ): ActiveFilters {
   return {
     years: [...filters.years].sort((a, b) => a - b),
     folders: [...filters.folders].sort(),
+    excludeFolders: [...(filters.excludeFolders ?? [])].sort(),
     playlistId,
   };
 }
@@ -129,6 +173,9 @@ export function parseActiveFilters(raw: string | null): ActiveFilters {
         : [],
       folders: Array.isArray(parsed.folders)
         ? parsed.folders.filter((folder): folder is string => typeof folder === 'string').sort()
+        : [],
+      excludeFolders: Array.isArray(parsed.excludeFolders)
+        ? parsed.excludeFolders.filter((folder): folder is string => typeof folder === 'string').sort()
         : [],
       playlistId: typeof parsed.playlistId === 'string' ? parsed.playlistId : null,
     };

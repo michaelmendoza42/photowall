@@ -14,6 +14,7 @@ export const queryKeys = {
       {
         years: [...(filters.years ?? [])].sort((a, b) => a - b),
         folders: [...(filters.folders ?? [])].sort(),
+        excludeFolders: [...(filters.excludeFolders ?? [])].sort(),
         playlistId: filters.playlistId ?? null,
         cursor,
       },
@@ -25,6 +26,7 @@ export const queryKeys = {
       {
         years: [...(filters.years ?? [])].sort((a, b) => a - b),
         folders: [...(filters.folders ?? [])].sort(),
+        excludeFolders: [...(filters.excludeFolders ?? [])].sort(),
         playlistId: filters.playlistId ?? null,
         limit,
       },

@@ -4,7 +4,7 @@ import {
   packJustifiedRows,
   type PackerResult,
 } from './packer.js';
-import type { PixiSceneTileInput } from './pixiScene.js';
+import { wallTileZOrder, type PixiSceneTileInput } from './pixiScene.js';
 import {
   buildSingleStreamRenderWindow,
   projectSingleStreamViewport,
@@ -132,9 +132,12 @@ export function buildSingleStreamSceneModel(
 export function buildPixiSceneTileInputs(
   renderedRows: readonly SingleStreamSceneRow[],
 ): PixiSceneTileInput[] {
-  return renderedRows.flatMap((row) =>
-    row.tiles.map((tile) => ({
+  // Match the hit targets' stacking: later rows draw over earlier ones,
+  // and within a row higher layers draw over lower ones.
+  return renderedRows.flatMap((row, rowIndex) =>
+    row.tiles.map((tile, tileIndex) => ({
       key: tile.key,
+      zOrder: wallTileZOrder(rowIndex, tile.layer, tileIndex),
       rowOffsetTop: row.offsetTop,
       x: tile.x,
       y: tile.y,

@@ -27,6 +27,9 @@ export function buildPhotosQueryParams(
   for (const folder of input.filters.folders ?? []) {
     params.append('folder', folder);
   }
+  for (const folder of input.filters.excludeFolders ?? []) {
+    params.append('exclude', folder);
+  }
   if (input.filters.playlistId !== undefined) {
     params.set('playlist', input.filters.playlistId);
   }

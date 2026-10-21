@@ -27,7 +27,7 @@ test.describe('grouped signpost navigation', () => {
     page,
   }, testInfo: TestInfo) => {
     await openControls(page);
-    await page.getByTestId('controls-year-2024').click();
+    await page.getByTestId('controls-folder-2024').click();
     await closeControls(page);
 
     const wall = page.getByTestId('wall-canvas');
@@ -88,6 +88,7 @@ test.describe('grouped signpost navigation', () => {
     page,
   }) => {
     await openControls(page);
+    await page.getByTestId('controls-folder-expand-2024').click();
     await page.getByTestId('controls-folder-2024/travel-iceland').click();
     await page.getByTestId('controls-folder-2024/wedding-anna').click();
     await closeControls(page);
@@ -95,12 +96,13 @@ test.describe('grouped signpost navigation', () => {
     const wall = page.getByTestId('wall-canvas');
     await expect(wall).toHaveAttribute('data-layout-mode', 'grouped');
     await expect
-      .poll(async () => countUniquePhotoIds(page))
-      .toBe(4);
+      .poll(async () => packedPhotoCount(page))
+      .toBe(SELECTED_PHOTO_COUNT);
 
     await page.reload();
     await openReadyWall(page);
     await openControls(page);
+    await page.getByTestId('controls-folder-expand-2024').click();
     await expect(page.getByTestId('controls-folder-2024/travel-iceland')).toHaveAttribute(
       'data-selected',
       'true',
@@ -113,8 +115,8 @@ test.describe('grouped signpost navigation', () => {
 
     await expect(page.getByTestId('wall-canvas')).toHaveAttribute('data-layout-mode', 'grouped');
     await expect
-      .poll(async () => countUniquePhotoIds(page))
-      .toBe(4);
+      .poll(async () => packedPhotoCount(page))
+      .toBe(SELECTED_PHOTO_COUNT);
   });
 });
 
@@ -170,16 +172,12 @@ async function cameraPosition(wall: Locator): Promise<{ x: string; y: string }> 
   };
 }
 
-async function countUniquePhotoIds(page: Page): Promise<number> {
-  return page.getByTestId('wall-photo-tile').evaluateAll((nodes) => {
-    const ids = new Set<string>();
-    nodes.forEach((node) => {
-      if (!(node instanceof HTMLElement)) return;
-      const id = node.dataset['photoId'];
-      if (id) ids.add(id);
-    });
-    return ids.size;
-  });
+/** Iceland (50) plus wedding (70) photos in `fixtures/library-wall`. */
+const SELECTED_PHOTO_COUNT = 120;
+
+/** Photos laid out on the wall (tiles off-screen are not mounted). */
+async function packedPhotoCount(page: Page): Promise<number> {
+  return Number(await page.getByTestId('wall-canvas').getAttribute('data-packed-photo-count'));
 }
 
 async function pickCenteredTile(page: Page): Promise<Locator> {

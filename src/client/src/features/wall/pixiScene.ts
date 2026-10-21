@@ -18,6 +18,8 @@ export interface PixiSceneTileInput {
   sourceWidth?: number;
   sourceHeight?: number;
   sourceMtimeMs?: number;
+  /** Draw order (higher on top); defaults to list order. */
+  zOrder?: number;
 }
 
 export interface PixiSceneSprite {
@@ -35,6 +37,7 @@ export interface PixiSceneSprite {
   onScreen: boolean;
   /** Load order: on-screen tiles nearest the viewport center come first. */
   priority: number;
+  zOrder?: number;
 }
 
 /** Screen size and device pixel ratio the wall is drawn at. */
@@ -131,6 +134,7 @@ export function buildPixiSceneSprites(
 
     return {
       key: tile.key,
+      ...(tile.zOrder !== undefined ? { zOrder: tile.zOrder } : {}),
       x: tile.x,
       y,
       width: tile.width,
@@ -164,4 +168,35 @@ export function largestOnScreenVariant(sprites: readonly PixiSceneSprite[]): Med
     }
   }
   return largest;
+}
+
+/**
+ * The centered region of a `source`-sized image that has the `target`
+ * shape, in source pixels: CSS `object-fit: cover` as a texture frame.
+ * Tiles may crop their photo but never stretch it.
+ */
+export function coverCropFrame(
+  source: { width: number; height: number },
+  target: { width: number; height: number },
+): { x: number; y: number; width: number; height: number } {
+  if (source.width <= 0 || source.height <= 0 || target.width <= 0 || target.height <= 0) {
+    return { x: 0, y: 0, width: Math.max(0, source.width), height: Math.max(0, source.height) };
+  }
+  const scale = Math.max(target.width / source.width, target.height / source.height);
+  const width = Math.min(source.width, target.width / scale);
+  const height = Math.min(source.height, target.height / scale);
+  return {
+    x: (source.width - width) / 2,
+    y: (source.height - height) / 2,
+    width,
+    height,
+  };
+}
+
+/**
+ * Draw order matching the DOM hit targets: rows stack in order (each row
+ * is its own stacking context), and inside a row, higher layers win.
+ */
+export function wallTileZOrder(rowIndex: number, layer: number, tileIndex: number): number {
+  return rowIndex * 1_000_000 + layer * 100_000 + tileIndex;
 }

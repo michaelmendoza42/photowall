@@ -20,6 +20,7 @@ const FolderPathSchema = z
 export const PlaylistFiltersSchema = z.object({
   years: z.array(z.number().int()).max(64),
   folders: z.array(FolderPathSchema).max(64),
+  excludeFolders: z.array(FolderPathSchema).max(256).optional(),
 });
 
 export const PlaylistRecordSchema = z.object({

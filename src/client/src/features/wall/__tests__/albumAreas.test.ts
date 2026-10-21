@@ -45,6 +45,7 @@ function filters(partial: Partial<ResolvedPhotoFilters>): ResolvedPhotoFilters {
   return {
     years: [],
     folders: [],
+    excludeFolders: [],
     playlistId: null,
     ...partial,
   };
@@ -118,6 +119,47 @@ describe('deriveAlbumAreas', () => {
     expect(
       resolvePhotoAlbumKey(photo('base', '2024/trip'), areas.albums),
     ).toBe('folder:2024/trip');
+  });
+
+  it('expands a selected top-level folder into one area per child album', () => {
+    const areas = deriveAlbumAreas({
+      filters: filters({ folders: ['2024'] }),
+      facets: FACETS,
+      photos: [],
+      snapshotId: 'snap-1',
+      worldWidth: 1200,
+    });
+
+    expect(areas.grouped).toBe(true);
+    expect(areas.albums.map((album) => album.albumKey).sort()).toEqual([
+      'folder:2024',
+      'folder:2024/family',
+      'folder:2024/trip',
+    ]);
+    expect(
+      resolvePhotoAlbumKey(photo('nested', '2024/trip/day-1'), areas.albums),
+    ).toBe('folder:2024/trip');
+  });
+
+  it('leaves deselected nested folders out of the album areas', () => {
+    const areas = deriveAlbumAreas({
+      filters: filters({
+        folders: ['2024'],
+        excludeFolders: ['2024/family', '2024/trip/day-1'],
+      }),
+      facets: FACETS,
+      photos: [],
+      snapshotId: 'snap-1',
+      worldWidth: 1200,
+    });
+
+    expect(areas.albums.map((album) => album.albumKey).sort()).toEqual([
+      'folder:2024',
+      'folder:2024/trip',
+    ]);
+    expect(
+      areas.albums.find((album) => album.albumKey === 'folder:2024/trip')?.photoCountEstimate,
+    ).toBe(4);
   });
 
   it('buckets photos by derived album key', () => {

@@ -93,7 +93,7 @@ On desktop fine-pointer devices, the hovered photo lifts slightly (about 8% larg
 - **Surfaced to users:** yes — directly experienced while browsing the wall
 
 ### Focused-photo modal
-The simple, viewport-sized overlay opened when a user clicks a non-dragged photo. It has an explicit visible `X` close control and returns the user to the same wall context on close.
+The simple, viewport-sized overlay opened when a user clicks a non-dragged photo. It has an explicit visible `X` close control, next/previous controls that step to an adjacent photo and center the wall on it, and returns the user to that wall context on close.
 
 - **Lives in:** `docs/product/photo-wall-experience.md`
 - **Why it exists:** preserves a minimal default UI while still letting users inspect a single photo at a larger size
@@ -120,7 +120,7 @@ The layout rule that photos should pack together tightly with no intentional gap
 - **Surfaced to users:** yes — visible in the core interface
 
 ### Structured mosaic
-The preferred wall-composition character: a column-first mosaic with intentional rhythm, varied tile shapes, and staggered seams rather than ad-hoc gap filling or obvious striping.
+The preferred wall-composition character: a column-first mosaic with intentional rhythm, varied tile shapes, and few, short, staggered seams rather than ad-hoc gap filling, long straight seam lines or obvious striping.
 
 - **Lives in:** `docs/glossary.md` and wall-layout review notes
 - **Why it exists:** gives reviewers a durable name for the target composition quality instead of describing it from scratch each time
@@ -174,9 +174,9 @@ A low-attention bridging tile that helps neighboring shapes meet cleanly without
 - **Surfaced to users:** indirectly — it influences the feel of the wall more than explicit perception
 
 ### Seam-break rescue
-A targeted corrective move that interrupts an overly long seam line before the wall starts reading as striped or mechanically repetitive.
+A targeted corrective move that interrupts an overly long seam line before the wall starts reading as striped or mechanically repetitive. The packer does this by sizing a photo so two neighbouring columns line up, then moving the boundary between them, so the seam ends in a T-junction.
 
-- **Lives in:** future wall-layout implementation notes
+- **Lives in:** `src/client/src/features/wall/packer.ts`
 - **Why it exists:** names a specific intervention for one of the main structured-mosaic failure modes
 - **Used by:** packer heuristics, layout review, and synthetic studies
 - **Change risk:** medium — misuse can either over-fragment the wall or leave obvious seam problems untreated

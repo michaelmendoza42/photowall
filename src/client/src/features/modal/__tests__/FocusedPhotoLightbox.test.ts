@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildFocusedPhotoLightboxSlide } from '../FocusedPhotoLightbox.js';
+import { buildFocusedPhotoLightboxSlide, swipeStepDirection } from '../FocusedPhotoLightbox.js';
 
 describe('buildFocusedPhotoLightboxSlide', () => {
   it('targets the modal derivative for the focused viewer', () => {
@@ -46,5 +46,17 @@ describe('buildFocusedPhotoLightboxSlide', () => {
       src: '/api/media/broken-size.jpg?variant=modal&format=webp',
       alt: '',
     });
+  });
+});
+
+describe('swipeStepDirection', () => {
+  it('swiping left goes to the next photo, swiping right to the previous', () => {
+    expect(swipeStepDirection(-120, 10)).toBe('next');
+    expect(swipeStepDirection(120, -10)).toBe('previous');
+  });
+
+  it('ignores short or mostly-vertical moves', () => {
+    expect(swipeStepDirection(-20, 0)).toBeNull();
+    expect(swipeStepDirection(-80, 90)).toBeNull();
   });
 });

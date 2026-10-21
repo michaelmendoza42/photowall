@@ -87,7 +87,21 @@ describe('matchesFilters', () => {
       directoryPath: 'misc',
       year: null,
     });
-    expect(matchesFilters(yearless, { years: [2024], folders: [], playlistId: null })).toBe(false);
+    expect(matchesFilters(yearless, { years: [2024], folders: [], excludeFolders: [], playlistId: null })).toBe(false);
+  });
+
+  it('carves excluded nested folders out of a selected folder', () => {
+    const filters = {
+      years: [],
+      folders: ['2024'],
+      excludeFolders: ['2024/wedding-anna'],
+      playlistId: null,
+    };
+    expect(sample.filter((p) => matchesFilters(p, filters)).map((p) => p.directoryPath))
+      .not.toContain('2024/wedding-anna');
+    expect(
+      sample.some((p) => p.directoryPath.startsWith('2024/') && matchesFilters(p, filters)),
+    ).toBe(true);
   });
 
   it('AND-combines year and folder filters', () => {
@@ -96,6 +110,7 @@ describe('matchesFilters', () => {
       matchesFilters(target, {
         years: [2024],
         folders: ['2024/wedding-anna'],
+        excludeFolders: [],
         playlistId: null,
       }),
     ).toBe(true);
@@ -103,6 +118,7 @@ describe('matchesFilters', () => {
       matchesFilters(target, {
         years: [2023],
         folders: ['2024/wedding-anna'],
+        excludeFolders: [],
         playlistId: null,
       }),
     ).toBe(false);
@@ -110,6 +126,7 @@ describe('matchesFilters', () => {
       matchesFilters(target, {
         years: [2024],
         folders: ['2023'],
+        excludeFolders: [],
         playlistId: null,
       }),
     ).toBe(false);
@@ -120,7 +137,7 @@ describe('slicePhotoPage deterministic pagination', () => {
   it('returns the first N matches and a non-null lastTuple', () => {
     const page = slicePhotoPage({
       photos: sample,
-      filters: { years: [], folders: [], playlistId: null },
+      filters: { years: [], folders: [], excludeFolders: [], playlistId: null },
       afterRelativePath: null,
       afterId: null,
       limit: 2,
@@ -137,14 +154,14 @@ describe('slicePhotoPage deterministic pagination', () => {
   it('resumes after a cursor tuple deterministically', () => {
     const firstPage = slicePhotoPage({
       photos: sample,
-      filters: { years: [], folders: [], playlistId: null },
+      filters: { years: [], folders: [], excludeFolders: [], playlistId: null },
       afterRelativePath: null,
       afterId: null,
       limit: 2,
     });
     const nextPage = slicePhotoPage({
       photos: sample,
-      filters: { years: [], folders: [], playlistId: null },
+      filters: { years: [], folders: [], excludeFolders: [], playlistId: null },
       afterRelativePath: firstPage.lastTuple!.relativePath,
       afterId: firstPage.lastTuple!.id,
       limit: 2,
@@ -153,7 +170,7 @@ describe('slicePhotoPage deterministic pagination', () => {
 
     const finalPage = slicePhotoPage({
       photos: sample,
-      filters: { years: [], folders: [], playlistId: null },
+      filters: { years: [], folders: [], excludeFolders: [], playlistId: null },
       afterRelativePath: nextPage.lastTuple!.relativePath,
       afterId: nextPage.lastTuple!.id,
       limit: 2,
@@ -170,7 +187,7 @@ describe('slicePhotoPage deterministic pagination', () => {
     while (safety-- > 0) {
       const page = slicePhotoPage({
         photos: sample,
-        filters: { years: [], folders: [], playlistId: null },
+        filters: { years: [], folders: [], excludeFolders: [], playlistId: null },
         afterRelativePath: afterPath,
         afterId,
         limit: 2,
@@ -186,7 +203,7 @@ describe('slicePhotoPage deterministic pagination', () => {
   it('combines year and folder filters', () => {
     const page = slicePhotoPage({
       photos: sample,
-      filters: { years: [2024], folders: ['2024/wedding-anna'], playlistId: null },
+      filters: { years: [2024], folders: ['2024/wedding-anna'], excludeFolders: [], playlistId: null },
       afterRelativePath: null,
       afterId: null,
       limit: 10,
@@ -199,7 +216,7 @@ describe('slicePhotoPage deterministic pagination', () => {
   it('reports totalMatching even when limit caps the page', () => {
     const page = slicePhotoPage({
       photos: sample,
-      filters: { years: [2024], folders: [], playlistId: null },
+      filters: { years: [2024], folders: [], excludeFolders: [], playlistId: null },
       afterRelativePath: null,
       afterId: null,
       limit: 1,

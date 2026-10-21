@@ -375,6 +375,20 @@ body {
 	}
 }
 
+/* The previous photo sinks back into the wall as the next one pops. */
+.wall-hover-preview--settling {
+	animation: wall-hover-settle 140ms ease-in forwards;
+}
+
+@keyframes wall-hover-settle {
+	to {
+		scale: 0.926;
+		box-shadow:
+			0 0 0 rgba(0, 0, 0, 0),
+			0 0 0 rgba(0, 0, 0, 0);
+	}
+}
+
 @media (prefers-reduced-motion: reduce) {
 	.wall-hover-preview {
 		animation: none;
@@ -464,8 +478,39 @@ body {
 	padding: 0;
 }
 
+.focused-photo__nav {
+	position: absolute;
+	top: 50%;
+	width: 44px;
+	height: 44px;
+	margin-top: -22px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	background: rgba(20, 17, 15, 0.6);
+	color: var(--pw-fg);
+	border: 1px solid var(--pw-rule);
+	border-radius: 999px;
+	z-index: 1;
+	font: inherit;
+	font-size: 26px;
+	line-height: 1;
+	cursor: pointer;
+	padding: 0 0 3px;
+}
+
+.focused-photo__nav--previous {
+	left: clamp(0.75rem, 2vw, 1.25rem);
+}
+
+.focused-photo__nav--next {
+	right: clamp(0.75rem, 2vw, 1.25rem);
+}
+
 .focused-photo__close:hover,
-.focused-photo__close:focus-visible {
+.focused-photo__close:focus-visible,
+.focused-photo__nav:hover,
+.focused-photo__nav:focus-visible {
 	color: var(--pw-fg);
 	border-color: var(--pw-fg-muted);
 	outline: none;
@@ -603,68 +648,121 @@ body {
 	font-size: 12px;
 }
 
-.controls__chips {
+.album-tree {
 	list-style: none;
 	margin: 0;
 	padding: 0;
+}
+
+.album-tree__row {
 	display: flex;
-	flex-wrap: wrap;
-	gap: 0.3rem;
+	align-items: center;
+	gap: 0.15rem;
+	min-height: 1.75rem;
 }
 
-.controls__chips--folders {
-	flex-direction: column;
-	gap: 0.25rem;
-}
-
-.controls__chip {
+.album-tree__disclosure {
 	appearance: none;
+	flex: 0 0 1.2rem;
+	width: 1.2rem;
+	height: 1.5rem;
+	padding: 0;
+	border: 0;
 	background: transparent;
-	border: 1px solid var(--pw-rule);
-	color: var(--pw-fg-muted);
-	padding: 0.25rem 0.55rem;
-	font: inherit;
-	font-size: 12px;
-	display: inline-flex;
-	align-items: baseline;
-	gap: 0.5rem;
+	color: var(--pw-fg-quiet);
+	font-size: 11px;
 	cursor: pointer;
-	max-width: 100%;
 }
 
-.controls__chips--folders .controls__chip {
-	width: 100%;
-	justify-content: space-between;
-}
-
-.controls__chip:hover,
-.controls__chip:focus-visible {
+button.album-tree__disclosure:hover,
+button.album-tree__disclosure:focus-visible {
 	color: var(--pw-fg);
-	border-color: var(--pw-fg-muted);
 	outline: none;
 }
 
-.controls__chip[data-selected="true"] {
-	color: var(--pw-bg);
-	background: var(--pw-fg);
-	border-color: var(--pw-fg);
+.album-tree__label {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	color: var(--pw-fg-muted);
+	font-size: 12px;
+	cursor: pointer;
 }
 
-.controls__chip-label {
+.album-tree__label:hover {
+	color: var(--pw-fg);
+}
+
+/* Square box: filled with a tick when the whole folder is picked, a bar
+   when only some of the folders inside it are. */
+.album-tree__checkbox {
+	appearance: none;
+	flex: 0 0 auto;
+	position: relative;
+	width: 14px;
+	height: 14px;
+	margin: 0;
+	border: 1px solid var(--pw-fg-quiet);
+	background: transparent;
+	cursor: pointer;
+}
+
+.album-tree__checkbox:focus-visible {
+	outline: 1px solid var(--pw-fg);
+	outline-offset: 2px;
+}
+
+.album-tree__checkbox:checked,
+.album-tree__checkbox:indeterminate {
+	border-color: var(--pw-fg);
+	background: var(--pw-fg);
+}
+
+.album-tree__checkbox:checked::after {
+	content: "";
+	position: absolute;
+	left: 4px;
+	top: 1px;
+	width: 4px;
+	height: 8px;
+	border: solid var(--pw-bg);
+	border-width: 0 2px 2px 0;
+	transform: rotate(45deg);
+}
+
+.album-tree__checkbox:indeterminate {
+	background: transparent;
+}
+
+.album-tree__checkbox:indeterminate::after {
+	content: "";
+	position: absolute;
+	left: 2px;
+	right: 2px;
+	top: 5px;
+	height: 2px;
+	background: var(--pw-fg);
+}
+
+.album-tree__checkbox:checked + .album-tree__name,
+.album-tree__checkbox:indeterminate + .album-tree__name {
+	color: var(--pw-fg);
+}
+
+.album-tree__name {
+	flex: 1;
+	min-width: 0;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
 
-.controls__chip-count {
+.album-tree__count {
 	color: var(--pw-fg-quiet);
 	font-family: var(--pw-font-mono);
 	font-size: 10px;
-}
-
-.controls__chip[data-selected="true"] .controls__chip-count {
-	color: var(--pw-bg);
-	opacity: 0.65;
 }
 
 .controls__playlists {

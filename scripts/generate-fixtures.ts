@@ -1,5 +1,6 @@
 /**
- * Regenerate the committed fixture libraries used by scanner tests.
+ * Regenerate the committed fixture libraries used by scanner tests and
+ * the browser specs (`library-wall`).
  *
  * The output images are tiny synthetic JPEGs whose width/height are
  * what the scanner tests assert against. Run with:
@@ -20,6 +21,7 @@ const repoRoot = path.resolve(here, '..');
 const fixturesRoot = path.join(repoRoot, 'fixtures');
 const smokeRoot = path.join(fixturesRoot, 'library-smoke');
 const edgeRoot = path.join(fixturesRoot, 'library-edge');
+const wallRoot = path.join(fixturesRoot, 'library-wall');
 
 interface ImageSpec {
   width: number;
@@ -146,11 +148,65 @@ async function buildEdge(): Promise<void> {
   );
 }
 
+/**
+ * The browser specs' library: the smoke library's albums with enough
+ * photos that the wall is several screens across, in a mix of shapes.
+ */
+async function buildWall(): Promise<void> {
+  await clearGenerated(wallRoot);
+  const albums: Array<[string, number]> = [
+    [path.join('2024', 'wedding-anna'), 70],
+    [path.join('2024', 'travel-iceland'), 50],
+    [path.join('2023', 'birthday-leo'), 40],
+  ];
+  const shapes: Array<[number, number]> = [
+    [180, 120],
+    [120, 180],
+    [160, 90],
+    [150, 150],
+    [180, 120],
+    [120, 180],
+    [200, 100],
+  ];
+  let index = 0;
+  for (const [album, count] of albums) {
+    for (let photo = 0; photo < count; photo += 1) {
+      const [width, height] = shapes[index % shapes.length]!;
+      const hue = (index * 47) % 360;
+      await writeJpeg(path.join(wallRoot, album, `img_${String(photo).padStart(3, '0')}.jpg`), {
+        width,
+        height,
+        color: hslToRgb(hue, 0.55, 0.5),
+      });
+      index += 1;
+    }
+  }
+}
+
+function hslToRgb(hue: number, saturation: number, lightness: number): ImageSpec['color'] {
+  const chroma = (1 - Math.abs(2 * lightness - 1)) * saturation;
+  const x = chroma * (1 - Math.abs(((hue / 60) % 2) - 1));
+  const m = lightness - chroma / 2;
+  const [r, g, b] =
+    hue < 60 ? [chroma, x, 0]
+      : hue < 120 ? [x, chroma, 0]
+        : hue < 180 ? [0, chroma, x]
+          : hue < 240 ? [0, x, chroma]
+            : hue < 300 ? [x, 0, chroma]
+              : [chroma, 0, x];
+  return {
+    r: Math.round((r + m) * 255),
+    g: Math.round((g + m) * 255),
+    b: Math.round((b + m) * 255),
+  };
+}
+
 async function main(): Promise<void> {
   await buildSmoke();
   await buildEdge();
+  await buildWall();
   // eslint-disable-next-line no-console
-  console.log('fixtures regenerated:', { smokeRoot, edgeRoot });
+  console.log('fixtures regenerated:', { smokeRoot, edgeRoot, wallRoot });
 }
 
 main().catch((err) => {

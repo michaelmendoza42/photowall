@@ -21,7 +21,8 @@
     "test:watch": "vitest",
     "test:browser": "playwright test",
     "playwright:serve": "npm run fixtures:generate && npm run build && npm start",
-    "fixtures:generate": "tsx scripts/generate-fixtures.ts"
+    "fixtures:generate": "tsx scripts/generate-fixtures.ts",
+    "layout:viz": "tsx scripts/visualize-layout.ts"
   },
   "dependencies": {
     "@fastify/static": "^7.0.4",

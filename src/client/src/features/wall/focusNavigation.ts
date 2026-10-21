@@ -1,11 +1,14 @@
 // Next/previous order for the focused-photo view.
 //
-// The wall is a column mosaic, so the order snakes through it: down one
-// column, up the neighbouring one, down the next, and so on. Every step
-// lands on a photo touching the one before it (the same column, or the
-// next column over at a turn), and the order is one cycle through every
-// packed photo, so repeated stepping never circles a small local group.
-// Grouped walls snake through each album area in turn, top to bottom.
+// Next moves right across the wall. The wall is cut into bands about two
+// photos tall, and the order runs a small serpentine along each band:
+// down the band's slice of the first column, up the next column's slice,
+// down the next, and so on to the right edge. It then drops to the next
+// band and carries on rightward from the left edge, which on the looping
+// wall sits just right of the edge it left. The order is one cycle through
+// every packed photo, so holding next never repeats a photo until the
+// whole wall is covered. Grouped walls run through each album's mosaic in
+// turn.
 
 import type { CameraState } from '../../state/camera.js';
 import type { PackedRow, PackedTile } from './packer.js';
@@ -14,7 +17,7 @@ import { computeWrapAwareCameraTarget } from './signpostNavigation.js';
 export type FocusStepDirection = 'next' | 'previous';
 
 export interface FocusNavigation {
-  /** Every packed photo id, in snake order. */
+  /** Every packed photo id, in band-serpentine order. */
   order: string[];
   tilesById: Map<string, PackedTile>;
 }
@@ -28,14 +31,12 @@ export interface WallFocusNavigator {
   step(photoId: string, direction: FocusStepDirection): string | null;
 }
 
-const EDGE_EPSILON_PX = 0.5;
+/** A band is about this many photos tall. */
+const BAND_PHOTOS = 2;
 
-interface ColumnChain {
-  x: number;
-  width: number;
-  top: number;
-  bottom: number;
-  tiles: PackedTile[];
+function medianHeight(tiles: readonly PackedTile[]): number {
+  const heights = tiles.map((tile) => tile.height).sort((a, b) => a - b);
+  return Math.max(heights[Math.floor(heights.length / 2)] ?? 1, 1);
 }
 
 export function buildFocusNavigation(
@@ -44,17 +45,47 @@ export function buildFocusNavigation(
   const tilesById = new Map<string, PackedTile>();
   for (const row of rows) {
     for (const tile of row.tiles) {
+      // Edge repeats show a photo that also sits elsewhere; step via the original.
+      if (tile.duplicate) continue;
       if (!tilesById.has(tile.photoId)) tilesById.set(tile.photoId, tile);
     }
   }
 
-  const chains = buildColumnChains([...tilesById.values()]);
+  const mosaics = new Map<number, PackedTile[]>();
+  for (const tile of tilesById.values()) {
+    const tiles = mosaics.get(tile.mosaic) ?? [];
+    mosaics.set(tile.mosaic, tiles);
+    tiles.push(tile);
+  }
+
   const order: string[] = [];
-  for (const block of groupAdjoiningChains(chains)) {
-    block.forEach((chain, index) => {
-      const tiles = index % 2 === 0 ? chain.tiles : [...chain.tiles].reverse();
-      for (const tile of tiles) order.push(tile.photoId);
-    });
+  for (const mosaic of [...mosaics.keys()].sort((a, b) => a - b)) {
+    const tiles = mosaics.get(mosaic)!;
+    const top = Math.min(...tiles.map((tile) => tile.y));
+    const bandHeight = BAND_PHOTOS * medianHeight(tiles);
+    const bandOf = (tile: PackedTile) =>
+      Math.max(0, Math.floor((tile.y + tile.height / 2 - top) / bandHeight));
+
+    const bands = new Map<number, Map<number, PackedTile[]>>();
+    for (const tile of tiles) {
+      const band = bandOf(tile);
+      const bandLanes = bands.get(band) ?? new Map<number, PackedTile[]>();
+      bands.set(band, bandLanes);
+      const slice = bandLanes.get(tile.lane) ?? [];
+      bandLanes.set(tile.lane, slice);
+      slice.push(tile);
+    }
+
+    for (const band of [...bands.keys()].sort((a, b) => a - b)) {
+      const bandLanes = bands.get(band)!;
+      [...bandLanes.keys()]
+        .sort((a, b) => a - b)
+        .forEach((lane, index) => {
+          const slice = bandLanes.get(lane)!.sort((a, b) => a.y - b.y);
+          if (index % 2 === 1) slice.reverse();
+          for (const tile of slice) order.push(tile.photoId);
+        });
+    }
   }
   return { order, tilesById };
 }
@@ -86,82 +117,4 @@ export function cameraCenteredOnTile(
     targetY: tile.y + tile.height / 2,
     zoom,
   });
-}
-
-/** Vertically contiguous runs of tiles sharing one column's x and width. */
-function buildColumnChains(tiles: PackedTile[]): ColumnChain[] {
-  const sorted = [...tiles].sort(
-    (a, b) => a.x - b.x || a.width - b.width || a.y - b.y,
-  );
-  const chains: ColumnChain[] = [];
-  let current: ColumnChain | null = null;
-  for (const tile of sorted) {
-    if (
-      current &&
-      near(current.x, tile.x) &&
-      near(current.width, tile.width) &&
-      near(current.bottom, tile.y)
-    ) {
-      current.tiles.push(tile);
-      current.bottom = tile.y + tile.height;
-      continue;
-    }
-    current = {
-      x: tile.x,
-      width: tile.width,
-      top: tile.y,
-      bottom: tile.y + tile.height,
-      tiles: [tile],
-    };
-    chains.push(current);
-  }
-  return chains;
-}
-
-/**
- * Chains that sit side by side and overlap vertically belong to the same
- * mosaic block (the whole single-stream wall, or one album area). Blocks
- * come back top-to-bottom, then left-to-right; chains inside a block are
- * left-to-right.
- */
-function groupAdjoiningChains(chains: ColumnChain[]): ColumnChain[][] {
-  const parent = chains.map((_, index) => index);
-  const find = (index: number): number => {
-    while (parent[index] !== index) {
-      parent[index] = parent[parent[index]!]!;
-      index = parent[index]!;
-    }
-    return index;
-  };
-
-  for (let i = 0; i < chains.length; i += 1) {
-    for (let j = i + 1; j < chains.length; j += 1) {
-      const a = chains[i]!;
-      const b = chains[j]!;
-      const sideBySide =
-        near(a.x + a.width, b.x) || near(b.x + b.width, a.x);
-      const overlap = a.top < b.bottom && b.top < a.bottom;
-      if (sideBySide && overlap) parent[find(i)] = find(j);
-    }
-  }
-
-  const blocks = new Map<number, ColumnChain[]>();
-  chains.forEach((chain, index) => {
-    const root = find(index);
-    const block = blocks.get(root);
-    if (block) block.push(chain);
-    else blocks.set(root, [chain]);
-  });
-
-  return [...blocks.values()]
-    .map((block) => block.sort((a, b) => a.x - b.x || a.top - b.top))
-    .sort((a, b) => blockTop(a) - blockTop(b) || a[0]!.x - b[0]!.x);
-}
-
-function blockTop(block: ColumnChain[]): number {
-  return Math.min(...block.map((chain) => chain.top));
-}
-
-function near(a: number, b: number): boolean {
-  return Math.abs(a - b) <= EDGE_EPSILON_PX;
 }

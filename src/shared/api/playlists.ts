@@ -22,6 +22,8 @@ export function playlistResourcePath(id: string): string {
 export interface PlaylistFilters {
   years: number[];
   folders: string[];
+  /** Nested folders deselected under `folders`. Older playlists omit it. */
+  excludeFolders?: string[];
 }
 
 export interface PlaylistRecord {

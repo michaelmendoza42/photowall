@@ -111,6 +111,79 @@ test.describe('photo wall hover / click / modal contract', () => {
     expect(Math.abs(pop.y + pop.height / 2 - (tileUnder.y + tileUnder.height / 2))).toBeLessThanOrEqual(1);
   });
 
+  test('each newly hovered photo pops in while the previous one settles back', async ({
+    page,
+  }) => {
+    // Zoom out so a couple of photos fit entirely on screen.
+    const wall = page.getByTestId('wall-canvas');
+    await page.mouse.move(720, 480);
+    await page.keyboard.down('Control');
+    for (let step = 0; step < 6; step += 1) await page.mouse.wheel(0, 40);
+    await page.keyboard.up('Control');
+    await expect.poll(async () => Number(await wall.getAttribute('data-zoom'))).toBeLessThan(0.7);
+    await page.mouse.move(1, 1);
+    await expect
+      .poll(async () => {
+        const first = await wall.getAttribute('data-camera-x');
+        await page.waitForTimeout(400);
+        return first === (await wall.getAttribute('data-camera-x'));
+      })
+      .toBe(true);
+    const targets = await page.getByTestId('wall-photo-tile').evaluateAll((nodes) => {
+      const seen = new Set<string>();
+      const points: Array<{ id: string; x: number; y: number }> = [];
+      for (const node of nodes) {
+        const el = node as HTMLElement;
+        const id = el.dataset['photoId']!;
+        const r = el.getBoundingClientRect();
+        const fullyVisible =
+          r.left >= 0 && r.top >= 0 && r.right <= window.innerWidth && r.bottom <= window.innerHeight;
+        if (!fullyVisible || r.width < 60 || seen.has(id)) continue;
+        seen.add(id);
+        points.push({ id, x: r.left + r.width / 2, y: r.top + r.height / 2 });
+      }
+      return points.slice(0, 2);
+    });
+    expect(targets).toHaveLength(2);
+    const [first, second] = targets as [(typeof targets)[0], (typeof targets)[0]];
+
+    const preview = page.getByTestId('wall-hover-preview');
+    await page.mouse.move(first.x, first.y);
+    await expect(preview).toHaveAttribute('data-photo-id', first.id);
+    await expect
+      .poll(() => preview.evaluate((element) => element.getAnimations().length))
+      .toBe(0);
+
+    // Record whether each pop element animates as it mounts.
+    await page.evaluate(() => {
+      const mounts: Array<{ kind: string; id: string; animated: boolean }> = [];
+      (window as unknown as { __popMounts: typeof mounts }).__popMounts = mounts;
+      new MutationObserver((records) => {
+        for (const record of records) {
+          for (const node of Array.from(record.addedNodes)) {
+            if (!(node instanceof HTMLElement)) continue;
+            const kind = node.dataset['testid'] ?? '';
+            if (!kind.startsWith('wall-hover-preview')) continue;
+            mounts.push({ kind, id: node.dataset['photoId']!, animated: node.getAnimations().length > 0 });
+          }
+        }
+      }).observe(document.body, { childList: true, subtree: true });
+    });
+    await page.mouse.move(second.x, second.y);
+    await expect(preview).toHaveAttribute('data-photo-id', second.id);
+    // A fresh pop element per photo, so its pop-in animation plays again,
+    // while the previous photo animates back down into the wall.
+    const mounts = await page.evaluate(
+      () =>
+        (window as unknown as { __popMounts: Array<{ kind: string; id: string; animated: boolean }> })
+          .__popMounts,
+    );
+    expect(mounts).toContainEqual({ kind: 'wall-hover-preview', id: second.id, animated: true });
+    expect(mounts).toContainEqual({ kind: 'wall-hover-preview-settling', id: first.id, animated: true });
+    const settling = page.getByTestId('wall-hover-preview-settling');
+    await expect(settling).toHaveCount(0);
+  });
+
   test('sub-threshold pointer jitter still opens the correct focused-photo modal', async ({
     page,
   }) => {

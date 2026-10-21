@@ -69,6 +69,7 @@ describe('/api/photos route', () => {
     expect(body.appliedFilters).toEqual({
       years: [],
       folders: [],
+      excludeFolders: [],
       playlistId: null,
     });
     await app.close();

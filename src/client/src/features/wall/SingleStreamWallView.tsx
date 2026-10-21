@@ -6,18 +6,21 @@ import {
 	useRef,
 	useState,
 } from "react";
-import {
-	DEFAULT_MAX_ROW_HEIGHT,
-	DEFAULT_MOSAIC_COLUMN_FACTORS,
-} from "./worldWidth.js";
 import { shouldLoadNextPage } from "./dynamicLoading.js";
 import {
 	collectFirstAppearancePhotoIds,
 	rememberSeenPhotoIds,
 } from "./appearanceTracking.js";
 import { computeHoverPopRect } from "./hoverPreview.js";
-import { WallHoverPop } from "./WallHoverPop.js";
+import { WallHoverPopLayer } from "./WallHoverPop.js";
 import { useHoverCursorPan } from "./useHoverCursorPan.js";
+import { useWallFocusNavigator } from "./useWallFocusNavigator.js";
+import {
+	useCenterCameraOnLayout,
+	useRadialWallLayout,
+} from "./useRadialWallLayout.js";
+import { useCameraGlide } from "./useCameraGlide.js";
+import type { WallFocusNavigator } from "./focusNavigation.js";
 import { PixiWallSurface } from "./PixiWallSurface.js";
 import { WallZoomControls } from "./WallZoomControls.js";
 import { useTouchPinchZoom } from "./useTouchPinchZoom.js";
@@ -41,7 +44,6 @@ import {
 	type DragOrigin,
 } from "./dragGesture.js";
 import {
-	buildSingleStreamLayout,
 	projectSingleStreamSceneModel,
 	type SingleStreamSceneRow,
 	type SingleStreamSceneTile,
@@ -77,6 +79,8 @@ export interface SingleStreamWallViewProps {
 	activeAlbumAreaCount?: number;
 	onPhotoOpen?: (photo: PhotoQueryRecord) => void;
 	isModalOpen?: boolean;
+	/** Receives the focused view's next/previous handle for this wall. */
+	focusNavigatorRef?: React.MutableRefObject<WallFocusNavigator | null>;
 	dragThresholdPx?: number;
 	mediaSourceResolver?: WallMediaSourceResolver;
 }
@@ -112,7 +116,7 @@ export function SingleStreamWallView(
 ): JSX.Element {
 	const {
 		photos,
-		worldWidth,
+		worldWidth: referenceWidth,
 		hasNextPage,
 		isFetchingNextPage,
 		onLoadMore,
@@ -124,6 +128,7 @@ export function SingleStreamWallView(
 		activeAlbumAreaCount = 1,
 		onPhotoOpen,
 		isModalOpen = false,
+		focusNavigatorRef,
 		dragThresholdPx = DRAG_THRESHOLD_PX,
 		mediaSourceResolver,
 	} = props;
@@ -146,6 +151,11 @@ export function SingleStreamWallView(
 		cancel: cancelPanMomentum,
 		isActive: isPanMomentumActive,
 	} = usePanMomentum({ cameraRef, publishCamera, flushCamera });
+	const {
+		glideTo: glideCameraTo,
+		cancel: cancelFocusGlide,
+		isActive: isFocusGlideActive,
+	} = useCameraGlide({ cameraRef, publishCamera, flushCamera });
 
 	const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
 	const [dragActive, setDragActive] = useState(false);
@@ -191,19 +201,29 @@ export function SingleStreamWallView(
 		if (isPublishedCamera(camera)) return;
 		const live = cameraRef.current;
 		cameraRef.current =
-			dragRef.current || isPanMomentumActive() || isHoverPanActive()
+			dragRef.current ||
+			isPanMomentumActive() ||
+			isHoverPanActive() ||
+			isFocusGlideActive()
 				? withWorldBounds(withViewport(live, camera.viewport), camera.world)
 				: camera;
-	}, [camera, isHoverPanActive, isPanMomentumActive, isPublishedCamera]);
+	}, [
+		camera,
+		isFocusGlideActive,
+		isHoverPanActive,
+		isPanMomentumActive,
+		isPublishedCamera,
+	]);
 	const handlePinchStart = useCallback(() => {
 		cancelPanMomentum();
+		cancelFocusGlide();
 		const drag = dragRef.current;
 		if (!drag) return;
 		drag.crossedThreshold = true;
 		drag.momentum = createDragMomentumSample(performance.now());
 		pressedPhotoIdRef.current = null;
 		setHoverPreview(null);
-	}, [cancelPanMomentum]);
+	}, [cancelFocusGlide, cancelPanMomentum]);
 	// The wall scales from its top-left, so every zoom also moves the camera
 	// to keep the world point under the pinch, cursor or screen center fixed.
 	const applyZoom = useCallback(
@@ -263,17 +283,27 @@ export function SingleStreamWallView(
 		return () => observer.disconnect();
 	}, []);
 
-	const packedLayout = useMemo(
-		() =>
-			buildSingleStreamLayout({
-				photos,
-				hasMore: hasNextPage,
-				worldWidth,
-				maxRowHeight: DEFAULT_MAX_ROW_HEIGHT,
-				columnWidthFactors: DEFAULT_MOSAIC_COLUMN_FACTORS,
-			}),
-		[photos, hasNextPage, worldWidth],
-	);
+	const packedLayout = useRadialWallLayout({
+		photos,
+		referenceWidth,
+	});
+	// The world is sized to the photos; the viewport only sets tile size.
+	const worldWidth = packedLayout.worldWidth;
+	useCenterCameraOnLayout({
+		layout: packedLayout,
+		cameraRef,
+		zoomRef,
+		publishCamera,
+		flushCamera,
+	});
+
+	useWallFocusNavigator({
+		navigatorRef: focusNavigatorRef,
+		packed: packedLayout,
+		cameraRef,
+		zoomRef,
+		glideTo: glideCameraTo,
+	});
 
 	const sceneModel = useMemo(
 		() =>
@@ -393,6 +423,7 @@ export function SingleStreamWallView(
 		const onWheel = (event: WheelEvent): void => {
 			event.preventDefault();
 			cancelPanMomentum();
+			cancelFocusGlide();
 			setHoverPreview(null);
 
 			if (event.ctrlKey || event.metaKey) {
@@ -417,7 +448,13 @@ export function SingleStreamWallView(
 		};
 		el.addEventListener("wheel", onWheel, { passive: false });
 		return () => el.removeEventListener("wheel", onWheel);
-	}, [applyZoom, cancelPanMomentum, publishCamera, startWheelMomentum]);
+	}, [
+		applyZoom,
+		cancelFocusGlide,
+		cancelPanMomentum,
+		publishCamera,
+		startWheelMomentum,
+	]);
 
 	const changeZoom = useCallback(
 		(factor: number) => {
@@ -437,6 +474,7 @@ export function SingleStreamWallView(
 			if (dragRef.current) return;
 
 			cancelPanMomentum();
+			cancelFocusGlide();
 			setHoverPreview(null);
 
 			const target = event.target as HTMLElement | null;
@@ -466,7 +504,7 @@ export function SingleStreamWallView(
 				crossedThreshold: false,
 			});
 		},
-		[cancelPanMomentum],
+		[cancelFocusGlide, cancelPanMomentum],
 	);
 
 	const handlePointerMove = useCallback(
@@ -648,6 +686,7 @@ export function SingleStreamWallView(
 			data-total-rows={sceneModel.packed.rows.length}
 			data-content-height={sceneModel.packed.contentHeight}
 			data-world-width={worldWidth}
+			data-packed-photo-count={packedLayout.packedPhotoCount}
 			data-camera-x={Math.round(camera.x)}
 			data-camera-y={Math.round(camera.y)}
 			data-render-x={Math.round(sceneModel.wrappedCameraX)}
@@ -716,12 +755,10 @@ export function SingleStreamWallView(
 				))}
 			</div>
 
-			{hoverPreview && (
-				<WallHoverPop
-					preview={hoverPreview}
-					mediaSourceResolver={mediaSourceResolver}
-				/>
-			)}
+			<WallHoverPopLayer
+				preview={hoverPreview}
+				mediaSourceResolver={mediaSourceResolver}
+			/>
 		</div>
 	);
 }
@@ -750,7 +787,7 @@ function V2WallTile(props: {
 			data-testid="wall-photo-tile"
 			data-photo-id={tile.photoId}
 			data-appearance={shouldFadeOnMountRef.current ? "fresh" : "seen"}
-			style={tileStyle(tile.x, tile.y, tile.width, tile.height)}
+			style={tileStyle(tile.x, tile.y, tile.width, tile.height, tile.layer)}
 			onPointerEnter={(event) => onPointerEnter?.(event, tile.photoId)}
 			onPointerMove={(event) => onPointerMove?.(event, tile.photoId)}
 			onPointerLeave={(event) => onPointerLeave?.(tile.photoId, event)}
@@ -763,10 +800,12 @@ function tileStyle(
 	y: number,
 	width: number,
 	height: number,
+	layer = 0,
 ): React.CSSProperties {
 	return {
 		width,
 		height,
+		...(layer > 0 ? { zIndex: layer } : {}),
 		"--tile-x": `${x}px`,
 		"--tile-y": `${y}px`,
 	} as unknown as React.CSSProperties;

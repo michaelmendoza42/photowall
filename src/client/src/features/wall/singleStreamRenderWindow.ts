@@ -4,6 +4,7 @@ import type { PackedTile, PackerResult } from './packer.js';
 import {
   computeWrappedAxisCopies,
   computeWrappedVisibleRowSegments,
+  isNearViewportHorizontally,
 } from './virtualization.js';
 
 export interface SingleStreamViewportProjection {
@@ -22,6 +23,8 @@ export interface SingleStreamRenderWindowTile {
   height: number;
   sourceWidth: number;
   sourceHeight: number;
+  /** Edge tiles that overlap the next copy draw above (see radialWall). */
+  layer: number;
 }
 
 export interface SingleStreamRenderWindowRow {
@@ -113,6 +116,7 @@ export function buildSingleStreamRenderWindow(input: {
           rowOffsetTop: row.offsetTop,
           tiles: row.tiles,
           horizontalCopies,
+          viewportWidth: projection.effectiveViewportWidth,
         }),
       });
     }
@@ -151,14 +155,19 @@ function buildWrappedRowTiles(input: {
   rowOffsetTop: number;
   tiles: readonly PackedTile[];
   horizontalCopies: readonly { copyIndex: number; offset: number }[];
+  viewportWidth: number;
 }): SingleStreamRenderWindowTile[] {
-  const { rowIndex, copyIndex, rowOffsetTop, tiles, horizontalCopies } = input;
+  const { rowIndex, copyIndex, rowOffsetTop, tiles, horizontalCopies, viewportWidth } = input;
   const nextTiles: SingleStreamRenderWindowTile[] = [];
 
   for (const xCopy of horizontalCopies) {
-    for (const tile of tiles) {
+    tiles.forEach((tile, tileIndex) => {
+      if (!isNearViewportHorizontally(tile.x + xCopy.offset, tile.width, viewportWidth)) {
+        return;
+      }
+      // The index keeps keys unique where an edge repeat shares a photo.
       nextTiles.push({
-        key: `${rowIndex}:${copyIndex}:${xCopy.copyIndex}:${tile.photoId}`,
+        key: `${rowIndex}:${copyIndex}:${xCopy.copyIndex}:${tileIndex}:${tile.photoId}`,
         photoId: tile.photoId,
         x: tile.x + xCopy.offset,
         y: tile.y - rowOffsetTop,
@@ -166,8 +175,9 @@ function buildWrappedRowTiles(input: {
         height: tile.height,
         sourceWidth: tile.sourceWidth,
         sourceHeight: tile.sourceHeight,
+        layer: tile.layer ?? 0,
       });
-    }
+    });
   }
 
   return nextTiles;

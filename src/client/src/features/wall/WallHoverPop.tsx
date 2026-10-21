@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef, useState } from "react";
 import type { PhotoQueryRecord } from "../../../../shared/api/photos.js";
 import type { PreviewRect } from "./hoverPreview.js";
 import {
@@ -15,11 +16,89 @@ export interface WallHoverPopState extends PreviewRect {
  * thumbnail (already in the browser cache from the wall) shows at once; a
  * tier sharp enough for the popped size loads over it.
  */
-export function WallHoverPop(props: {
-	preview: WallHoverPopState;
+/** Matches the `wall-hover-settle` keyframe duration in global.css. */
+export const HOVER_SETTLE_MS = 140;
+/** A clear followed this quickly by a new hover is a move to a neighbour. */
+const HANDOFF_WINDOW_MS = 50;
+
+/**
+ * The live hover pop plus any photo settling back after the pointer moved
+ * on to a neighbour. Each photo gets its own element so the pop-in plays
+ * for every photo, not just the first. A pop cleared for any other reason
+ * (wheel, drag, modal) vanishes at once: the wall is about to move and a
+ * lingering pop would come loose from its tile. A photo already settling
+ * finishes its short settle.
+ */
+export function WallHoverPopLayer(props: {
+	preview: WallHoverPopState | null;
 	mediaSourceResolver?: WallMediaSourceResolver;
 }): JSX.Element {
 	const { preview, mediaSourceResolver } = props;
+	const [settling, setSettling] = useState<WallHoverPopState[]>([]);
+	const lastRef = useRef<WallHoverPopState | null>(null);
+	// Moving straight onto a neighbour clears the hover (leave) and sets it
+	// again (enter) in back-to-back events, so remember a just-cleared pop
+	// briefly to recognise that hand-off.
+	const clearedRef = useRef<{ pop: WallHoverPopState; at: number } | null>(
+		null,
+	);
+
+	useLayoutEffect(() => {
+		const last = lastRef.current;
+		lastRef.current = preview;
+		if (!preview) {
+			clearedRef.current = last ? { pop: last, at: performance.now() } : null;
+			return;
+		}
+		const cleared = clearedRef.current;
+		clearedRef.current = null;
+		const previous =
+			last ??
+			(cleared && performance.now() - cleared.at <= HANDOFF_WINDOW_MS
+				? cleared.pop
+				: null);
+		if (!previous || previous.photo.id === preview.photo.id) return;
+		if (prefersReducedMotion()) return;
+		setSettling((prev) => [
+			...prev.filter(
+				(p) =>
+					p.photo.id !== previous.photo.id && p.photo.id !== preview.photo.id,
+			),
+			previous,
+		]);
+		window.setTimeout(
+			() => setSettling((prev) => prev.filter((p) => p !== previous)),
+			HOVER_SETTLE_MS,
+		);
+	}, [preview]);
+
+	return (
+		<>
+			{settling.map((p) => (
+				<WallHoverPop
+					key={`settle:${p.photo.id}`}
+					preview={p}
+					settling
+					mediaSourceResolver={mediaSourceResolver}
+				/>
+			))}
+			{preview && (
+				<WallHoverPop
+					key={preview.photo.id}
+					preview={preview}
+					mediaSourceResolver={mediaSourceResolver}
+				/>
+			)}
+		</>
+	);
+}
+
+export function WallHoverPop(props: {
+	preview: WallHoverPopState;
+	settling?: boolean;
+	mediaSourceResolver?: WallMediaSourceResolver;
+}): JSX.Element {
+	const { preview, settling = false, mediaSourceResolver } = props;
 	const { photo } = preview;
 	const variant = variantForDrawnSize(
 		Math.max(preview.width, preview.height) * wallPixelRatio(),
@@ -29,8 +108,12 @@ export function WallHoverPop(props: {
 
 	return (
 		<div
-			className="wall-hover-preview"
-			data-testid="wall-hover-preview"
+			className={
+				settling
+					? "wall-hover-preview wall-hover-preview--settling"
+					: "wall-hover-preview"
+			}
+			data-testid={settling ? "wall-hover-preview-settling" : "wall-hover-preview"}
 			data-photo-id={photo.id}
 			style={
 				{
@@ -51,5 +134,12 @@ export function WallHoverPop(props: {
 				draggable={false}
 			/>
 		</div>
+	);
+}
+
+function prefersReducedMotion(): boolean {
+	return (
+		typeof window.matchMedia === "function" &&
+		window.matchMedia("(prefers-reduced-motion: reduce)").matches
 	);
 }

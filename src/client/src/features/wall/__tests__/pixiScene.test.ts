@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  coverCropFrame,
   buildPixiSceneSprites,
   FAR_ZOOM_MAX,
   largestOnScreenVariant,
@@ -159,5 +160,33 @@ describe('buildPixiSceneSprites', () => {
     expect(byKey.get('center')!.priority).toBeGreaterThan(byKey.get('edge')!.priority);
     expect(byKey.get('edge')!.priority).toBeGreaterThan(byKey.get('offscreen')!.priority);
     expect(largestOnScreenVariant(sprites)).toBe('modal');
+  });
+});
+
+describe('coverCropFrame', () => {
+  it('crops the sides of a wide photo shown in a taller tile, keeping its aspect ratio', () => {
+    const frame = coverCropFrame({ width: 3000, height: 2000 }, { width: 300, height: 300 });
+    expect(frame).toEqual({ x: 500, y: 0, width: 2000, height: 2000 });
+  });
+
+  it('crops top and bottom of a tall photo shown in a wider tile', () => {
+    const frame = coverCropFrame({ width: 2000, height: 3000 }, { width: 400, height: 300 });
+    expect(frame.x).toBe(0);
+    expect(frame.width).toBe(2000);
+    expect(frame.height).toBeCloseTo(1500, 6);
+    expect(frame.y).toBeCloseTo(750, 6);
+  });
+
+  it('uses the whole image when the shapes already match', () => {
+    expect(coverCropFrame({ width: 1600, height: 1200 }, { width: 400, height: 300 })).toEqual({
+      x: 0, y: 0, width: 1600, height: 1200,
+    });
+  });
+
+  it('always matches the tile shape so the photo is never stretched', () => {
+    for (const [tw, th] of [[300, 520], [610, 290], [455, 455]] as const) {
+      const frame = coverCropFrame({ width: 4000, height: 6000 }, { width: tw, height: th });
+      expect(frame.width / frame.height).toBeCloseTo(tw / th, 6);
+    }
   });
 });

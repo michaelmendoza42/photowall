@@ -25,7 +25,7 @@ test.describe('wall layout modes', () => {
   }, testInfo: TestInfo) => {
     await openReadyWall(page);
     await openControls(page);
-    await page.getByTestId('controls-year-2024').click();
+    await page.getByTestId('controls-folder-2024').click();
     await closeControls(page);
 
     const shell = page.getByTestId('wall-shell');

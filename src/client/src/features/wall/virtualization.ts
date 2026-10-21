@@ -198,3 +198,20 @@ function normalizeWrappedOffset(value: number, period: number): number {
   const wrapped = value % period;
   return wrapped < 0 ? wrapped + period : wrapped;
 }
+
+/**
+ * Share of the viewport width kept mounted on each side, so a pan does not
+ * outrun mounting. Worlds can be many viewports wide, so rows only mount
+ * the tiles near the screen.
+ */
+export const HORIZONTAL_OVERSCAN_RATIO = 0.5;
+
+/** Whether a tile at `left` (px from the viewport's left edge) is near the screen. */
+export function isNearViewportHorizontally(
+  left: number,
+  width: number,
+  viewportWidth: number,
+): boolean {
+  const margin = viewportWidth * HORIZONTAL_OVERSCAN_RATIO;
+  return left + width > -margin && left < viewportWidth + margin;
+}

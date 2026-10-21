@@ -6,6 +6,8 @@ import {
   packJustifiedRows,
   type PackedTile,
 } from '../packer.js';
+import { DEFAULT_MOSAIC_COLUMN_FACTORS } from '../worldWidth.js';
+import { createLargeAlbumFixture } from './fixtures/largeAlbum.js';
 
 function photo(id: string, width: number, height: number): PhotoQueryRecord {
   return {
@@ -40,6 +42,42 @@ function columnHeights(tiles: readonly PackedTile[]): number[] {
   }
   return [...byX.values()].sort((a, b) => a - b);
 }
+
+/** Length of every straight vertical seam: an x where tile edges meet on both sides. */
+function seamRuns(tiles: readonly PackedTile[]): number[] {
+  const near = (a: number, b: number) => Math.abs(a - b) < 0.5;
+  const runs: number[] = [];
+  const edges = [...new Set(tiles.map((t) => Math.round(t.x)))].filter((x) => x > 0);
+  for (const x of edges) {
+    const left = tiles.filter((t) => near(t.x + t.width, x));
+    const right = tiles.filter((t) => near(t.x, x));
+    const shared: Array<[number, number]> = [];
+    for (const a of left) {
+      for (const b of right) {
+        const top = Math.max(a.y, b.y);
+        const bottom = Math.min(a.y + a.height, b.y + b.height);
+        if (bottom > top) shared.push([top, bottom]);
+      }
+    }
+    shared.sort((a, b) => a[0] - b[0]);
+    let run: [number, number] | null = null;
+    for (const span of shared) {
+      if (run && span[0] <= run[1] + 0.5) run[1] = Math.max(run[1], span[1]);
+      else {
+        if (run) runs.push(run[1] - run[0]);
+        run = [span[0], span[1]];
+      }
+    }
+    if (run) runs.push(run[1] - run[0]);
+  }
+  return runs;
+}
+
+const WALL_OPTS = {
+  worldWidth: 3600,
+  maxRowHeight: 460,
+  columnWidthFactors: DEFAULT_MOSAIC_COLUMN_FACTORS,
+};
 
 describe('packJustifiedRows', () => {
   it('returns an empty result for an empty input', () => {
@@ -165,6 +203,50 @@ describe('packJustifiedRows', () => {
     expect(columns).toHaveLength(6);
     expect(columns[columns.length - 1]!.width).toBeGreaterThan(250);
     expect(columns.reduce((sum, column) => sum + column.width, 0)).toBeCloseTo(OPTS.worldWidth, 6);
+  });
+
+  it('keeps vertical seams short instead of running down the whole wall', () => {
+    const result = packJustifiedRows(createLargeAlbumFixture(300), WALL_OPTS, false);
+    const tiles = flattenTiles(result);
+    const runs = seamRuns(tiles);
+    const tallestTile = Math.max(...tiles.map((t) => t.height));
+    // Fixed columns gave five seams the full ~20,000px height of this wall.
+    expect(Math.max(...runs)).toBeLessThan(result.contentHeight / 6);
+    const mean = runs.reduce((sum, run) => sum + run, 0) / runs.length;
+    expect(mean).toBeLessThan(tallestTile * 2.5);
+  });
+
+  it('stays gapless and non-overlapping while column boundaries shift', () => {
+    const result = packJustifiedRows(createLargeAlbumFixture(300), WALL_OPTS, false);
+    const tiles = flattenTiles(result);
+    const floor = Math.min(
+      ...[...new Set(tiles.map((t) => t.lane))].map((lane) =>
+        Math.max(...tiles.filter((t) => t.lane === lane).map((t) => t.y + t.height)),
+      ),
+    );
+    const coveredArea = tiles.reduce((sum, t) => {
+      const visible = Math.max(0, Math.min(t.y + t.height, floor) - t.y);
+      return sum + t.width * visible;
+    }, 0);
+    // Full coverage up to the lowest column bottom, and no tile overlaps.
+    expect(coveredArea / (WALL_OPTS.worldWidth * floor)).toBeCloseTo(1, 6);
+    for (let i = 0; i < tiles.length; i += 1) {
+      for (let j = i + 1; j < tiles.length; j += 1) {
+        const a = tiles[i]!;
+        const b = tiles[j]!;
+        const overlapX = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x);
+        const overlapY = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y);
+        expect(overlapX > 0.01 && overlapY > 0.01, `${a.photoId} overlaps ${b.photoId}`).toBe(false);
+      }
+    }
+  });
+
+  it('keeps earlier tiles in place when more pages append, even after boundaries move', () => {
+    const photos = createLargeAlbumFixture(200);
+    const before = flattenTiles(packJustifiedRows(photos.slice(0, 120), WALL_OPTS, true));
+    const after = flattenTiles(packJustifiedRows(photos, WALL_OPTS, true));
+    const byId = new Map(after.map((tile) => [tile.photoId, tile]));
+    for (const tile of before) expect(byId.get(tile.photoId)).toEqual(tile);
   });
 
   it('bounds extreme portrait tiles to a mosaic-safe displayed height', () => {

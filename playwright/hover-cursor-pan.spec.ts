@@ -65,9 +65,20 @@ test.describe('hover slide to cursor', () => {
     const startOffset = await popCenterOffset(pop, target!);
     expect(startOffset).toBeGreaterThan(20);
 
-    // It glides rather than jumping: partway through it is still off-center.
-    await expect.poll(() => popCenterOffset(pop, target!)).toBeLessThan(startOffset - 2);
-    expect(await popCenterOffset(pop, target!)).toBeGreaterThan(3);
+    // It glides rather than jumping: sampled every frame, the offset passes
+    // through in-between values on its way to centered.
+    const offsets = await page.evaluate(async (cursor) => {
+      const samples: number[] = [];
+      for (let frame = 0; frame < 180; frame += 1) {
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        const el = document.querySelector<HTMLElement>('[data-testid="wall-hover-preview"]');
+        if (!el) continue;
+        const box = el.getBoundingClientRect();
+        samples.push(Math.hypot(box.x + box.width / 2 - cursor.x, box.y + box.height / 2 - cursor.y));
+      }
+      return samples;
+    }, target!);
+    expect(offsets.some((offset) => offset > 3 && offset < startOffset - 2)).toBe(true);
     await expect.poll(() => popCenterOffset(pop, target!), { timeout: 3_000 }).toBeLessThan(3);
     await expect(pop).toHaveAttribute('data-photo-id', target!.photoId);
 
@@ -86,8 +97,16 @@ test.describe('hover slide to cursor', () => {
     for (let step = 0; step < 6; step += 1) await page.mouse.wheel(0, 40);
     await page.keyboard.up('Control');
     await expect.poll(async () => Number(await wall.getAttribute('data-zoom'))).toBeLessThan(0.7);
+    // Parking the mouse can hover a partly off-screen photo, which slides;
+    // let that finish before measuring.
     await page.mouse.move(1, 1);
-    await page.waitForTimeout(300);
+    await expect
+      .poll(async () => {
+        const first = await camera(wall);
+        await page.waitForTimeout(400);
+        return first === (await camera(wall));
+      })
+      .toBe(true);
     const target = await findTilePoint(page, 0.2, 0.25, 'visible');
     expect(target).not.toBeNull();
     const before = await camera(wall);

@@ -1,10 +1,10 @@
-// Wall-width and tile-density strategy.
+// Tile-size strategy.
 //
-// The wall remains a bounded-width, vertically growing world. World
-// width controls how much horizontal travel/panning space exists.
-// Tile density is a separate concern controlled by `WALL_TILE_SCALE`,
-// where `1` means the previous base column width and smaller values
-// make tiles smaller by increasing effective column count.
+// The wall's world is sized to its photos (see `radialWall.ts`); the
+// viewport-based width here only sets how wide tiles are, so tiles keep a
+// comfortable size on each screen. Tile density is a separate concern
+// controlled by `WALL_TILE_SCALE`, where `1` means the previous base column
+// width and smaller values make tiles smaller.
 
 export const WORLD_WIDTH_MIN = 360;
 export const WORLD_WIDTH_MAX = 3600;
@@ -36,10 +36,8 @@ export const DEFAULT_MOSAIC_COLUMN_FACTORS: readonly number[] = [
 ];
 
 /**
- * Map a viewport width onto the wall's world width. The world stays
- * bounded, but deliberately much wider than the viewport so the
- * horizontal wrap seam stays out of view long enough for 2D pans to
- * read as continuous movement rather than an early direction flip.
+ * Map a viewport width onto the reference width tile sizes derive from
+ * (five irregular columns' worth, scaled by `WALL_TILE_SCALE`).
  */
 export function computeWorldWidth(viewportWidth: number): number {
   if (!Number.isFinite(viewportWidth) || viewportWidth <= 0) {

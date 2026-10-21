@@ -85,9 +85,15 @@ test.describe('zoom/detail tiers', () => {
     await expect.poll(() => seenMediaVariants.has(largestVariant)).toBe(true);
     await expect(pixi).toHaveAttribute('data-app-init-count', '1');
 
-    const { photoId: centeredId } = await exposedTileNearCenter(page);
+    // A photo on screen loads that sharp tier (any one: a narrow tile can
+    // legitimately stay on a thumbnail).
+    const exposedIds = await exposedTileIds(page);
     await expect
-      .poll(() => [...(variantsByPhoto.get(centeredId) ?? [])].some((v) => v === 'modal' || v === 'detail'))
+      .poll(() =>
+        exposedIds.some((id) =>
+          [...(variantsByPhoto.get(id) ?? [])].some((v) => v === 'modal' || v === 'detail'),
+        ),
+      )
       .toBe(true);
 
     const zoomTierScreenshotPath = testInfo.outputPath('zoom-detail-modal-tier.png');
@@ -135,6 +141,23 @@ async function zoomToMax(page: Page, wall: Locator): Promise<void> {
       .then(() => true, () => false);
     if (!changed) return;
   }
+}
+
+/** Photos with some part exposed on screen (not under an overlay or control). */
+async function exposedTileIds(page: Page): Promise<string[]> {
+  return page.evaluate(() => {
+    const ids = new Set<string>();
+    for (let x = 10; x < window.innerWidth; x += 20) {
+      for (let y = 10; y < window.innerHeight; y += 20) {
+        const top = document.elementFromPoint(x, y);
+        if (top instanceof HTMLElement && top.dataset['testid'] === 'wall-photo-tile') {
+          const photoId = top.dataset['photoId'];
+          if (photoId) ids.add(photoId);
+        }
+      }
+    }
+    return [...ids];
+  });
 }
 
 /** The tile on top (not under an overlay or control) nearest the viewport center. */

@@ -32,6 +32,7 @@ const PhotosQuerySchema = z.object({
     .default(PHOTOS_PAGE_DEFAULT_LIMIT),
   year: z.preprocess(toArray, z.array(z.coerce.number().int())).optional(),
   folder: z.preprocess(toArray, z.array(z.string())).optional(),
+  exclude: z.preprocess(toArray, z.array(z.string())).optional(),
   playlist: z.string().min(1).optional(),
 });
 
@@ -91,6 +92,7 @@ export async function registerPhotoRoutes(
       const resolved = await resolveFilters(deps.playlists, {
         years: params.year ?? [],
         folders: params.folder ?? [],
+        excludeFolders: params.exclude ?? [],
         playlistId: params.playlist ?? null,
       });
 
@@ -150,10 +152,16 @@ function snapshotChanged(
  */
 async function resolveFilters(
   playlists: PlaylistService,
-  input: { years: number[]; folders: string[]; playlistId: string | null },
+  input: {
+    years: number[];
+    folders: string[];
+    excludeFolders: string[];
+    playlistId: string | null;
+  },
 ): Promise<ResolvedPhotoFilters> {
   let savedYears: number[] = [];
   let savedFolders: string[] = [];
+  let savedExcludes: string[] = [];
   let resolvedPlaylistId: string | null = null;
 
   if (input.playlistId !== null) {
@@ -162,6 +170,7 @@ async function resolveFilters(
       resolvedPlaylistId = playlist.id;
       savedYears = playlist.filters.years;
       savedFolders = playlist.filters.folders;
+      savedExcludes = playlist.filters.excludeFolders ?? [];
     }
   }
 
@@ -169,6 +178,8 @@ async function resolveFilters(
     playlistId: resolvedPlaylistId,
     years: mergeFilterAxis(savedYears, input.years),
     folders: mergeFilterAxis(savedFolders, input.folders),
+    // Exclusions only ever narrow, so both sides apply.
+    excludeFolders: dedupe([...savedExcludes, ...input.excludeFolders]),
   };
 }
 

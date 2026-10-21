@@ -7,10 +7,7 @@ import {
 	useState,
 } from "react";
 import {
-	DEFAULT_MAX_ROW_HEIGHT,
-	DEFAULT_MOSAIC_COLUMN_FACTORS,
-} from "./worldWidth.js";
-import {
+	isNearViewportHorizontally,
 	computeWrappedAxisCopies,
 	computeWrappedVisibleRowSegments,
 } from "./virtualization.js";
@@ -19,12 +16,19 @@ import {
 	collectFirstAppearancePhotoIds,
 	rememberSeenPhotoIds,
 } from "./appearanceTracking.js";
-import type { PackerResult } from "./packer.js";
-import { buildWallLayout, type GroupedWallFoundation } from "./groupedWall.js";
+import type { GroupedWallFoundation } from "./groupedWall.js";
+import { useWallFocusNavigator } from "./useWallFocusNavigator.js";
+import {
+	useCenterCameraOnLayout,
+	useRadialWallLayout,
+} from "./useRadialWallLayout.js";
+import { useCameraGlide } from "./useCameraGlide.js";
+import type { WallFocusNavigator } from "./focusNavigation.js";
 import { computeHoverPopRect } from "./hoverPreview.js";
-import { WallHoverPop } from "./WallHoverPop.js";
+import { WallHoverPopLayer } from "./WallHoverPop.js";
 import { useHoverCursorPan } from "./useHoverCursorPan.js";
 import { PixiWallSurface } from "./PixiWallSurface.js";
+import { wallTileZOrder } from "./pixiScene.js";
 import { WallZoomControls } from "./WallZoomControls.js";
 import { useTouchPinchZoom } from "./useTouchPinchZoom.js";
 import {
@@ -127,6 +131,8 @@ export interface WallCanvasProps {
 	onPhotoOpen?: (photo: PhotoQueryRecord) => void;
 	/** True while the focused-photo modal is open. */
 	isModalOpen?: boolean;
+	/** Receives the focused view's next/previous handle for this wall. */
+	focusNavigatorRef?: React.MutableRefObject<WallFocusNavigator | null>;
 	/** Override for unit tests; defaults to {@link DRAG_THRESHOLD_PX}. */
 	dragThresholdPx?: number;
 	mediaSourceResolver?: WallMediaSourceResolver;
@@ -153,6 +159,7 @@ interface RenderedTileInstance {
 	height: number;
 	sourceWidth: number;
 	sourceHeight: number;
+	layer: number;
 	shouldFadeOnMount: boolean;
 }
 
@@ -175,7 +182,7 @@ interface HoverPreviewState {
 export function WallCanvas(props: WallCanvasProps): JSX.Element {
 	const {
 		photos,
-		worldWidth,
+		worldWidth: referenceWidth,
 		hasNextPage,
 		isFetchingNextPage,
 		onLoadMore,
@@ -189,6 +196,7 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
 		signpostsEnabled = true,
 		onPhotoOpen,
 		isModalOpen = false,
+		focusNavigatorRef,
 		dragThresholdPx = DRAG_THRESHOLD_PX,
 		mediaSourceResolver,
 	} = props;
@@ -215,6 +223,11 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
 		cancel: cancelPanMomentum,
 		isActive: isPanMomentumActive,
 	} = usePanMomentum({ cameraRef, publishCamera, flushCamera });
+	const {
+		glideTo: glideCameraTo,
+		cancel: cancelFocusGlide,
+		isActive: isFocusGlideActive,
+	} = useCameraGlide({ cameraRef, publishCamera, flushCamera });
 
 	const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
 	// Mirror the live drag flag into React state so the `data-dragging`
@@ -265,19 +278,29 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
 		if (isPublishedCamera(camera)) return;
 		const live = cameraRef.current;
 		cameraRef.current =
-			dragRef.current || isPanMomentumActive() || isHoverPanActive()
+			dragRef.current ||
+			isPanMomentumActive() ||
+			isHoverPanActive() ||
+			isFocusGlideActive()
 				? withWorldBounds(withViewport(live, camera.viewport), camera.world)
 				: camera;
-	}, [camera, isHoverPanActive, isPanMomentumActive, isPublishedCamera]);
+	}, [
+		camera,
+		isFocusGlideActive,
+		isHoverPanActive,
+		isPanMomentumActive,
+		isPublishedCamera,
+	]);
 	const handlePinchStart = useCallback(() => {
 		cancelPanMomentum();
+		cancelFocusGlide();
 		const drag = dragRef.current;
 		if (!drag) return;
 		drag.crossedThreshold = true;
 		drag.momentum = createDragMomentumSample(performance.now());
 		pressedPhotoIdRef.current = null;
 		setHoverPreview(null);
-	}, [cancelPanMomentum]);
+	}, [cancelFocusGlide, cancelPanMomentum]);
 	// The wall scales from its top-left, so every zoom also moves the camera
 	// to keep the world point under the pinch, cursor or screen center fixed.
 	const applyZoom = useCallback(
@@ -348,11 +371,12 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
 	const effectiveViewportHeight = viewportHeight / zoom;
 
 	const cancelActiveGlide = useCallback(() => {
+		cancelFocusGlide();
 		if (glideFrameRef.current !== null) {
 			cancelAnimationFrame(glideFrameRef.current);
 			glideFrameRef.current = null;
 		}
-	}, []);
+	}, [cancelFocusGlide]);
 
 	const revealSignposts = useCallback((lingerMs = SIGNPOST_LINGER_MS) => {
 		setSignpostsVisible(true);
@@ -374,18 +398,28 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
 		};
 	}, [cancelActiveGlide]);
 
-	const packed: PackerResult = useMemo(() => {
-		return buildWallLayout({
-			photos,
-			hasMore: hasNextPage,
-			foundation: groupedFoundation,
-			options: {
-				worldWidth,
-				maxRowHeight: DEFAULT_MAX_ROW_HEIGHT,
-				columnWidthFactors: DEFAULT_MOSAIC_COLUMN_FACTORS,
-			},
-		});
-	}, [photos, worldWidth, hasNextPage, groupedFoundation]);
+	const packed = useRadialWallLayout({
+		photos,
+		groupedFoundation,
+		referenceWidth,
+	});
+	// The world is sized to the photos; the viewport only sets tile size.
+	const worldWidth = packed.worldWidth;
+	useCenterCameraOnLayout({
+		layout: packed,
+		cameraRef,
+		zoomRef,
+		publishCamera,
+		flushCamera,
+	});
+
+	useWallFocusNavigator({
+		navigatorRef: focusNavigatorRef,
+		packed,
+		cameraRef,
+		zoomRef,
+		glideTo: glideCameraTo,
+	});
 
 	const wrappedCameraX = useMemo(
 		() => wrapTravelOffset(camera.x, worldWidth),
@@ -452,9 +486,18 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
 
 				const rowTiles: RenderedTileInstance[] = [];
 				for (const xCopy of horizontalCopies) {
-					for (const tile of row.tiles) {
+					for (const [tileIndex, tile] of row.tiles.entries()) {
+						if (
+							!isNearViewportHorizontally(
+								tile.x + xCopy.offset,
+								tile.width,
+								effectiveViewportWidth,
+							)
+						) {
+							continue;
+						}
 						rowTiles.push({
-							key: `${row.index}:${segment.copyIndex}:${xCopy.copyIndex}:${tile.photoId}`,
+							key: `${row.index}:${segment.copyIndex}:${xCopy.copyIndex}:${tileIndex}:${tile.photoId}`,
 							photoId: tile.photoId,
 							x: tile.x + xCopy.offset,
 							y: tile.y - row.offsetTop,
@@ -462,6 +505,7 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
 							height: tile.height,
 							sourceWidth: tile.sourceWidth,
 							sourceHeight: tile.sourceHeight,
+							layer: tile.layer ?? 0,
 							albumKey: photoAlbumKeys.get(tile.photoId) ?? null,
 							shouldFadeOnMount: rowFreshIdSet.has(tile.photoId),
 						});
@@ -488,7 +532,13 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
 			),
 			mountedRowCount: mountedRowIndices.size,
 		};
-	}, [verticalSegments, packed.rows, horizontalCopies, photoAlbumKeys]);
+	}, [
+		verticalSegments,
+		packed.rows,
+		horizontalCopies,
+		photoAlbumKeys,
+		effectiveViewportWidth,
+	]);
 
 	const dominantVisibleAlbumKey = useMemo(() => {
 		if (!signpostsEnabled || groupedFoundation?.mode !== "grouped") return null;
@@ -528,10 +578,24 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
 		);
 	}, [signpostsEnabled, dominantVisibleAlbumKey, groupedFoundation]);
 
+	// Signposts point at where each album actually sits in the layout.
+	const signpostFoundation = useMemo(() => {
+		if (groupedFoundation?.mode !== "grouped") return groupedFoundation;
+		return {
+			...groupedFoundation,
+			albums: groupedFoundation.albums.map((album) => {
+				const center = packed.groupCenters.get(album.area.albumKey);
+				return center
+					? { ...album, area: { ...album.area, anchorX: center.x, anchorY: center.y } }
+					: album;
+			}),
+		};
+	}, [groupedFoundation, packed.groupCenters]);
+
 	const visibleSignposts = useMemo(() => {
 		if (!signpostsEnabled || !signpostsVisible || isModalOpen) return [];
 		return selectVisibleSignposts({
-			foundation: groupedFoundation,
+			foundation: signpostFoundation,
 			camera,
 			contentHeight: packed.contentHeight,
 			suppressedAlbumKeys: dominantVisibleAlbumKey
@@ -542,7 +606,7 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
 		signpostsEnabled,
 		signpostsVisible,
 		isModalOpen,
-		groupedFoundation,
+		signpostFoundation,
 		camera,
 		packed.contentHeight,
 		dominantVisibleAlbumKey,
@@ -985,9 +1049,10 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
 
 	const pixiTiles = useMemo(
 		() =>
-			renderPlan.renderedRows.flatMap((row) =>
-				row.tiles.map((tile) => ({
+			renderPlan.renderedRows.flatMap((row, rowIndex) =>
+				row.tiles.map((tile, tileIndex) => ({
 					key: tile.key,
+					zOrder: wallTileZOrder(rowIndex, tile.layer, tileIndex),
 					rowOffsetTop: row.offsetTop,
 					x: tile.x,
 					y: tile.y,
@@ -1010,6 +1075,7 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
 			data-total-rows={packed.rows.length}
 			data-content-height={packed.contentHeight}
 			data-world-width={worldWidth}
+			data-packed-photo-count={packed.packedPhotoCount}
 			data-camera-x={Math.round(camera.x)}
 			data-camera-y={Math.round(camera.y)}
 			data-render-x={Math.round(wrappedCameraX)}
@@ -1098,12 +1164,10 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
 				</button>
 			))}
 
-			{hoverPreview && (
-				<WallHoverPop
-					preview={hoverPreview}
-					mediaSourceResolver={mediaSourceResolver}
-				/>
-			)}
+			<WallHoverPopLayer
+				preview={hoverPreview}
+				mediaSourceResolver={mediaSourceResolver}
+			/>
 		</div>
 	);
 }
@@ -1135,7 +1199,7 @@ function WallCanvasTile(props: {
 			data-photo-id={tile.photoId}
 			data-album-key={tile.albumKey ?? undefined}
 			data-appearance={shouldFadeOnMountRef.current ? "fresh" : "seen"}
-			style={tileStyle(tile.x, tile.y, tile.width, tile.height)}
+			style={tileStyle(tile.x, tile.y, tile.width, tile.height, tile.layer)}
 			onPointerEnter={(event) => onPointerEnter?.(event, tile.photoId)}
 			onPointerMove={(event) => onPointerMove?.(event, tile.photoId)}
 			onPointerLeave={(event) => onPointerLeave?.(tile.photoId, event)}
@@ -1155,10 +1219,12 @@ function tileStyle(
 	y: number,
 	width: number,
 	height: number,
+	layer = 0,
 ): React.CSSProperties {
 	return {
 		width,
 		height,
+		...(layer > 0 ? { zIndex: layer } : {}),
 		"--tile-x": `${x}px`,
 		"--tile-y": `${y}px`,
 	} as unknown as React.CSSProperties;

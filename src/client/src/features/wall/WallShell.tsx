@@ -19,12 +19,12 @@ import {
   EMPTY_FILTERS,
   ACTIVE_FILTERS_STORAGE_KEY,
   parseActiveFilters,
+  pruneMissingFolders,
   toQueryFilters,
   type ActiveFilters,
 } from '../../state/filters.js';
 import {
   INITIAL_CAMERA,
-  panTo,
   withViewport,
   withWorldBounds,
 } from '../../state/camera.js';
@@ -52,19 +52,20 @@ import {
   type WallStats,
 } from './WallCanvas.js';
 import { PhotoWallSurface } from './PhotoWallSurface.js';
-import {
-  deriveGroupedCameraTarget,
-  deriveGroupedWallFoundation,
-} from './groupedWall.js';
-import { shouldLoadNextGroupedCompletenessPage } from './groupedLoading.js';
+import { deriveGroupedWallFoundation } from './groupedWall.js';
 import {
   computeWorldWidth,
   WORLD_WIDTH_MAX,
 } from './worldWidth.js';
 import { deriveActiveAlbumAreaCount } from './activeAlbumAreaCount.js';
 import type {
-  PhotoQueryRecord,
-  PhotosQueryResponse,
+  FocusStepDirection,
+  WallFocusNavigator,
+} from './focusNavigation.js';
+import {
+  PHOTOS_PAGE_MAX_LIMIT,
+  type PhotoQueryRecord,
+  type PhotosQueryResponse,
 } from '../../../../shared/api/photos.js';
 
 const DEV_PAGE_SIZE_ENV = import.meta.env.VITE_PHOTOS_PAGE_SIZE as
@@ -109,10 +110,12 @@ export function WallShell(): JSX.Element {
   const queryFilters = useMemo(() => toQueryFilters(filters), [filters]);
 
   const devPageSize = parseDevPageSize();
+  // The wall lays out the whole selection at once, so every photo record
+  // loads up front (in big pages); images still load as they come on screen.
   const photosQuery = useInfinitePhotos({
     filters: queryFilters,
     enabled: statusQuery.data?.scanState === 'ready',
-    ...(devPageSize !== undefined ? { limit: devPageSize } : {}),
+    limit: devPageSize ?? PHOTOS_PAGE_MAX_LIMIT,
   });
 
   useEffect(() => {
@@ -166,25 +169,6 @@ export function WallShell(): JSX.Element {
     // same query; including it in deps is safe.
   }, [hasSnapshotChanged, queryClient, photosQuery]);
 
-  // Filter / playlist reset: when the active filters change, snap the
-  // camera back to the origin so the operator sees the new result set
-  // from its starting frame. TanStack already owns photo-page state
-  // (the queryKey changes when filters change), so a fresh wall builds
-  // automatically — we just need to make sure the camera does not stay
-  // parked at a y-offset that belonged to the previous result set.
-  const lastFiltersKey = useRef<string | null>(null);
-  useEffect(() => {
-    const key = JSON.stringify(filters);
-    if (lastFiltersKey.current === null) {
-      lastFiltersKey.current = key;
-      return;
-    }
-    if (lastFiltersKey.current === key) return;
-    lastFiltersKey.current = key;
-    setCamera((prev) => panTo(prev, { x: 0, y: 0 }));
-  }, [filters]);
-
-  const lastGroupedViewKeyRef = useRef<string | null>(null);
 
   const successPages = useMemo(
     () => flattenPhotoPages(pages),
@@ -212,6 +196,7 @@ export function WallShell(): JSX.Element {
         filters: firstPage?.appliedFilters ?? {
           years: filters.years,
           folders: filters.folders,
+          excludeFolders: filters.excludeFolders,
           playlistId: filters.playlistId,
         },
         facets: facetsQuery.data ?? null,
@@ -223,6 +208,7 @@ export function WallShell(): JSX.Element {
       firstPage,
       filters.years,
       filters.folders,
+      filters.excludeFolders,
       filters.playlistId,
       facetsQuery.data,
       photos,
@@ -235,27 +221,43 @@ export function WallShell(): JSX.Element {
     setFocusedPhoto((prev) => openFocusedPhoto(prev, photo));
   }, []);
 
+  const focusNavigatorRef = useRef<WallFocusNavigator | null>(null);
+  const photosByIdRef = useRef(new Map<string, PhotoQueryRecord>());
+  photosByIdRef.current = useMemo(
+    () => new Map(photos.map((photo) => [photo.id, photo])),
+    [photos],
+  );
+  const focusedPhotoIdRef = useRef<string | null>(null);
+  focusedPhotoIdRef.current = focusedPhoto.photo?.id ?? null;
+
+  const handleFocusStep = useCallback((direction: FocusStepDirection) => {
+    const currentId = focusedPhotoIdRef.current;
+    if (!currentId) return;
+    const nextId = focusNavigatorRef.current?.step(currentId, direction);
+    const next = nextId ? photosByIdRef.current.get(nextId) : undefined;
+    if (!next) return;
+    // Track it now so rapid presses step from here rather than the
+    // photo React has not re-rendered away from yet.
+    focusedPhotoIdRef.current = next.id;
+    setFocusedPhoto((prev) => openFocusedPhoto(prev, next));
+  }, []);
+  const handleFocusNext = useCallback(
+    () => handleFocusStep('next'),
+    [handleFocusStep],
+  );
+  const handleFocusPrevious = useCallback(
+    () => handleFocusStep('previous'),
+    [handleFocusStep],
+  );
+
+  // Saved selections can name folders that have since disappeared from
+  // the library; drop them once the scanned folder list is known.
+  const facetFolders = facetsQuery.data?.folders;
   useEffect(() => {
-    if (!groupedFoundation || groupedFoundation.mode !== 'grouped') {
-      lastGroupedViewKeyRef.current = null;
-      return;
-    }
-    if (lastGroupedViewKeyRef.current === groupedFoundation.viewKey) return;
-
-    const target = deriveGroupedCameraTarget({
-      foundation: groupedFoundation,
-      viewportWidth: camera.viewport.width,
-      viewportHeight: camera.viewport.height,
-    });
-    if (!target) return;
-
-    lastGroupedViewKeyRef.current = groupedFoundation.viewKey;
-    setCamera((prev) => panTo(prev, target));
-  }, [
-    groupedFoundation,
-    camera.viewport.width,
-    camera.viewport.height,
-  ]);
+    if (!facetFolders || facetFolders.length === 0) return;
+    const paths = facetFolders.map((f) => f.path);
+    setFilters((prev) => pruneMissingFolders(prev, paths));
+  }, [facetFolders]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -266,24 +268,9 @@ export function WallShell(): JSX.Element {
   }, [filters]);
 
   useEffect(() => {
-    // Grouped loading orchestration stays in the shell so grouped views
-    // share the same completeness rule without smearing pagination
-    // concerns into the renderer boundaries.
-    if (
-      !shouldLoadNextGroupedCompletenessPage({
-        foundation: groupedFoundation,
-        loadedPhotoCount: photos.length,
-        hasNextPage: photosQuery.hasNextPage,
-        isFetchingNextPage: photosQuery.isFetchingNextPage,
-      })
-    ) {
-      return;
-    }
-
+    if (!photosQuery.hasNextPage || photosQuery.isFetchingNextPage) return;
     void photosQuery.fetchNextPage();
   }, [
-    groupedFoundation,
-    photos.length,
     photosQuery.hasNextPage,
     photosQuery.isFetchingNextPage,
     photosQuery.fetchNextPage,
@@ -382,6 +369,7 @@ export function WallShell(): JSX.Element {
           filters: {
             years: filters.years,
             folders: filters.folders,
+            excludeFolders: filters.excludeFolders,
           },
         },
         {
@@ -396,7 +384,7 @@ export function WallShell(): JSX.Element {
         },
       );
     },
-    [createPlaylist, filters.years, filters.folders],
+    [createPlaylist, filters.years, filters.folders, filters.excludeFolders],
   );
 
   const handleUpdatePlaylist = useCallback(
@@ -413,6 +401,7 @@ export function WallShell(): JSX.Element {
             filters: {
               years: filters.years,
               folders: filters.folders,
+              excludeFolders: filters.excludeFolders,
             },
           };
       updatePlaylist.mutate(
@@ -424,7 +413,7 @@ export function WallShell(): JSX.Element {
         },
       );
     },
-    [updatePlaylist, filters.years, filters.folders],
+    [updatePlaylist, filters.years, filters.folders, filters.excludeFolders],
   );
 
   const handleDeletePlaylist = useCallback(
@@ -461,6 +450,7 @@ export function WallShell(): JSX.Element {
     onDragStateChange: setDragState,
     onPhotoOpen: handlePhotoOpen,
     isModalOpen: focusedPhoto.photo !== null,
+    focusNavigatorRef,
   };
 
   const activeLayoutMode = groupedFoundation?.mode ?? 'single';
@@ -495,7 +485,10 @@ export function WallShell(): JSX.Element {
       {screen.kind === 'snapshot-changed' && (
         <SnapshotChangedState status={screen.status} />
       )}
-      {screen.kind === 'ready' && firstPage && (
+      {screen.kind === 'ready' && firstPage && photosQuery.hasNextPage && (
+        <LoadingState />
+      )}
+      {screen.kind === 'ready' && firstPage && !photosQuery.hasNextPage && (
         <PhotoWallSurface
           {...sharedWallProps}
           groupedFoundation={groupedFoundation}
@@ -517,16 +510,14 @@ export function WallShell(): JSX.Element {
         updatePending={updatePlaylist.isPending}
         deletePending={deletePlaylist.isPending}
         errorMessage={controlsError}
-        libraryRoot={statusQuery.data?.libraryRoot ?? ''}
-        onLibraryRootChange={handleLibraryRootChange}
-        libraryRootPending={updateLibraryRoot.isPending}
-        libraryRootError={libraryRootError}
       />
 
       {focusedPhoto.photo && (
         <FocusedPhotoLightbox
           photo={focusedPhoto.photo}
           onClose={handlePhotoClose}
+          onNext={handleFocusNext}
+          onPrevious={handleFocusPrevious}
         />
       )}
 

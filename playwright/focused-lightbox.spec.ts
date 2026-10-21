@@ -68,7 +68,113 @@ test.describe('focused-photo lightbox flow', () => {
       .poll(async () => requiredAttr(wall, 'data-camera-y'))
       .not.toBe(cameraYAfterClose);
   });
+
+  test('next and previous step to adjacent photos and center the wall on each', async ({
+    page,
+  }) => {
+    const shell = page.getByTestId('wall-shell');
+    const wall = page.getByTestId('wall-canvas');
+    const modal = page.getByTestId('focused-photo-modal');
+
+    await zoomWall(page, wall);
+    const tile = await pickCenteredTile(page);
+    const startId = await requiredAttr(tile, 'data-photo-id');
+    await tile.click();
+    await expect(modal).toHaveAttribute('data-photo-id', startId);
+
+    // Press next and watch the wall: it glides there over several frames
+    // rather than jumping.
+    const cameraPath = await page.evaluate(async () => {
+      const wallEl = document.querySelector<HTMLElement>('[data-testid="wall-canvas"]')!;
+      const position = () => `${wallEl.dataset['cameraX']},${wallEl.dataset['cameraY']}`;
+      const start = position();
+      document.querySelector<HTMLElement>('[data-testid="focused-photo-next"]')!.click();
+      const samples: string[] = [];
+      for (let i = 0; i < 40; i += 1) {
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        samples.push(position());
+      }
+      return { start, samples };
+    });
+    await expect(modal).not.toHaveAttribute('data-photo-id', startId);
+    const nextId = await requiredAttr(modal, 'data-photo-id');
+    const end = cameraPath.samples.at(-1);
+    const inBetween = cameraPath.samples.filter((p) => p !== cameraPath.start && p !== end);
+    expect(end).not.toBe(cameraPath.start);
+    expect(inBetween.length).toBeGreaterThan(0);
+    await expect(page.getByTestId('focused-photo-image')).toHaveAttribute(
+      'src',
+      new RegExp(`${encodeURIComponent(nextId)}\\?variant=modal`),
+    );
+    await expect.poll(() => distanceFromViewportCenter(page, nextId)).toBeLessThan(3);
+
+    await page.getByTestId('focused-photo-previous').click();
+    await expect(modal).toHaveAttribute('data-photo-id', startId);
+    await expect.poll(() => distanceFromViewportCenter(page, startId)).toBeLessThan(3);
+
+    // Arrow keys step too, and keep reaching new photos rather than
+    // circling a small group. (That the order is one cycle through every
+    // photo is covered by the focusNavigation unit tests.)
+    const visited = [startId];
+    for (let step = 0; step < 30; step += 1) {
+      const before = await requiredAttr(modal, 'data-photo-id');
+      await page.keyboard.press('ArrowRight');
+      await expect(modal).not.toHaveAttribute('data-photo-id', before);
+      const current = await requiredAttr(modal, 'data-photo-id');
+      expect(visited).not.toContain(current);
+      visited.push(current);
+    }
+    await page.keyboard.press('ArrowLeft');
+    await expect(modal).toHaveAttribute('data-photo-id', visited.at(-2)!);
+
+    const lastId = await requiredAttr(modal, 'data-photo-id');
+    await page.getByTestId('focused-photo-close').click();
+    await expect(shell).toHaveAttribute('data-modal-open', 'false');
+    await expect.poll(() => distanceFromViewportCenter(page, lastId)).toBeLessThan(3);
+  });
 });
+
+test('clicking outside the focused photo closes it, clicking the photo does not', async ({
+  page,
+}) => {
+  const shell = page.getByTestId('wall-shell');
+  const modal = page.getByTestId('focused-photo-modal');
+  await openReadyWall(page);
+  const tile = await pickCenteredTile(page);
+  await tile.click();
+  await expect(modal).toBeVisible();
+
+  const box = (await page.getByTestId('focused-photo-image').boundingBox())!;
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  await page.waitForTimeout(300);
+  await expect(shell).toHaveAttribute('data-modal-open', 'true');
+
+  const viewport = page.viewportSize()!;
+  const right = viewport.width - (box.x + box.width);
+  const outside =
+    right > 12
+      ? { x: box.x + box.width + right / 2, y: viewport.height * 0.85 }
+      : { x: viewport.width / 2, y: (box.y + box.height + viewport.height) / 2 };
+  await page.mouse.click(outside.x, outside.y);
+  await expect(shell).toHaveAttribute('data-modal-open', 'false');
+});
+
+/** Pixels between the viewport center and the nearest copy of the photo's tile center. */
+async function distanceFromViewportCenter(page: Page, photoId: string): Promise<number> {
+  return page.evaluate((id) => {
+    const nodes = document.querySelectorAll<HTMLElement>(
+      `[data-testid="wall-photo-tile"][data-photo-id="${CSS.escape(id)}"]`,
+    );
+    let best = Number.POSITIVE_INFINITY;
+    nodes.forEach((node) => {
+      const rect = node.getBoundingClientRect();
+      const dx = rect.left + rect.width / 2 - window.innerWidth / 2;
+      const dy = rect.top + rect.height / 2 - window.innerHeight / 2;
+      best = Math.min(best, Math.hypot(dx, dy));
+    });
+    return best;
+  }, photoId);
+}
 
 async function openReadyWall(page: Page): Promise<void> {
   await page.goto('/');

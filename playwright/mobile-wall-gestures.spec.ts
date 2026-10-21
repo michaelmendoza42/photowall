@@ -77,7 +77,7 @@ test.describe("mobile wall gestures", () => {
 		test(`stops slow release, honors pause and reduced motion (${grouped ? "grouped" : "stream"})`, async ({ page }) => {
 			if (grouped) {
 				await page.getByTestId("controls-trigger").click();
-				await page.getByTestId("controls-year-2024").click();
+				await page.getByTestId("controls-folder-2024").click();
 				await page.getByTestId("controls-trigger").click();
 			}
 			const wall = page.getByTestId("wall-canvas");
@@ -101,7 +101,7 @@ test.describe("mobile wall gestures", () => {
 		test(`new touch catches an active fling after zoom (${grouped ? "grouped" : "stream"})`, async ({ page }) => {
 			if (grouped) {
 				await page.getByTestId("controls-trigger").click();
-				await page.getByTestId("controls-year-2024").click();
+				await page.getByTestId("controls-folder-2024").click();
 				await page.getByTestId("controls-trigger").click();
 			}
 			const wall = page.getByTestId("wall-canvas");
@@ -130,7 +130,7 @@ test.describe("mobile wall gestures", () => {
 		test(`fling glides forward without backward jitter (${grouped ? "grouped" : "stream"})`, async ({ page }) => {
 			if (grouped) {
 				await page.getByTestId("controls-trigger").click();
-				await page.getByTestId("controls-year-2024").click();
+				await page.getByTestId("controls-folder-2024").click();
 				await page.getByTestId("controls-trigger").click();
 			}
 			const wall = page.getByTestId("wall-canvas");
@@ -189,7 +189,82 @@ test.describe("mobile wall gestures", () => {
 			contentType: "image/png",
 		});
 	});
+
+	test("tapping outside the focused photo closes it, tapping the photo does not", async ({
+		page,
+	}) => {
+		const candidate = await findTileOverlappedByLaterRow(page);
+		expect(candidate).not.toBeNull();
+		if (!candidate) return;
+		await page.touchscreen.tap(candidate.x, candidate.y);
+		const modal = page.getByTestId("focused-photo-modal");
+		await expect(modal).toBeVisible();
+
+		const image = page.getByTestId("focused-photo-image");
+		const box = (await image.boundingBox())!;
+		await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+		await page.waitForTimeout(300);
+		await expect(modal).toBeVisible();
+
+		const outside = pointOutsideBox(box, page.viewportSize()!);
+		await page.touchscreen.tap(outside.x, outside.y);
+		await expect(modal).toHaveCount(0);
+	});
+
+	test("swiping left and right in the focused photo steps next and previous", async ({
+		page,
+	}) => {
+		const candidate = await findTileOverlappedByLaterRow(page);
+		expect(candidate).not.toBeNull();
+		if (!candidate) return;
+		await page.touchscreen.tap(candidate.x, candidate.y);
+		const modal = page.getByTestId("focused-photo-modal");
+		await expect(modal).toHaveAttribute("data-photo-id", candidate.photoId);
+
+		const box = (await page.getByTestId("focused-photo-image").boundingBox())!;
+		const y = box.y + box.height / 2;
+		const mid = page.viewportSize()!.width / 2;
+		// Record the photo's horizontal offset every frame through the swipe.
+		await page.evaluate(() => {
+			const samples: number[] = [];
+			(window as unknown as { swipeSamples: number[] }).swipeSamples = samples;
+			const started = performance.now();
+			const sample = () => {
+				const frame = document.querySelector<HTMLElement>('[data-testid="focused-photo-frame"]');
+				const transform = frame ? getComputedStyle(frame).transform : "none";
+				samples.push(transform === "none" ? 0 : new DOMMatrix(transform).m41);
+				if (performance.now() - started < 4000) requestAnimationFrame(sample);
+			};
+			requestAnimationFrame(sample);
+		});
+		await performTouchDrag(page, { x: mid + 100, y }, { x: mid - 100, y });
+		await expect(modal).not.toHaveAttribute("data-photo-id", candidate.photoId);
+		await expect(modal).toBeVisible();
+		await page.waitForTimeout(4100);
+		const samples = await page.evaluate(
+			() => (window as unknown as { swipeSamples: number[] }).swipeSamples,
+		);
+		const width = page.viewportSize()!.width;
+		// Followed the finger and slid off to the left...
+		expect(Math.min(...samples)).toBeLessThan(-width * 0.5);
+		// ...then the next photo came in from the right and settled centered.
+		expect(Math.max(...samples)).toBeGreaterThan(width * 0.2);
+		expect(samples.at(-1)).toBe(0);
+
+		await performTouchDrag(page, { x: mid - 100, y }, { x: mid + 100, y });
+		await expect(modal).toHaveAttribute("data-photo-id", candidate.photoId);
+	});
 });
+
+/** A point beside the photo, clear of the side nav buttons and top close button. */
+function pointOutsideBox(
+	box: { x: number; y: number; width: number; height: number },
+	viewport: { width: number; height: number },
+): { x: number; y: number } {
+	const below = viewport.height - (box.y + box.height);
+	if (below > 12) return { x: viewport.width / 2, y: box.y + box.height + below / 2 };
+	return { x: box.x / 2, y: viewport.height * 0.85 };
+}
 
 async function performTouchDrag(
 	page: Page,

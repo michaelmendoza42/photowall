@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig, devices } from '@playwright/test';
 
 const port = 5176;
-const smokeLibraryRoot = fileURLToPath(new URL('./fixtures/library-smoke/', import.meta.url));
+const wallLibraryRoot = fileURLToPath(new URL('./fixtures/library-wall/', import.meta.url));
 const dataRoot = mkdtempSync(`${os.tmpdir()}${sep}photo-wall-playwright-`);
 
 export default defineConfig({
@@ -34,7 +34,7 @@ export default defineConfig({
       NODE_ENV: 'test',
       PHOTO_WALL_BIND_HOST: '0.0.0.0',
       PHOTO_WALL_PORT: String(port),
-      PHOTO_WALL_LIBRARY_ROOT: smokeLibraryRoot,
+      PHOTO_WALL_LIBRARY_ROOT: wallLibraryRoot,
       PHOTO_WALL_DATA_ROOT: dataRoot,
       PHOTO_WALL_LOG_LEVEL: 'warn',
       PHOTO_WALL_SCAN_TOP_LEVEL_YEARS_ONLY: 'false',

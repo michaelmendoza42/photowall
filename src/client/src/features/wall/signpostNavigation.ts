@@ -5,10 +5,13 @@ export function computeWrapAwareCameraTarget(input: {
   camera: CameraState;
   targetX: number;
   targetY: number;
+  /** Wall zoom; the viewport covers `viewport / zoom` world px. */
+  zoom?: number;
 }): { x: number; y: number } {
-  const { camera, targetX, targetY } = input;
-  const targetWrappedX = targetX - camera.viewport.width / 2;
-  const targetWrappedY = targetY - camera.viewport.height / 2;
+  const { camera, targetX, targetY, zoom = 1 } = input;
+  const scale = zoom > 0 ? zoom : 1;
+  const targetWrappedX = targetX - camera.viewport.width / (2 * scale);
+  const targetWrappedY = targetY - camera.viewport.height / (2 * scale);
   const nextX = camera.x + shortestWrappedDelta(targetWrappedX - wrapTravelOffset(camera.x, camera.world.width), camera.world.width);
   const verticalPeriod = camera.world.height ?? 0;
   const nextY =

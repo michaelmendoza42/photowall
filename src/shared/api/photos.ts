@@ -10,7 +10,7 @@
 import type { YearSource } from './library.js';
 
 /** Server-defined hard cap on a single page request. */
-export const PHOTOS_PAGE_MAX_LIMIT = 200;
+export const PHOTOS_PAGE_MAX_LIMIT = 5000;
 
 /** Server-defined default page size when the client omits `limit`. */
 export const PHOTOS_PAGE_DEFAULT_LIMIT = 60;
@@ -83,6 +83,8 @@ export type PhotosQueryResponse =
 export interface PhotosQueryFilters {
   years?: number[];
   folders?: string[];
+  /** Folders carved back out of `folders`; see `folderSelectionIncludes`. */
+  excludeFolders?: string[];
   playlistId?: string;
 }
 
@@ -93,5 +95,46 @@ export interface PhotosQueryFilters {
 export interface ResolvedPhotoFilters {
   years: number[];
   folders: string[];
+  excludeFolders: string[];
   playlistId: string | null;
+}
+
+/**
+ * Whether a folder's own photos are inside a folder selection.
+ *
+ * `include` and `exclude` are folder rules that each cover a folder and
+ * everything beneath it. The deepest rule covering `directoryPath` wins,
+ * so a nested folder can be excluded from a selected parent and a
+ * deeper folder re-included under that exclusion. With no include
+ * rules the selection starts from the whole library.
+ */
+export function folderSelectionIncludes(
+  directoryPath: string,
+  include: readonly string[],
+  exclude: readonly string[],
+): boolean {
+  let included = include.length === 0;
+  let depth = -1;
+  for (const rule of include) {
+    const ruleDepth = coveringRuleDepth(directoryPath, rule);
+    if (ruleDepth > depth) {
+      depth = ruleDepth;
+      included = true;
+    }
+  }
+  for (const rule of exclude) {
+    const ruleDepth = coveringRuleDepth(directoryPath, rule);
+    if (ruleDepth >= depth && ruleDepth >= 0) {
+      depth = ruleDepth;
+      included = false;
+    }
+  }
+  return included;
+}
+
+/** Segment depth of `rule` when it covers `directoryPath`, else -1. */
+function coveringRuleDepth(directoryPath: string, rule: string): number {
+  if (rule === '') return 0;
+  if (directoryPath !== rule && !directoryPath.startsWith(`${rule}/`)) return -1;
+  return rule.split('/').length;
 }

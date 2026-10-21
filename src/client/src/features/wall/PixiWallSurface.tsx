@@ -1,9 +1,10 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
-import { Application, Container, Sprite, Texture } from 'pixi.js';
+import { Application, Container, Rectangle, Sprite, Texture } from 'pixi.js';
 import { Viewport } from 'pixi-viewport';
 import type { MediaVariant } from '../../../../shared/api/media.js';
 import {
   buildPixiSceneSprites,
+  coverCropFrame,
   largestOnScreenVariant,
   variantRank,
   wallPixelRatio,
@@ -43,6 +44,13 @@ interface SpriteEntry {
   src: string;
   displayedSrc: string | null;
   displayedVariant: MediaVariant | null;
+  /** The loaded (cached, shared) texture for the displayed image. */
+  base: Texture | null;
+  /** This sprite's cover crop of `base`; owned by the entry. */
+  view: Texture | null;
+  /** Tile size the sprite is laid out at. */
+  width: number;
+  height: number;
 }
 
 export const PixiWallSurface = memo(function PixiWallSurface(
@@ -187,9 +195,13 @@ export const PixiWallSurface = memo(function PixiWallSurface(
     for (const [key, entry] of spriteEntries) {
       if (nextKeys.has(key)) continue;
       const removedSprite = entry.sprite;
+      const removedView = entry.view;
       scene.removeChild(removedSprite);
       spriteEntries.delete(key);
-      requestAnimationFrame(() => removedSprite.destroy());
+      requestAnimationFrame(() => {
+        removedSprite.destroy();
+        removedView?.destroy(false);
+      });
     }
 
     for (let index = 0; index < sprites.length; index += 1) {
@@ -202,7 +214,7 @@ export const PixiWallSurface = memo(function PixiWallSurface(
         getActiveSources,
         isDisposed: () => surfaceDisposedRef.current,
         spriteData,
-        zIndex: index,
+        zIndex: spriteData.zOrder ?? index,
       });
     }
 
@@ -249,7 +261,12 @@ function syncSprite(args: {
 
   const current = spriteEntries.get(spriteData.key);
   if (current) {
+    const resized =
+      current.width !== spriteData.width || current.height !== spriteData.height;
+    current.width = spriteData.width;
+    current.height = spriteData.height;
     applySpriteLayout(current.sprite, spriteData, zIndex);
+    if (resized && current.base) showTexture(current, current.base);
     if (current.src === spriteData.src) {
       return;
     }
@@ -269,7 +286,7 @@ function syncSprite(args: {
     current.src = spriteData.src;
     if (cachedTexture) {
       touchTexture(textureCache, spriteData.src, cachedTexture);
-      current.sprite.texture = cachedTexture;
+      showTexture(current, cachedTexture);
       current.displayedSrc = spriteData.src;
       current.displayedVariant = spriteData.variant;
       current.sprite.visible = true;
@@ -291,7 +308,7 @@ function syncSprite(args: {
         browserMediaDiagnostics.record('superseded', spriteData.variant);
         return;
       }
-      latest.sprite.texture = texture;
+      showTexture(latest, texture);
       latest.displayedSrc = spriteData.src;
       latest.displayedVariant = spriteData.variant;
       latest.sprite.visible = true;
@@ -305,22 +322,24 @@ function syncSprite(args: {
   sprite.visible = false;
   applySpriteLayout(sprite, spriteData, zIndex);
   scene.addChild(sprite);
-  spriteEntries.set(spriteData.key, {
+  const entry: SpriteEntry = {
     sprite,
     src: spriteData.src,
     displayedSrc: null,
     displayedVariant: null,
-  });
+    base: null,
+    view: null,
+    width: spriteData.width,
+    height: spriteData.height,
+  };
+  spriteEntries.set(spriteData.key, entry);
 
   const cachedTexture = textureCache.get(spriteData.src);
   if (cachedTexture) {
     touchTexture(textureCache, spriteData.src, cachedTexture);
-    sprite.texture = cachedTexture;
-    const entry = spriteEntries.get(spriteData.key);
-    if (entry) {
-      entry.displayedSrc = spriteData.src;
-      entry.displayedVariant = spriteData.variant;
-    }
+    showTexture(entry, cachedTexture);
+    entry.displayedSrc = spriteData.src;
+    entry.displayedVariant = spriteData.variant;
     sprite.visible = true;
     browserMediaDiagnostics.record('sprite_applied', spriteData.variant);
     return;
@@ -338,13 +357,38 @@ function syncSprite(args: {
       browserMediaDiagnostics.record('superseded', spriteData.variant);
       return;
     }
-    latest.sprite.texture = texture;
+    showTexture(latest, texture);
     latest.displayedSrc = spriteData.src;
     latest.displayedVariant = spriteData.variant;
     latest.sprite.visible = true;
     browserMediaDiagnostics.record('sprite_applied', spriteData.variant);
     evictTextures(textureCache, getActiveSources());
   }).catch(() => undefined);
+}
+
+/**
+ * Show `base` on the sprite cropped to the tile's shape (like CSS
+ * `object-fit: cover`), so a tile sized differently from its photo crops
+ * the photo instead of stretching it.
+ */
+function showTexture(entry: SpriteEntry, base: Texture): void {
+  const { sprite, width, height } = entry;
+  const frame = coverCropFrame(
+    { width: base.source.width, height: base.source.height },
+    { width, height },
+  );
+  const previousView = entry.view;
+  const view = new Texture({
+    source: base.source,
+    frame: new Rectangle(frame.x, frame.y, frame.width, frame.height),
+  });
+  entry.base = base;
+  entry.view = view;
+  sprite.texture = view;
+  // Swapping the texture resets the sprite to the frame's size.
+  sprite.width = width;
+  sprite.height = height;
+  if (previousView) destroyTextureAfterRender(previousView);
 }
 
 function applySpriteLayout(

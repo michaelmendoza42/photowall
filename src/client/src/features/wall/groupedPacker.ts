@@ -48,24 +48,25 @@ export function packGroupedAlbums(
 
   const tiles: PackedTile[] = [];
 
-  for (const album of albums) {
-    if (album.photos.length === 0) continue;
+  albums.forEach((album, mosaic) => {
+    if (album.photos.length === 0) return;
     const columns = buildColumns({
       worldWidth: album.area.footprintWidth,
       factors: columnWidthFactors,
       tileScale,
     });
-    if (columns.length === 0) continue;
+    if (columns.length === 0) return;
 
     const local = packColumnMosaic({
       photos: album.photos,
       columns,
       offsetX: album.area.anchorX - album.area.footprintWidth / 2,
       offsetY: Math.max(0, album.area.anchorY - album.area.footprintHeight / 2),
+      mosaic,
     });
 
     tiles.push(...local.tiles);
-  }
+  });
 
   if (tiles.length === 0) {
     return {

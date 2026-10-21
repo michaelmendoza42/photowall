@@ -1,9 +1,12 @@
 // Column-first mosaic layout engine.
 //
-// The wall reads as a staggered vertical mosaic instead of stacked
-// horizontal justified rows. Photos are placed into a deterministic
-// repeated set of gapless columns and each next photo lands in the
-// best-scoring candidate among the shortest current columns.
+// Photos are placed into a deterministic set of gapless columns and each
+// next photo lands in the best-scoring candidate among the shortest
+// current columns. To keep seams few and short, column boundaries are not
+// fixed: whenever two neighbouring columns line up, the boundary between
+// them moves sideways, so the seam above ends in a T-junction instead of
+// running on down the wall. Placement favours lining up a pair whose
+// shared seam has run long, cropping the tile slightly if needed.
 //
 // The layout remains deterministic for any loaded prefix of photos:
 // appending more photos only extends already-established columns and
@@ -48,6 +51,20 @@ export interface PackedTile {
   /** Source dimensions, kept so consumers can pick a media variant. */
   sourceWidth: number;
   sourceHeight: number;
+  /**
+   * Which column of its mosaic the tile was stacked in. A lane's tiles
+   * form one gapless vertical stack even as its boundaries shift.
+   */
+  lane: number;
+  /** Which mosaic the tile belongs to (one per album area when grouped). */
+  mosaic: number;
+  /**
+   * A repeat of a photo shown elsewhere, used for the wall's ragged outer
+   * edge where tiles overlap; next/previous skip these.
+   */
+  duplicate?: boolean;
+  /** Draw order: higher layers draw over lower ones (edge overlaps). */
+  layer?: number;
 }
 
 export interface PackedRow {
@@ -98,12 +115,27 @@ const MIN_TILE_SCALE = 0.05;
 const MAX_COLUMN_COUNT_GUARD = 10_000;
 const TAIL_COLUMN_MERGE_RATIO = 0.7;
 const CANDIDATE_COLUMN_COUNT = 3;
-const DISPLAY_HEIGHT_MIN_WIDTH_RATIO = 0.58;
+export const DISPLAY_HEIGHT_MIN_WIDTH_RATIO = 0.58;
 const DISPLAY_HEIGHT_MAX_WIDTH_RATIO = 1.75;
 const FALLBACK_ASPECT_MIN_HEIGHT_MULTIPLIER = 1.5;
-const SKYLINE_SPREAD_WEIGHT = 1;
-const NEIGHBOR_DELTA_WEIGHT = 1.35;
-const CROP_WEIGHT = 420;
+export const SKYLINE_SPREAD_WEIGHT = 1;
+export const NEIGHBOR_DELTA_WEIGHT = 1.35;
+export const CROP_WEIGHT = 420;
+/** Column bottoms closer than this count as lined up. */
+export const ALIGN_EPSILON_PX = 0.5;
+/** Reward per px of seam that lining up a pair would end, up to the cap. */
+export const SEAM_LEVEL_WEIGHT = 0.4;
+/** Seams shorter than this (× column width) are fine and earn no bonus. */
+export const SEAM_FREE_RUN_PX = 0.6;
+export const SEAM_BONUS_CAP_RATIO = 6;
+/** Boundary positions a lined-up pair may move to, as the left share. */
+const RESPLIT_RATIOS: readonly number[] = [0.36, 0.44, 0.5, 0.56, 0.64];
+/** Smallest boundary move worth making, as a share of the pair's width. */
+const RESPLIT_MIN_SHIFT = 0.06;
+/** Column widths stay within this range of the original widths. */
+export const RESPLIT_MIN_WIDTH_RATIO = 0.8;
+export const RESPLIT_MAX_WIDTH_RATIO = 1.25;
+export const LEVEL_MAX_CROP = 0.25;
 
 /**
  * Compatibility name retained to minimize churn in the wall code. The
@@ -151,34 +183,56 @@ export function packColumnMosaic(input: {
   columns: readonly ColumnGeometry[];
   offsetX?: number;
   offsetY?: number;
+  mosaic?: number;
 }): ColumnPackedResult {
-  const { photos, columns, offsetX = 0, offsetY = 0 } = input;
-  if (photos.length === 0 || columns.length === 0) {
+  const { photos, offsetX = 0, offsetY = 0, mosaic = 0 } = input;
+  if (photos.length === 0 || input.columns.length === 0) {
     return {
       tiles: [],
       contentHeight: 0,
-      columnHeights: new Array<number>(columns.length).fill(0),
+      columnHeights: new Array<number>(input.columns.length).fill(0),
     };
   }
 
+  // Columns are working state: lined-up neighbours trade width.
+  const columns = input.columns.map((column) => ({ ...column }));
+  const minWidth =
+    Math.min(...input.columns.map((column) => column.width)) * RESPLIT_MIN_WIDTH_RATIO;
+  const maxWidth =
+    Math.max(...input.columns.map((column) => column.width)) * RESPLIT_MAX_WIDTH_RATIO;
   const columnHeights = new Array<number>(columns.length).fill(0);
+  // Where the straight seam between column b and b + 1 currently starts.
+  const seamStarts = new Array<number>(Math.max(0, columns.length - 1)).fill(0);
   const tiles: PackedTile[] = [];
 
   for (const photo of photos) {
-    const placement = choosePlacement({ photo, columns, columnHeights });
-    const y = columnHeights[placement.columnIndex]!;
+    const placement = choosePlacement({ photo, columns, columnHeights, seamStarts });
+    const lane = placement.columnIndex;
+    const column = columns[lane]!;
+    const y = columnHeights[lane]!;
 
     tiles.push({
       photoId: photo.id,
-      x: placement.column.x + offsetX,
+      x: column.x + offsetX,
       y: y + offsetY,
-      width: placement.column.width,
+      width: column.width,
       height: placement.height,
       sourceWidth: photo.width,
       sourceHeight: photo.height,
+      lane,
+      mosaic,
     });
 
-    columnHeights[placement.columnIndex] = y + placement.height;
+    columnHeights[lane] = placement.levelTo ?? y + placement.height;
+
+    for (const boundary of [lane - 1, lane]) {
+      if (boundary < 0 || boundary >= columns.length - 1) continue;
+      const top = columnHeights[boundary]!;
+      if (Math.abs(top - columnHeights[boundary + 1]!) > ALIGN_EPSILON_PX) continue;
+      if (resplitBoundary(columns, boundary, minWidth, maxWidth)) {
+        seamStarts[boundary] = top;
+      }
+    }
   }
 
   return {
@@ -186,6 +240,41 @@ export function packColumnMosaic(input: {
     contentHeight: Math.max(...columnHeights, 0),
     columnHeights,
   };
+}
+
+/**
+ * Move the boundary between two lined-up columns as far as the allowed
+ * splits permit, so the seam above does not continue below. Returns
+ * whether it moved.
+ */
+export function resplitBoundary(
+  columns: ColumnGeometry[],
+  boundary: number,
+  minWidth: number,
+  maxWidth: number,
+): boolean {
+  const left = columns[boundary]!;
+  const right = columns[boundary + 1]!;
+  const total = left.width + right.width;
+  const current = left.width / total;
+
+  let bestRatio: number | null = null;
+  for (const ratio of RESPLIT_RATIOS) {
+    const leftWidth = total * ratio;
+    const rightWidth = total - leftWidth;
+    if (Math.min(leftWidth, rightWidth) < minWidth) continue;
+    if (Math.max(leftWidth, rightWidth) > maxWidth) continue;
+    if (Math.abs(ratio - current) < RESPLIT_MIN_SHIFT) continue;
+    if (bestRatio === null || Math.abs(ratio - current) > Math.abs(bestRatio - current)) {
+      bestRatio = ratio;
+    }
+  }
+  if (bestRatio === null) return false;
+
+  const leftWidth = total * bestRatio;
+  columns[boundary] = { x: left.x, width: leftWidth };
+  columns[boundary + 1] = { x: left.x + leftWidth, width: total - leftWidth };
+  return true;
 }
 
 export function buildPackedRows(
@@ -230,8 +319,12 @@ interface BuildColumnsInput {
 
 interface PlacementChoice {
   columnIndex: number;
-  column: ColumnGeometry;
   height: number;
+  /**
+   * Exact bottom when the tile was sized to line up with a neighbour, so
+   * float error never leaves the pair a hair apart.
+   */
+  levelTo?: number;
 }
 
 function normalizeFactors(
@@ -303,48 +396,79 @@ function choosePlacement(input: {
   photo: PhotoQueryRecord;
   columns: readonly ColumnGeometry[];
   columnHeights: readonly number[];
+  seamStarts: readonly number[];
 }): PlacementChoice {
-  const { photo, columns, columnHeights } = input;
+  const { photo, columns, columnHeights, seamStarts } = input;
 
   const firstUnusedColumnIndex = columnHeights.findIndex((height) => height === 0);
   if (firstUnusedColumnIndex >= 0) {
-    const column = columns[firstUnusedColumnIndex]!;
     return {
       columnIndex: firstUnusedColumnIndex,
-      column,
-      height: computeDisplayHeight(column.width, photo),
+      height: computeDisplayHeight(columns[firstUnusedColumnIndex]!.width, photo),
     };
   }
 
-  const candidates = sortedColumnIndices(columnHeights).slice(0, CANDIDATE_COLUMN_COUNT);
+  const seamBonus = (boundary: number): number => {
+    const reference = columns[boundary]!.width;
+    const run =
+      Math.min(columnHeights[boundary]!, columnHeights[boundary + 1]!) -
+      seamStarts[boundary]!;
+    const excess = run - reference * SEAM_FREE_RUN_PX;
+    return SEAM_LEVEL_WEIGHT * clamp(excess, 0, reference * SEAM_BONUS_CAP_RATIO);
+  };
 
   let best: PlacementChoice | null = null;
   let bestScore = Number.POSITIVE_INFINITY;
-
-  for (const columnIndex of candidates) {
-    const column = columns[columnIndex]!;
-    const height = computeDisplayHeight(column.width, photo);
-    const score = scorePlacement({
-      columnIndex,
-      height,
-      columns,
-      columnHeights,
-      photo,
-    });
-
+  const consider = (choice: PlacementChoice, bonus: number): void => {
+    const width = columns[choice.columnIndex]!.width;
+    const projected = columnHeights.slice();
+    projected[choice.columnIndex] =
+      choice.levelTo ?? columnHeights[choice.columnIndex]! + choice.height;
+    const score =
+      scoreProjection(projected, choice.columnIndex) +
+      computeCropPenalty(width, photo, choice.height) * CROP_WEIGHT -
+      bonus;
     if (
       best === null ||
       score < bestScore ||
-      (score === bestScore && columnIndex < best.columnIndex)
+      (score === bestScore && choice.columnIndex < best.columnIndex)
     ) {
-      best = { columnIndex, column, height };
+      best = choice;
       bestScore = score;
+    }
+  };
+
+  const candidates = sortedColumnIndices(columnHeights).slice(0, CANDIDATE_COLUMN_COUNT);
+  for (const columnIndex of candidates) {
+    consider(
+      {
+        columnIndex,
+        height: computeDisplayHeight(columns[columnIndex]!.width, photo),
+      },
+      0,
+    );
+  }
+
+  // Lining up is tried on every column: a long seam is worth ending even
+  // where the skyline is not lowest.
+  for (let columnIndex = 0; columnIndex < columns.length; columnIndex += 1) {
+    const width = columns[columnIndex]!.width;
+    const top = columnHeights[columnIndex]!;
+    for (const neighbor of [columnIndex - 1, columnIndex + 1]) {
+      if (neighbor < 0 || neighbor >= columns.length) continue;
+      const target = columnHeights[neighbor]!;
+      const height = target - top;
+      if (height <= ALIGN_EPSILON_PX) continue;
+      if (computeCropPenalty(width, photo, height) > LEVEL_MAX_CROP) continue;
+      consider(
+        { columnIndex, height, levelTo: target },
+        seamBonus(Math.min(columnIndex, neighbor)),
+      );
     }
   }
 
   return best ?? {
     columnIndex: 0,
-    column: columns[0]!,
     height: computeDisplayHeight(columns[0]!.width, photo),
   };
 }
@@ -368,26 +492,15 @@ export function computeDisplayHeight(
   return clamp(idealHeight, minHeight, maxHeight);
 }
 
-function scorePlacement(input: {
-  columnIndex: number;
-  height: number;
-  columns: readonly ColumnGeometry[];
-  columnHeights: readonly number[];
-  photo: PhotoQueryRecord;
-}): number {
-  const { columnIndex, height, columns, columnHeights, photo } = input;
-  const projected = columnHeights.map((current, index) =>
-    index === columnIndex ? current + height : current,
-  );
-
+function scoreProjection(
+  projected: readonly number[],
+  columnIndex: number,
+): number {
   const skylineSpread = Math.max(...projected) - Math.min(...projected);
   const neighborDelta = neighboringHeightPenalty(projected, columnIndex);
-  const cropPenalty = computeCropPenalty(columns[columnIndex]!.width, photo, height);
-
   return (
     skylineSpread * SKYLINE_SPREAD_WEIGHT +
-    neighborDelta * NEIGHBOR_DELTA_WEIGHT +
-    cropPenalty * CROP_WEIGHT
+    neighborDelta * NEIGHBOR_DELTA_WEIGHT
   );
 }
 
@@ -418,7 +531,7 @@ function neighboringHeightPenalty(
   return penalty;
 }
 
-function computeCropPenalty(
+export function computeCropPenalty(
   columnWidth: number,
   photo: PhotoQueryRecord,
   displayedHeight: number,

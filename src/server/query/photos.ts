@@ -10,14 +10,17 @@
 //  - `folders` matches PhotoRecord.directoryPath either exactly or as
 //    a prefix segment ("2024" matches "2024/wedding-anna" but not
 //    "2024-old-import")
+//  - `excludeFolders` carves nested folders back out; the deepest
+//    include/exclude rule covering a photo's folder decides
 //  - empty filter arrays mean "no constraint on this axis"
 //
 // All filters AND together.
 
 import type { PhotoRecord } from '../scanner/types.js';
-import type {
-  PhotoQueryRecord,
-  ResolvedPhotoFilters,
+import {
+  folderSelectionIncludes,
+  type PhotoQueryRecord,
+  type ResolvedPhotoFilters,
 } from '../../shared/api/photos.js';
 
 export interface PageSliceInput {
@@ -50,8 +53,14 @@ export function matchesFilters(
     if (photo.year === null) return false;
     if (!filters.years.includes(photo.year)) return false;
   }
-  if (filters.folders.length > 0) {
-    if (!filters.folders.some((f) => folderMatches(photo.directoryPath, f))) {
+  if (filters.folders.length > 0 || filters.excludeFolders.length > 0) {
+    if (
+      !folderSelectionIncludes(
+        photo.directoryPath,
+        filters.folders,
+        filters.excludeFolders,
+      )
+    ) {
       return false;
     }
   }

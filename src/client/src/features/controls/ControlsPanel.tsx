@@ -1,20 +1,21 @@
-import { useMemo, useState } from 'react';
-import type {
-  LibraryFacetsResponse,
-  YearFacet,
-  FolderFacet,
-} from '../../../../shared/api/library.js';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { LibraryFacetsResponse } from '../../../../shared/api/library.js';
 import type { PlaylistRecord } from '../../../../shared/api/playlists.js';
 import {
   applyPlaylistFilters,
   clearFilters,
   findStaleFolders,
   hasAnyFilter,
-  toggleFolder,
-  toggleYear,
+  setFolderSelection,
   type ActiveFilters,
 } from '../../state/filters.js';
-import { LibraryRootEditor } from '../library/LibraryRootEditor.js';
+import {
+  buildFolderTree,
+  folderCheckStates,
+  toggleFolderInTree,
+  type FolderCheckState,
+  type FolderTreeNode,
+} from '../../state/folderTree.js';
 
 export interface ControlsPanelProps {
   open: boolean;
@@ -30,32 +31,6 @@ export interface ControlsPanelProps {
   updatePending?: boolean;
   deletePending?: boolean;
   errorMessage?: string | null;
-  libraryRoot: string;
-  onLibraryRootChange: (nextRoot: string) => void;
-  libraryRootPending?: boolean;
-  libraryRootError?: string | null;
-}
-
-/**
- * Sort folder facets by depth then path so the most useful top-level
- * buckets surface first while still letting the operator drill into
- * deeper folders if they want. Empty (root) folder is dropped — it
- * means "everything" and is not a useful filter on its own.
- */
-function visibleFolders(folders: readonly FolderFacet[]): FolderFacet[] {
-  return folders
-    .filter((f) => f.path.length > 0 && f.photoCount > 0)
-    .slice()
-    .sort((a, b) => {
-      if (a.depth !== b.depth) return a.depth - b.depth;
-      return a.path.localeCompare(b.path);
-    });
-}
-
-function visibleYears(years: readonly YearFacet[]): YearFacet[] {
-  return years
-    .slice()
-    .sort((a, b) => b.year - a.year);
 }
 
 export function ControlsPanel(props: ControlsPanelProps): JSX.Element {
@@ -73,10 +48,6 @@ export function ControlsPanel(props: ControlsPanelProps): JSX.Element {
     updatePending,
     deletePending,
     errorMessage,
-    libraryRoot,
-    onLibraryRootChange,
-    libraryRootPending,
-    libraryRootError,
   } = props;
 
   const [name, setName] = useState('');
@@ -85,14 +56,19 @@ export function ControlsPanel(props: ControlsPanelProps): JSX.Element {
     name: string;
   } | null>(null);
 
-  const years = useMemo(
-    () => (facets ? visibleYears(facets.years) : []),
+  const folderTree = useMemo(
+    () => (facets ? buildFolderTree(facets.folders) : []),
     [facets],
   );
-  const folders = useMemo(
-    () => (facets ? visibleFolders(facets.folders) : []),
-    [facets],
+  const checkStates = useMemo(
+    () => folderCheckStates(folderTree, filters),
+    [folderTree, filters],
   );
+  // Folders the user opened or closed; the rest open when partially
+  // selected so the deselected albums inside are visible.
+  const [expandedOverrides, setExpandedOverrides] = useState<
+    ReadonlyMap<string, boolean>
+  >(() => new Map());
 
   const availableFolderPaths = useMemo(
     () => (facets ? facets.folders.map((f) => f.path) : []),
@@ -122,6 +98,25 @@ export function ControlsPanel(props: ControlsPanelProps): JSX.Element {
     if (!trimmed) return;
     onCreatePlaylist(trimmed);
     setName('');
+  }
+
+  function handleToggleFolder(path: string): void {
+    // Keep folders that are open only because they were partial from
+    // snapping shut under the cursor once they become fully (de)selected.
+    setExpandedOverrides((prev) => {
+      const next = new Map(prev);
+      for (const [folder, state] of checkStates) {
+        if (state === 'partial' && !next.has(folder)) next.set(folder, true);
+      }
+      return next;
+    });
+    onFiltersChange(
+      setFolderSelection(filters, toggleFolderInTree(folderTree, filters, path)),
+    );
+  }
+
+  function handleToggleExpanded(path: string, isExpanded: boolean): void {
+    setExpandedOverrides((prev) => new Map(prev).set(path, !isExpanded));
   }
 
   function handleSelectPlaylist(p: PlaylistRecord): void {
@@ -203,70 +198,28 @@ export function ControlsPanel(props: ControlsPanelProps): JSX.Element {
           )}
 
           <section className="controls__section">
-            <LibraryRootEditor
-              currentRoot={libraryRoot}
-              onSubmit={onLibraryRootChange}
-              pending={libraryRootPending}
-              errorMessage={libraryRootError}
-              hint="Use the path the server can actually read. The local picker only prefills when the browser exposes a compatible path."
-              submitLabel="Change root"
-            />
-          </section>
-
-          <section className="controls__section">
-            <h3 className="controls__section-title">Years</h3>
-            {years.length === 0 ? (
-              <p className="controls__hint">No year metadata in the library yet.</p>
+            <h3 className="controls__section-title">Albums</h3>
+            {folderTree.length === 0 ? (
+              <p className="controls__hint">No albums discovered yet.</p>
             ) : (
-              <ul className="controls__chips" data-testid="controls-years">
-                {years.map((y) => {
-                  const selected = filters.years.includes(y.year);
-                  return (
-                    <li key={y.year}>
-                      <button
-                        type="button"
-                        className="controls__chip"
-                        data-testid={`controls-year-${y.year}`}
-                        data-selected={selected ? 'true' : 'false'}
-                        aria-pressed={selected}
-                        onClick={() => onFiltersChange(toggleYear(filters, y.year))}
-                      >
-                        <span className="controls__chip-label">{y.year}</span>
-                        <span className="controls__chip-count">{y.photoCount}</span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </section>
-
-          <section className="controls__section">
-            <h3 className="controls__section-title">Folders</h3>
-            {folders.length === 0 ? (
-              <p className="controls__hint">No folder facets available yet.</p>
-            ) : (
-              <ul className="controls__chips controls__chips--folders" data-testid="controls-folders">
-                {folders.map((f) => {
-                  const selected = filters.folders.includes(f.path);
-                  return (
-                    <li key={f.path}>
-                      <button
-                        type="button"
-                        className="controls__chip"
-                        data-testid={`controls-folder-${f.path}`}
-                        data-selected={selected ? 'true' : 'false'}
-                        aria-pressed={selected}
-                        title={f.path}
-                        onClick={() => onFiltersChange(toggleFolder(filters, f.path))}
-                      >
-                        <span className="controls__chip-label">{f.path}</span>
-                        <span className="controls__chip-count">{f.photoCount}</span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
+              <>
+                {filters.folders.length === 0 && (
+                  <p className="controls__hint">Nothing picked: the wall shows every album.</p>
+                )}
+                <ul className="album-tree" data-testid="controls-folders">
+                  {folderTree.map((node) => (
+                    <AlbumTreeItem
+                      key={node.path}
+                      node={node}
+                      depth={0}
+                      checkStates={checkStates}
+                      expandedOverrides={expandedOverrides}
+                      onToggle={handleToggleFolder}
+                      onToggleExpanded={handleToggleExpanded}
+                    />
+                  ))}
+                </ul>
+              </>
             )}
           </section>
 
@@ -424,5 +377,76 @@ export function ControlsPanel(props: ControlsPanelProps): JSX.Element {
         </section>
       )}
     </div>
+  );
+}
+
+interface AlbumTreeItemProps {
+  node: FolderTreeNode;
+  depth: number;
+  checkStates: ReadonlyMap<string, FolderCheckState>;
+  expandedOverrides: ReadonlyMap<string, boolean>;
+  onToggle: (path: string) => void;
+  onToggleExpanded: (path: string, isExpanded: boolean) => void;
+}
+
+function AlbumTreeItem(props: AlbumTreeItemProps): JSX.Element {
+  const { node, depth, checkStates, expandedOverrides, onToggle, onToggleExpanded } = props;
+  const state = checkStates.get(node.path) ?? 'none';
+  const hasChildren = node.children.length > 0;
+  const isExpanded =
+    hasChildren && (expandedOverrides.get(node.path) ?? state === 'partial');
+  const checkboxRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (checkboxRef.current) checkboxRef.current.indeterminate = state === 'partial';
+  }, [state]);
+
+  return (
+    <li className="album-tree__item">
+      <div className="album-tree__row" style={{ paddingLeft: `${depth * 18}px` }}>
+        {hasChildren ? (
+          <button
+            type="button"
+            className="album-tree__disclosure"
+            data-testid={`controls-folder-expand-${node.path}`}
+            aria-expanded={isExpanded}
+            aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${node.name}`}
+            onClick={() => onToggleExpanded(node.path, isExpanded)}
+          >
+            <span aria-hidden="true">{isExpanded ? '▾' : '▸'}</span>
+          </button>
+        ) : (
+          <span className="album-tree__disclosure" aria-hidden="true" />
+        )}
+        <label className="album-tree__label" title={node.path}>
+          <input
+            ref={checkboxRef}
+            type="checkbox"
+            className="album-tree__checkbox"
+            data-testid={`controls-folder-${node.path}`}
+            data-selected={state === 'all' ? 'true' : state === 'partial' ? 'partial' : 'false'}
+            checked={state === 'all'}
+            onChange={() => onToggle(node.path)}
+          />
+          <span className="album-tree__name">{node.name}</span>
+          <span className="album-tree__count">{node.photoCount}</span>
+        </label>
+      </div>
+      {isExpanded && (
+        <ul className="album-tree" role="group">
+          {node.children.map((child) => (
+            <AlbumTreeItem
+              key={child.path}
+              node={child}
+              depth={depth + 1}
+              checkStates={checkStates}
+              expandedOverrides={expandedOverrides}
+              onToggle={onToggle}
+              onToggleExpanded={onToggleExpanded}
+            />
+          ))}
+        </ul>
+      )}
+    </li>
   );
 }
