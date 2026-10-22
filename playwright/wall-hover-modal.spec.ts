@@ -254,6 +254,30 @@ test.describe('photo wall hover / click / modal contract', () => {
     ).toBe(true);
   });
 
+  test('scrolling the wall suppresses the hover pop until the scroll settles', async ({
+    page,
+  }) => {
+    const tile = await pickCenteredTile(page);
+    const tileBox = await requiredBox(tile);
+    const preview = page.getByTestId('wall-hover-preview');
+    const centerX = tileBox.x + tileBox.width / 2;
+    const centerY = tileBox.y + tileBox.height / 2;
+
+    await page.mouse.move(centerX, centerY);
+    await expect(preview).toBeVisible();
+
+    // Photos keep sliding under the cursor mid-scroll; none of them pops.
+    for (let step = 0; step < 6; step += 1) {
+      await page.mouse.wheel(0, 30);
+      await page.mouse.move(centerX + (step % 2), centerY + 1);
+      expect(await preview.count()).toBe(0);
+    }
+
+    await page.waitForTimeout(400);
+    await page.mouse.move(centerX + 2, centerY + 2);
+    await expect(preview).toBeVisible();
+  });
+
   test('the focused view keeps hover preview suppressed while open', async ({
     page,
   }) => {

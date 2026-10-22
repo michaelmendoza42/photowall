@@ -88,6 +88,12 @@ export function computeHoverPopRect(input: {
   };
 }
 
+/**
+ * Wheel/trackpad scrolling counts as panning until this long after its last
+ * event, so photos sliding under a still cursor don't pop mid-scroll.
+ */
+export const HOVER_RESUME_AFTER_WHEEL_MS = 200;
+
 /** Smaller offsets than this aren't worth a slide. */
 export const HOVER_PAN_MIN_OFFSET_PX = 2;
 

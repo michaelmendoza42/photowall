@@ -37,7 +37,7 @@ npm run test:browser
 - `single-stream-wrap-continuity.spec.ts` — protects seamless wrap travel and verifies that the Pixi wall does not reinitialize during full-period travel
 - `hover-cursor-pan.spec.ts` — protects the desktop hover slide: a partly off-screen (or larger-than-viewport) photo glides once until the cursor is at its center, not again while moving within it; fully visible photos never slide
 - `focused-lightbox.spec.ts` — protects focused-photo open/close return and next/previous: each step shows a different photo, glides the wall until it is centered, and stepping reaches every photo once before returning to the start; clicking outside the photo closes it, clicking the photo does not
-- `wall-hover-modal.spec.ts` — protects the hover pop (slight in-place lift with drop shadow, animating in for each photo while the previous settles back), click-vs-drag suppression, and focused-photo return behavior
+- `wall-hover-modal.spec.ts` — protects the hover pop (slight in-place lift with drop shadow, animating in for each photo while the previous settles back), click-vs-drag suppression, suppression while scrolling, and focused-photo return behavior
 - `album-picker.spec.ts` — protects the album-picker tree: nested folders under top-level folders, a top-level pick selecting everything inside, the partial indicator after deselecting a nested folder (surviving reload), and no year chips or root editor in the menu
 - `grouped-signposts.spec.ts` — protects grouped signpost reveal, glide, modal suppression, and grouped-selection persistence
 - `zoom-detail-tiers.spec.ts` — protects zoom-aware derivative tiers: thumbnails at overview, then screen-resolution tiers (at 2× DPR) for on-screen photos when zoomed in, plus the focused view

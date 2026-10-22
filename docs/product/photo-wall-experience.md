@@ -74,7 +74,7 @@ The MVP is a trusted-LAN, Docker-run app with no auth boundary and no internet-f
 - Every visibly exposed photo tile should remain tappable even where staggered layout-row bounds overlap; controls layered above the wall remain intentional exceptions.
 - Zooming out should favor a fast readable overview over full-detail loading everywhere at once, and zooming in should refine image detail progressively rather than waiting for the whole wall to repopulate.
 - Minor pointer jitter that stays below the drag threshold should still resolve as a click on the hovered photo rather than shifting the wall first.
-- The hover pop should be suppressed while the user is actively dragging the wall and while the focused-photo modal is open.
+- The hover pop should be suppressed while the user is actively dragging the wall, while the wall is scrolling or gliding (wheel/trackpad scroll and its momentum tail, or a fling), and while the focused-photo modal is open. It returns on the next mouse movement once the wall comes to rest (Michael, 2026-10-22: "disable hoverstate while swiping scrolling through the wall").
 - Panning past the right edge should immediately continue from the left side of the currently loaded wall, and vice versa; the same wrap rule applies for top/bottom travel. With unchanged selection and loaded photos, traveling a full horizontal or vertical period returns to exactly the same arrangement.
 - At the minimum supported zoom on desktop or mobile, additional zoom-out input must stop changing the scale while repeated photo content continues to cover the viewport. Visible repeated copies must still open the correct photo through the existing focused-photo flow.
 - Applying a year or folder filter should narrow the displayed set coherently without leaving stale mixed-result tiles onscreen and without changing the minimal overall framing of the page.
@@ -108,6 +108,10 @@ The MVP is a trusted-LAN, Docker-run app with no auth boundary and no internet-f
 - `../system/photo-library-source-and-runtime.md`
 
 ## Changelog
+
+### 2026-10-22 (hover while scrolling)
+
+- The hover pop no longer appears while the wall is scrolling or gliding; photos sliding under a still or moving cursor stay flat until the wall settles (requested by Michael, 2026-10-22).
 
 ### 2026-10-20
 

@@ -24,7 +24,10 @@ import {
 } from "./useRadialWallLayout.js";
 import { useCameraGlide } from "./useCameraGlide.js";
 import type { WallFocusNavigator } from "./focusNavigation.js";
-import { computeHoverPopRect } from "./hoverPreview.js";
+import {
+	computeHoverPopRect,
+	HOVER_RESUME_AFTER_WHEEL_MS,
+} from "./hoverPreview.js";
 import { WallHoverPopLayer } from "./WallHoverPop.js";
 import { useHoverCursorPan } from "./useHoverCursorPan.js";
 import { PixiWallSurface } from "./PixiWallSurface.js";
@@ -249,6 +252,7 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
 	const hoverPreviewRef = useRef<HoverPreviewState | null>(null);
 	hoverPreviewRef.current = hoverPreview;
 	const lastPointerRef = useRef<{ x: number; y: number } | null>(null);
+	const lastWheelAtRef = useRef(Number.NEGATIVE_INFINITY);
 	const {
 		schedule: scheduleHoverPan,
 		cancel: cancelHoverPan,
@@ -700,6 +704,7 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
 		const el = containerRef.current;
 		if (!el) return undefined;
 		const onWheel = (event: WheelEvent): void => {
+			lastWheelAtRef.current = performance.now();
 			// Honor the event regardless of axis lock — trackpads emit both
 			// deltaX and deltaY for 2D gestures.
 			event.preventDefault();
@@ -924,11 +929,21 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
 		[flushCamera, photosById, startDragMomentum],
 	);
 
+	// No hover pop while the wall is panning (drag, fling, wheel scroll or its
+	// tail): photos sliding under the cursor would pop one after another.
+	const isPanningForHover = useCallback(
+		(): boolean =>
+			isPanMomentumActive() ||
+			performance.now() - lastWheelAtRef.current < HOVER_RESUME_AFTER_WHEEL_MS,
+		[isPanMomentumActive],
+	);
+
 	const updateHoverPreview = useCallback(
 		(tileEl: HTMLDivElement, photoId: string) => {
 			if (!supportsFinePointerHover()) return;
 			if (
 				dragRef.current ||
+				isPanningForHover() ||
 				isModalOpen ||
 				viewportWidth <= 0 ||
 				viewportHeight <= 0
@@ -959,7 +974,7 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
 			});
 			scheduleHoverPan(photo.id);
 		},
-		[scheduleHoverPan, isModalOpen, photosById, viewportWidth, viewportHeight],
+		[scheduleHoverPan, isPanningForHover, isModalOpen, photosById, viewportWidth, viewportHeight],
 	);
 
 	// During a hover slide the wall moves under a still cursor. Boundary

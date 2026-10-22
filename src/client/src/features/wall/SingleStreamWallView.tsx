@@ -11,7 +11,10 @@ import {
 	collectFirstAppearancePhotoIds,
 	rememberSeenPhotoIds,
 } from "./appearanceTracking.js";
-import { computeHoverPopRect } from "./hoverPreview.js";
+import {
+	computeHoverPopRect,
+	HOVER_RESUME_AFTER_WHEEL_MS,
+} from "./hoverPreview.js";
 import { WallHoverPopLayer } from "./WallHoverPop.js";
 import { useHoverCursorPan } from "./useHoverCursorPan.js";
 import { useWallFocusNavigator } from "./useWallFocusNavigator.js";
@@ -172,6 +175,7 @@ export function SingleStreamWallView(
 	const hoverPreviewRef = useRef<HoverPreviewState | null>(null);
 	hoverPreviewRef.current = hoverPreview;
 	const lastPointerRef = useRef<{ x: number; y: number } | null>(null);
+	const lastWheelAtRef = useRef(Number.NEGATIVE_INFINITY);
 	const {
 		schedule: scheduleHoverPan,
 		cancel: cancelHoverPan,
@@ -421,6 +425,7 @@ export function SingleStreamWallView(
 		const el = containerRef.current;
 		if (!el) return undefined;
 		const onWheel = (event: WheelEvent): void => {
+			lastWheelAtRef.current = performance.now();
 			event.preventDefault();
 			cancelPanMomentum();
 			cancelFocusGlide();
@@ -598,11 +603,21 @@ export function SingleStreamWallView(
 		[flushCamera, photosById, startDragMomentum],
 	);
 
+	// No hover pop while the wall is panning (drag, fling, wheel scroll or its
+	// tail): photos sliding under the cursor would pop one after another.
+	const isPanningForHover = useCallback(
+		(): boolean =>
+			isPanMomentumActive() ||
+			performance.now() - lastWheelAtRef.current < HOVER_RESUME_AFTER_WHEEL_MS,
+		[isPanMomentumActive],
+	);
+
 	const updateHoverPreview = useCallback(
 		(tileEl: HTMLDivElement, photoId: string) => {
 			if (!supportsFinePointerHover()) return;
 			if (
 				dragRef.current ||
+				isPanningForHover() ||
 				isModalOpen ||
 				viewportSize.width <= 0 ||
 				viewportSize.height <= 0
@@ -633,7 +648,7 @@ export function SingleStreamWallView(
 			});
 			scheduleHoverPan(photo.id);
 		},
-		[scheduleHoverPan, isModalOpen, photosById, viewportSize.height, viewportSize.width],
+		[scheduleHoverPan, isPanningForHover, isModalOpen, photosById, viewportSize.height, viewportSize.width],
 	);
 
 	// During a hover slide the wall moves under a still cursor. Boundary
