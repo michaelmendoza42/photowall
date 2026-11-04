@@ -8,6 +8,7 @@
 // than silently returning unrelated rows.
 
 import type { YearSource } from './library.js';
+import type { PhotoEdit } from './edits.js';
 
 /** Server-defined hard cap on a single page request. */
 export const PHOTOS_PAGE_MAX_LIMIT = 5000;
@@ -35,6 +36,13 @@ export interface PhotoQueryRecord {
   mtimeMs: number;
   year: number | null;
   yearSource: YearSource;
+  /**
+   * The curator's light edit, when there is one. `width`, `height` and
+   * `aspectRatio` above already describe the edited photo.
+   */
+  edit?: PhotoEdit;
+  /** Fingerprint of `edit`; part of the media URL so edits bust caches. */
+  editVersion?: string;
 }
 
 /** Reason a snapshot-bound cursor is no longer usable. */

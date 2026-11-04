@@ -12,6 +12,7 @@ import type { PhotoQueryRecord } from '../../../../shared/api/photos.js';
 import { computeFocusedPhotoRenderSize } from '../wall/hoverPreview.js';
 import {
   resolveWallMediaSource,
+  type WallMediaSourcePhoto,
   type WallMediaSourceResolver,
 } from '../wall/mediaSourceResolver.js';
 
@@ -25,7 +26,7 @@ export interface FocusedPhotoLightboxProps {
 }
 
 export function buildFocusedPhotoLightboxSlide(
-  photo: Pick<PhotoQueryRecord, 'id' | 'width' | 'height'>,
+  photo: WallMediaSourcePhoto,
   mediaSourceResolver?: WallMediaSourceResolver,
 ): SlideImage {
   return {

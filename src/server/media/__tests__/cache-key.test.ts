@@ -23,6 +23,14 @@ describe('cache-key', () => {
     expect(a).toMatch(/^[0-9a-f]{64}$/);
   });
 
+  it('keeps unedited keys as they were, and gives each edit its own', () => {
+    const plain = computeCacheKey(baseInput);
+    expect(computeCacheKey({ ...baseInput, editVersion: undefined })).toBe(plain);
+    const edited = computeCacheKey({ ...baseInput, editVersion: 'k3x9' });
+    expect(edited).not.toBe(plain);
+    expect(computeCacheKey({ ...baseInput, editVersion: 'k3xa' })).not.toBe(edited);
+  });
+
   it('changes when the source fingerprint changes (invalidation property)', () => {
     const before = computeCacheKey(baseInput);
     const after = computeCacheKey({

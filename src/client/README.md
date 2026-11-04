@@ -14,6 +14,7 @@ Current React + TypeScript + Vite frontend.
 - `src/state/` — camera, filter, focused-photo, and layout state helpers
 - `src/features/controls/` — filter and playlist controls UI
 - `src/features/debug/` — dev-only overlay diagnostics
+- `src/features/editor/` — the curator's light photo editor: Pixi preview scene, crop frame overlay and pure crop math
 - `src/features/modal/` — focused-photo lightbox adapter and related tests
 - `src/features/wall/` — wall shell orchestration, `SingleStreamWallView.tsx`, `GroupedWallView.tsx`, `activeAlbumAreaCount.ts`, layout/packing helpers, the Pixi surface, the DOM hit-target bridge, hover/signpost logic, and related tests
 - `src/styles/` — global app and wall styling

@@ -8,6 +8,8 @@ import {
   type MediaVariant,
 } from '../../shared/api/media.js';
 import type { PersistedSnapshot } from '../snapshots/schema.js';
+import { editVersion, type PhotoEdit } from '../../shared/api/edits.js';
+import { renderEdit } from './edit-render.js';
 import {
   cacheFilePath,
   computeCacheKey,
@@ -36,6 +38,8 @@ export interface DerivativeRequest {
   photoId: string;
   variant: MediaVariant;
   format: MediaFormat;
+  /** The curator's light edit to apply; the original file is never changed. */
+  edit?: PhotoEdit;
 }
 
 /**
@@ -131,6 +135,7 @@ export class DerivativeService {
       variant: request.variant,
       format: request.format,
       sourceFingerprint: fingerprint,
+      ...(request.edit ? { editVersion: editVersion(request.edit) } : {}),
     };
     const cacheKey = computeCacheKey(keyInput);
     const target = cacheFilePath(this.cacheRoot, keyInput);
@@ -239,14 +244,14 @@ async function renderToFile(
   await fs.mkdir(path.dirname(targetFile), { recursive: true });
   const tmp = `${targetFile}.${randomUUID()}.tmp`;
 
-  const pipeline = sharp(sourceAbsolutePath)
-    .rotate()
-    .resize({
-      width: spec.longEdge,
-      height: spec.longEdge,
-      fit: 'inside',
-      withoutEnlargement: true,
-    });
+  const pipeline = request.edit
+    ? await renderEdit(sourceAbsolutePath, request.edit, spec.longEdge)
+    : sharp(sourceAbsolutePath).rotate().resize({
+        width: spec.longEdge,
+        height: spec.longEdge,
+        fit: 'inside',
+        withoutEnlargement: true,
+      });
 
   const finalized =
     request.format === 'webp'

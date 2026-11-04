@@ -238,3 +238,11 @@ The contextual directional label that appears only on navigational intent in gro
 - **Change risk:** medium to high — changing it affects navigation discoverability, chrome density, and grouped-view feel
 - **Surfaced to users:** yes — directly visible during grouped navigation
 - **Notes:** signpost labels stay hidden by default, remain suppressed while the focused-photo modal is open, use the motion itself as the destination cue after click/tap glide, and omit the album that already dominates most of the current viewport so the user is not told to navigate toward what they are clearly already viewing
+
+### Light edit
+The curator's non-destructive edit of one photo: crop, straighten, quarter turns, flips, light and color adjustments, blur, grain and a look. It is stored as a recipe in the curation folder (`edits.json`, logged in `edits.log`), never written into the photo file, and the server renders it into the photo's derivatives so everyone sees the edited photo.
+
+- **Lives in:** `docs/product/photo-wall-experience.md`; code in `src/shared/api/edits.ts`, `src/server/curation/edits.ts`, `src/server/media/edit-render.ts`, `src/client/src/features/editor/`
+- **Change risk:** medium — it changes how photos look and their shape on the wall, but never the files
+- **Surfaced to users:** yes — the curator's Edit button; viewers see the result
+- **Notes:** the editor previews with Pixi's ColorMatrixFilter using the same color matrix the server applies, so colors match exactly; blur and grain are close, not pixel-identical

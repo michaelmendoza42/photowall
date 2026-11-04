@@ -27,6 +27,8 @@ export interface CacheKeyInput {
    * this fingerprint changes and the next request misses cache.
    */
   sourceFingerprint: string;
+  /** Fingerprint of the curator's edit; absent for the original photo. */
+  editVersion?: string;
 }
 
 /**
@@ -47,6 +49,11 @@ export function computeCacheKey(input: CacheKeyInput): string {
   hash.update(input.format);
   hash.update('\0');
   hash.update(input.sourceFingerprint);
+  // Only edited photos mix this in, so existing cache entries stay valid.
+  if (input.editVersion) {
+    hash.update('\0edit:');
+    hash.update(input.editVersion);
+  }
   return hash.digest('hex');
 }
 

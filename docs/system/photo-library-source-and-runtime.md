@@ -57,6 +57,9 @@ The MVP is explicitly a trusted-LAN-only app: it is intended to run on the opera
 
 ## Changelog
 
+### 2026-11-01 (light editing)
+- Light edits are stored as recipes (`edits.json`, logged in `edits.log`) in the curation folder and applied when the server renders derivatives; edited derivatives get their own cache keys, unedited ones keep theirs. Editing never writes to the library.
+
 ### 2026-07-30
 - Clarified that the recorded operator library path is a deployment value, while the repository contract remains configurable.
 

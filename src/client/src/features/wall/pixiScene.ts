@@ -18,6 +18,8 @@ export interface PixiSceneTileInput {
   sourceWidth?: number;
   sourceHeight?: number;
   sourceMtimeMs?: number;
+  /** Changes when the curator edits the photo, so its URL changes too. */
+  sourceEditVersion?: string;
   /** Draw order (higher on top); defaults to list order. */
   zOrder?: number;
 }
@@ -146,6 +148,7 @@ export function buildPixiSceneSprites(
           width: tile.sourceWidth ?? 0,
           height: tile.sourceHeight ?? 0,
           mtimeMs: tile.sourceMtimeMs,
+          editVersion: tile.sourceEditVersion,
         },
         variant,
         mediaSourceResolver,

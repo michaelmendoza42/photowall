@@ -1077,6 +1077,7 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
 					sourceWidth: tile.sourceWidth,
 					sourceHeight: tile.sourceHeight,
 					sourceMtimeMs: photosById.get(tile.photoId)?.mtimeMs,
+					sourceEditVersion: photosById.get(tile.photoId)?.editVersion,
 				})),
 			),
 		[photosById, renderPlan.renderedRows],

@@ -724,6 +724,7 @@ export function SingleStreamWallView(
 				tiles={sceneModel.pixiTiles.map((tile) => ({
 					...tile,
 					sourceMtimeMs: photosById.get(tile.photoId)?.mtimeMs,
+					sourceEditVersion: photosById.get(tile.photoId)?.editVersion,
 				}))}
 				viewportWidth={viewportSize.width}
 				viewportHeight={viewportSize.height}

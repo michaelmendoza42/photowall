@@ -9,7 +9,7 @@ Current Fastify + TypeScript backend.
 - `snapshots/` — library snapshot lifecycle and persisted scan state
 - `query/` — paginated photo-query filtering and cursor helpers
 - `playlists/` — saved-filter playlist schema, storage, and service layer
-- `media/` — media source resolution and derivative-image generation/cache helpers
+- `media/` — media source resolution, derivative-image generation/cache helpers, and rendering light edits
 - `routes/` — HTTP routes for health, library status/facets, photos, playlists, and media
 - `services/` — production static-client mounting
 - `version.ts` — service version metadata

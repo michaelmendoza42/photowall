@@ -1,5 +1,6 @@
 import type { MediaFormat, MediaVariant } from '../../shared/api/media.js';
 import type { PersistedSnapshot } from '../snapshots/schema.js';
+import type { PhotoEdit } from '../../shared/api/edits.js';
 import type { DerivativeService, DerivativeServiceLogger } from './derivative-service.js';
 
 export interface DerivativeWarmerOptions {
@@ -10,6 +11,8 @@ export interface DerivativeWarmerOptions {
   format?: MediaFormat;
   /** Background renders in flight; keep below the service's permit cap. */
   concurrency?: number;
+  /** The curator's edit for a photo path, so warm renders match what the wall asks for. */
+  editFor?: (relativePath: string) => PhotoEdit | undefined;
 }
 
 export interface DerivativeWarmerMetrics {
@@ -34,6 +37,7 @@ export class DerivativeWarmer {
   private readonly variants: readonly MediaVariant[];
   private readonly format: MediaFormat;
   private readonly concurrency: number;
+  private readonly editFor?: (relativePath: string) => PhotoEdit | undefined;
   private generation = 0;
   private metrics: DerivativeWarmerMetrics = {
     running: false,
@@ -50,6 +54,7 @@ export class DerivativeWarmer {
     this.variants = options.variants ?? ['thumb', 'wall'];
     this.format = options.format ?? 'webp';
     this.concurrency = options.concurrency ?? 2;
+    this.editFor = options.editFor;
     if (!Number.isInteger(this.concurrency) || this.concurrency < 1) {
       throw new RangeError('concurrency must be a positive integer');
     }
@@ -68,7 +73,11 @@ export class DerivativeWarmer {
     this.generation += 1;
     const generation = this.generation;
     const jobs = snapshot.photos.flatMap((photo) =>
-      this.variants.map((variant) => ({ photoId: photo.id, variant })),
+      this.variants.map((variant) => ({
+        photoId: photo.id,
+        variant,
+        edit: this.editFor?.(photo.relativePath),
+      })),
     );
     this.metrics = {
       running: true,
@@ -93,7 +102,12 @@ export class DerivativeWarmer {
         try {
           const outcome = await this.derivatives.generate(
             snapshot,
-            { photoId: job.photoId, variant: job.variant, format: this.format },
+            {
+              photoId: job.photoId,
+              variant: job.variant,
+              format: this.format,
+              ...(job.edit ? { edit: job.edit } : {}),
+            },
             'background',
           );
           if (generation !== this.generation) return;

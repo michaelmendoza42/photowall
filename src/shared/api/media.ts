@@ -21,6 +21,30 @@ export function mediaResourcePath(
   return sourceVersion === undefined ? base : `${base}&v=${encodeURIComponent(String(sourceVersion))}`;
 }
 
+/**
+ * The `v` a media URL carries: the source file's mtime, plus the edit's
+ * fingerprint for edited photos, so a new edit is a new URL.
+ */
+export function mediaVersion(
+  mtimeMs: number | undefined,
+  editVersion?: string,
+): string | number | undefined {
+  if (editVersion === undefined) return mtimeMs;
+  return `${mtimeMs ?? 0}-${editVersion}`;
+}
+
+/**
+ * The unedited photo, for the curator's editor to start from. Only the
+ * curator gets the original; everyone else is served the edit.
+ */
+export function mediaOriginalPath(
+  photoId: string,
+  variant: MediaVariant,
+  mtimeMs?: number,
+): string {
+  return `${mediaResourcePath(photoId, variant, DEFAULT_MEDIA_FORMAT, mtimeMs)}&edit=original`;
+}
+
 /** Variants, smallest to largest. `detail` serves zoomed-in wall tiles. */
 export type MediaVariant = 'thumb' | 'wall' | 'modal' | 'detail';
 
