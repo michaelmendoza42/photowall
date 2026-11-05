@@ -1,4 +1,4 @@
-import { useEffect, useMemo, type MutableRefObject } from 'react';
+import { useEffect, useMemo, useRef, type MutableRefObject } from 'react';
 import type { CameraState } from '../../state/camera.js';
 import {
   buildFocusNavigation,
@@ -24,12 +24,25 @@ export function useWallFocusNavigator(input: {
 }): void {
   const { navigatorRef, packed, cameraRef, zoomRef, glideTo, setZoom } = input;
   const navigation = useMemo(() => buildFocusNavigation(packed.rows), [packed.rows]);
+  // The order before the wall last changed, so a focused photo that has
+  // just left the wall can still step to its old neighbours.
+  const previousOrderRef = useRef<string[]>([]);
+  const currentOrderRef = useRef<string[]>([]);
+  if (currentOrderRef.current !== navigation.order) {
+    previousOrderRef.current = currentOrderRef.current;
+    currentOrderRef.current = navigation.order;
+  }
 
   useEffect(() => {
     if (!navigatorRef) return undefined;
     const navigator: WallFocusNavigator = {
       step(photoId, direction) {
-        const nextId = stepFocusOrder(navigation.order, photoId, direction);
+        const nextId = stepFocusOrder(
+          navigation.order,
+          photoId,
+          direction,
+          previousOrderRef.current,
+        );
         const tile = nextId ? navigation.tilesById.get(nextId) : undefined;
         if (!nextId || !tile) return null;
         glideTo(cameraCenteredOnTile(cameraRef.current, tile, zoomRef.current));

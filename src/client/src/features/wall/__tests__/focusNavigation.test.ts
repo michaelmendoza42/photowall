@@ -127,6 +127,16 @@ describe('stepFocusOrder', () => {
     expect(stepFocusOrder(order, 'z', 'next')).toBeNull();
     expect(stepFocusOrder(['a'], 'a', 'next')).toBeNull();
   });
+
+  it('steps from where a photo sat once it has left the wall', () => {
+    // 'b' and 'c' were made private; the wall now holds a and d.
+    const before = ['a', 'b', 'c', 'd'];
+    const after = ['a', 'd'];
+    expect(stepFocusOrder(after, 'b', 'next', before)).toBe('d');
+    expect(stepFocusOrder(after, 'c', 'previous', before)).toBe('a');
+    expect(stepFocusOrder(['a'], 'b', 'next', ['a', 'b'])).toBe('a');
+    expect(stepFocusOrder([], 'b', 'next', before)).toBeNull();
+  });
 });
 
 describe('cameraCenteredOnTile', () => {

@@ -97,16 +97,32 @@ export function buildFocusNavigation(
   return { order, tilesById };
 }
 
-/** The neighbouring id in the order, wrapping at the ends. */
+/**
+ * The neighbouring id in the order, wrapping at the ends. A photo that
+ * has left the wall (made private, say) steps from where it sat in
+ * `previousOrder` to the nearest photo still on the wall.
+ */
 export function stepFocusOrder(
   order: readonly string[],
   photoId: string,
   direction: FocusStepDirection,
+  previousOrder: readonly string[] = [],
 ): string | null {
-  const index = order.indexOf(photoId);
-  if (index < 0 || order.length < 2) return null;
   const offset = direction === 'next' ? 1 : -1;
-  return order[(index + offset + order.length) % order.length] ?? null;
+  const index = order.indexOf(photoId);
+  if (index >= 0) {
+    if (order.length < 2) return null;
+    return order[(index + offset + order.length) % order.length] ?? null;
+  }
+  const oldIndex = previousOrder.indexOf(photoId);
+  if (oldIndex < 0 || order.length === 0) return null;
+  const onWall = new Set(order);
+  for (let step = 1; step < previousOrder.length; step += 1) {
+    const id =
+      previousOrder[(oldIndex + offset * step + previousOrder.length * step) % previousOrder.length];
+    if (id !== undefined && onWall.has(id)) return id;
+  }
+  return null;
 }
 
 /**

@@ -299,9 +299,11 @@ export function WallShell(): JSX.Element {
   const focusedPhotoIdRef = useRef<string | null>(null);
   focusedPhotoIdRef.current = focusedPhoto.photo?.id ?? null;
 
+  const lastStepDirectionRef = useRef<FocusStepDirection>('next');
   const handleFocusStep = useCallback((direction: FocusStepDirection) => {
     const currentId = focusedPhotoIdRef.current;
     if (!currentId) return;
+    lastStepDirectionRef.current = direction;
     const nextId = focusNavigatorRef.current?.step(currentId, direction);
     const next = nextId ? photosByIdRef.current.get(nextId) : undefined;
     if (!next) return;
@@ -310,6 +312,24 @@ export function WallShell(): JSX.Element {
     focusedPhotoIdRef.current = next.id;
     setFocusedPhoto((prev) => openFocusedPhoto(prev, next));
   }, []);
+  // A visitor without the curator's rights never stays on a photo they can
+  // no longer see (made private, or its album put away, since their wall
+  // loaded): once the wall refreshes without it, step on the way they were
+  // going, or close when nothing is left.
+  const canSeeEverything = isCurator && session?.enabled === true;
+  const focusedId = focusedPhoto.photo?.id ?? null;
+  const focusedLeftWall =
+    focusedId !== null && photos.length > 0 && !photosByIdRef.current.has(focusedId);
+  useEffect(() => {
+    if (!focusedLeftWall || canSeeEverything) return;
+    handleFocusStep(lastStepDirectionRef.current);
+    if (focusedPhotoIdRef.current === focusedId) handlePhotoClose();
+  }, [focusedLeftWall, canSeeEverything, focusedId, handleFocusStep, handlePhotoClose]);
+  // A focused image that fails to load may be one this visitor can no
+  // longer see; refresh the wall so the step above can move past it.
+  const handleFocusedImageError = useCallback(() => {
+    if (!canSeeEverything) void queryClient.invalidateQueries({ queryKey: ['photos'] });
+  }, [canSeeEverything, queryClient]);
   const handleFocusNext = useCallback(
     () => handleFocusStep('next'),
     [handleFocusStep],
@@ -816,6 +836,7 @@ export function WallShell(): JSX.Element {
           curatorStar={curatorStar}
           curatorPrivate={curatorPrivate}
           onEdit={handleEditOpen}
+          onImageError={handleFocusedImageError}
         />
       )}
 

@@ -524,3 +524,44 @@ test('the curator previews the wall as a guest and keeps curating', async ({ pag
   await page.getByTestId('guest-preview-badge').click();
   await expect(page.getByTestId('guest-preview-badge')).toHaveCount(0);
 });
+
+test('a guest stepping through photos skips one made private after their wall loaded', async ({
+  page,
+  browser,
+}) => {
+  const other = await browser.newContext({ baseURL: BASE_URL });
+  const viewer = await other.newPage();
+  await viewer.goto('/');
+  await expect(viewer.getByTestId('wall-shell')).toHaveAttribute('data-screen', 'ready', {
+    timeout: 60_000,
+  });
+  const modal = viewer.getByTestId('focused-photo-modal');
+  // Learn the next photo without loading its big image, as for a guest
+  // who has not opened it yet.
+  const modalImages = '**/api/media/**variant=modal**';
+  await viewer.route(modalImages, (route) => route.abort());
+  await (await pickCenteredTile(viewer)).click();
+  const startId = (await modal.getAttribute('data-photo-id'))!;
+  await viewer.keyboard.press('ArrowRight');
+  await expect(modal).not.toHaveAttribute('data-photo-id', startId);
+  const nextId = (await modal.getAttribute('data-photo-id'))!;
+  await viewer.keyboard.press('ArrowLeft');
+  await expect(modal).toHaveAttribute('data-photo-id', startId);
+  await viewer.unroute(modalImages);
+
+  // The curator makes the next photo private while the guest's wall is open.
+  await page.request.post('/api/curation/session', { data: { pin: PIN } });
+  const res = await page.request.post(`/api/curation/photos/${nextId}/private`, {
+    data: { private: true },
+  });
+  expect(res.ok()).toBe(true);
+
+  // Stepping onto it moves straight past it, and stepping back skips it too.
+  await viewer.keyboard.press('ArrowRight');
+  await expect
+    .poll(() => modal.getAttribute('data-photo-id'), { timeout: 15_000 })
+    .not.toMatch(new RegExp(`^(${nextId}|${startId})$`));
+  await viewer.keyboard.press('ArrowLeft');
+  await expect(modal).toHaveAttribute('data-photo-id', startId);
+  await other.close();
+});

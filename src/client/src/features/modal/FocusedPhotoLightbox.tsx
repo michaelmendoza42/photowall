@@ -57,6 +57,8 @@ export interface FocusedPhotoLightboxProps {
   };
   /** Curator-only: open the light editor for this photo. */
   onEdit?: () => void;
+  /** The photo's image would not load (it may no longer be visible to this viewer). */
+  onImageError?: () => void;
 }
 
 export function buildFocusedPhotoLightboxSlide(
@@ -208,11 +210,62 @@ function useSwipeStep(input: {
 /** Quiet time that ends a trackpad swipe, including its momentum tail. */
 const WHEEL_SWIPE_IDLE_MS = 250;
 
+/** What is known about the rest of a trackpad swipe that already stepped. */
+export interface WheelSwipeTail {
+  /** Sign of deltaX for the swipe that stepped. */
+  sign: number;
+  /** Largest sideways delta seen since the step. */
+  peak: number;
+  /** Smallest sideways delta seen once the tail started fading. */
+  low: number;
+  fading: boolean;
+  /** Consecutive events rising well above `low`. */
+  rising: number;
+}
+
+export function newWheelSwipeTail(deltaX: number): WheelSwipeTail {
+  const size = Math.abs(deltaX);
+  return { sign: Math.sign(deltaX), peak: size, low: size, fading: false, rising: 0 };
+}
+
+/** Sideways delta, in px, that counts as a swipe back the other way. */
+const WHEEL_SWIPE_REVERSE_PX = 4;
+
+/**
+ * Follows the rest of a swipe that already stepped, one wheel event at a
+ * time, and returns true when the event is really the start of a new
+ * swipe. A momentum tail only ever fades, so sideways deltas turning the
+ * other way, or climbing back up after the tail began to fade, mean the
+ * fingers are on the trackpad again.
+ */
+export function wheelSwipeTailRestarts(tail: WheelSwipeTail, deltaX: number, deltaY: number): boolean {
+  const size = Math.abs(deltaX);
+  if (size < 1 || size < Math.abs(deltaY)) return false;
+  if (Math.sign(deltaX) !== tail.sign) return size >= WHEEL_SWIPE_REVERSE_PX;
+  if (!tail.fading) {
+    tail.peak = Math.max(tail.peak, size);
+    if (size < tail.peak / 2) {
+      tail.fading = true;
+      tail.low = size;
+    }
+    return false;
+  }
+  if (size > Math.max(tail.low * 2, tail.low + 4)) {
+    // Two in a row, so one jittery event in the tail is not a new swipe.
+    tail.rising += 1;
+    return tail.rising >= 2;
+  }
+  tail.rising = 0;
+  tail.low = Math.min(tail.low, size);
+  return false;
+}
+
 /**
  * A two-finger sideways trackpad swipe steps like a touch swipe: fingers
  * moving left (positive deltaX) bring in the next photo. One swipe steps
  * once; the rest of it, and its momentum tail, is ignored until the
- * wheel goes quiet. Off while the photo is zoomed in (scrolling pans).
+ * wheel goes quiet or a new swipe starts within the tail. Off while the
+ * photo is zoomed in (scrolling pans).
  */
 function useWheelSwipeStep(input: {
   element: HTMLElement | null;
@@ -224,7 +277,12 @@ function useWheelSwipeStep(input: {
   const { element } = input;
   // Lives outside the listener: the slide element is replaced when the
   // photo steps, and the swipe's tail must stay locked across that.
-  const gesture = useRef({ dx: 0, dy: 0, stepped: false, idleTimer: 0 });
+  const gesture = useRef({
+    dx: 0,
+    dy: 0,
+    tail: null as WheelSwipeTail | null,
+    idleTimer: 0,
+  });
 
   useEffect(() => () => window.clearTimeout(gesture.current.idleTimer), []);
 
@@ -239,12 +297,19 @@ function useWheelSwipeStep(input: {
       state.idleTimer = window.setTimeout(() => {
         state.dx = 0;
         state.dy = 0;
-        state.stepped = false;
+        state.tail = null;
       }, WHEEL_SWIPE_IDLE_MS);
-      if (state.stepped) return;
+      if (state.tail) {
+        if (!wheelSwipeTailRestarts(state.tail, event.deltaX, event.deltaY)) return;
+        state.tail = null;
+        state.dx = 0;
+        state.dy = 0;
+      }
       state.dx += event.deltaX;
       state.dy += event.deltaY;
-      state.stepped = latest.current.slideTo(swipeStepDirection(-state.dx, -state.dy));
+      if (latest.current.slideTo(swipeStepDirection(-state.dx, -state.dy))) {
+        state.tail = newWheelSwipeTail(event.deltaX);
+      }
     }
     element.addEventListener('wheel', onWheel, { passive: false });
     return () => element.removeEventListener('wheel', onWheel);
@@ -403,6 +468,7 @@ export function FocusedPhotoLightbox(
     curatorStar,
     curatorPrivate,
     onEdit,
+    onImageError,
   } = props;
 
   // The lightbox only ever holds the focused photo as its one slide, so
@@ -592,6 +658,7 @@ export function FocusedPhotoLightbox(
                 src={imageSrc}
                 alt=""
                 draggable={false}
+                onError={onImageError}
               />
             </div>
           </div>
