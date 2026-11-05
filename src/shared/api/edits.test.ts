@@ -54,10 +54,10 @@ describe('light edits', () => {
   });
 
   it('composes colors the way Pixi does: later steps wrap earlier ones', () => {
-    const brighter = editColorMatrix({ ...NEUTRAL_EDIT, brightness: 1 })!;
-    // Brightness 1 doubles each channel.
+    const brighter = editColorMatrix({ ...NEUTRAL_EDIT, exposure: 1 })!;
+    // One stop of exposure doubles each channel.
     expect(brighter.slice(0, 5)).toEqual([2, 0, 0, 0, 0]);
-    const both = editColorMatrix({ ...NEUTRAL_EDIT, brightness: 1, look: 'negative' })!;
+    const both = editColorMatrix({ ...NEUTRAL_EDIT, exposure: 1, look: 'negative' })!;
     // Negative after doubling: 1 - 2x.
     const pixel = new Uint8Array([50, 100, 200]);
     applyColorMatrixToRgb(pixel, 3, both);
@@ -65,6 +65,23 @@ describe('light edits', () => {
     // Identity is neutral for multiplication.
     const identity = [1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0];
     expect(multiplyColorMatrices(identity, both)).toEqual(both);
+  });
+
+  it('temperature warms or cools; brightness lifts every tone evenly', () => {
+    const grey = () => new Uint8Array([128, 128, 128]);
+    const warm = grey();
+    applyColorMatrixToRgb(warm, 3, editColorMatrix({ ...NEUTRAL_EDIT, temperature: 1 })!);
+    expect(warm[0]).toBeGreaterThan(128);
+    expect(warm[2]).toBeLessThan(128);
+    const cool = grey();
+    applyColorMatrixToRgb(cool, 3, editColorMatrix({ ...NEUTRAL_EDIT, temperature: -1 })!);
+    expect(cool[0]).toBeLessThan(128);
+    expect(cool[2]).toBeGreaterThan(128);
+
+    const lifted = new Uint8Array([0, 128, 200]);
+    applyColorMatrixToRgb(lifted, 3, editColorMatrix({ ...NEUTRAL_EDIT, brightness: 0.4 })!);
+    // +0.4 lifts each channel by 0.1 of full scale (25.5).
+    expect([...lifted]).toEqual([26, 154, 226]);
   });
 
   it('applies contrast offsets without clipping in between', () => {

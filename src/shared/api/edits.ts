@@ -49,7 +49,11 @@ export interface PhotoEdit {
   flipX: boolean;
   flipY: boolean;
   crop: EditCrop;
-  /** -1..1; 0 leaves the photo as it is. Brightness doubles or halves at the ends. */
+  /** White balance, -1..1: negative is cooler (bluer), positive warmer. */
+  temperature: number;
+  /** Stops, -2..2: each stop doubles (or halves) all the light. */
+  exposure: number;
+  /** -1..1; lifts or drops every tone evenly. 0 leaves the photo as it is. */
   brightness: number;
   contrast: number;
   saturation: number;
@@ -64,6 +68,8 @@ export interface PhotoEdit {
 
 export const EDIT_LIMITS = {
   straighten: 45,
+  temperature: 1,
+  exposure: 2,
   brightness: 1,
   contrast: 1,
   saturation: 1,
@@ -82,6 +88,8 @@ export const NEUTRAL_EDIT: PhotoEdit = {
   flipX: false,
   flipY: false,
   crop: FULL_CROP,
+  temperature: 0,
+  exposure: 0,
   brightness: 0,
   contrast: 0,
   saturation: 0,
@@ -123,6 +131,8 @@ export function normalizeEdit(edit: PhotoEdit): PhotoEdit {
       w,
       h,
     },
+    temperature: round(clamp(edit.temperature, EDIT_LIMITS.temperature), 3),
+    exposure: round(clamp(edit.exposure, EDIT_LIMITS.exposure), 3),
     brightness: round(clamp(edit.brightness, EDIT_LIMITS.brightness), 3),
     contrast: round(clamp(edit.contrast, EDIT_LIMITS.contrast), 3),
     saturation: round(clamp(edit.saturation, EDIT_LIMITS.saturation), 3),
@@ -167,6 +177,8 @@ export function editVersion(edit: PhotoEdit): string {
     e.crop.y,
     e.crop.w,
     e.crop.h,
+    e.temperature,
+    e.exposure,
     e.brightness,
     e.contrast,
     e.saturation,
@@ -236,19 +248,21 @@ const IDENTITY: ColorMatrix = [1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0
 
 /**
  * The edit's color adjustments as one matrix, or null when colors are
- * untouched. Applied in this order: brightness, contrast, saturation,
- * hue, then the look. The matrices are Pixi's (MIT), so the editor's
+ * untouched. Applied in this order: temperature, exposure, brightness,
+ * contrast, saturation, hue, then the look. The matrices are Pixi's (MIT), so the editor's
  * ColorMatrixFilter shows exactly what the server renders.
  */
 export function editColorMatrix(edit: PhotoEdit): ColorMatrix | null {
   const steps: ColorMatrix[] = [];
-  if (edit.brightness !== 0) steps.push(brightnessMatrix(2 ** edit.brightness));
+  if (edit.temperature !== 0) steps.push(temperatureMatrix(edit.temperature));
+  if (edit.exposure !== 0) steps.push(exposureMatrix(2 ** edit.exposure));
+  if (edit.brightness !== 0) steps.push(brightnessMatrix(edit.brightness));
   if (edit.contrast !== 0) steps.push(contrastMatrix(edit.contrast));
   if (edit.saturation !== 0) steps.push(saturateMatrix(edit.saturation));
   if (edit.hue !== 0) steps.push(hueMatrix(edit.hue));
   if (edit.look !== 'none') steps.push(LOOK_MATRICES[edit.look]);
   if (steps.length === 0) return null;
-  // Later steps wrap earlier ones: M = look · hue · … · brightness.
+  // Later steps wrap earlier ones: M = look · hue · … · temperature.
   return steps.reduce((applied, step) => multiplyColorMatrices(step, applied), IDENTITY);
 }
 
@@ -266,8 +280,23 @@ export function multiplyColorMatrices(a: ColorMatrix, b: ColorMatrix): ColorMatr
   return out;
 }
 
-function brightnessMatrix(b: number): ColorMatrix {
-  return [b, 0, 0, 0, 0, 0, b, 0, 0, 0, 0, 0, b, 0, 0, 0, 0, 0, 1, 0];
+/** Warmer boosts red and cuts blue (with a touch of green); cooler the reverse. */
+function temperatureMatrix(t: number): ColorMatrix {
+  const r = 1 + 0.2 * t;
+  const g = 1 + 0.03 * t;
+  const b = 1 - 0.2 * t;
+  return [r, 0, 0, 0, 0, 0, g, 0, 0, 0, 0, 0, b, 0, 0, 0, 0, 0, 1, 0];
+}
+
+/** Gain on every channel (Pixi's `brightness`). */
+function exposureMatrix(gain: number): ColorMatrix {
+  return [gain, 0, 0, 0, 0, 0, gain, 0, 0, 0, 0, 0, gain, 0, 0, 0, 0, 0, 1, 0];
+}
+
+/** An even lift: at ±1 every channel moves by a quarter of full scale. */
+function brightnessMatrix(amount: number): ColorMatrix {
+  const o = 0.25 * amount;
+  return [1, 0, 0, 0, o, 0, 1, 0, 0, o, 0, 0, 1, 0, o, 0, 0, 0, 1, 0];
 }
 
 function contrastMatrix(amount: number): ColorMatrix {

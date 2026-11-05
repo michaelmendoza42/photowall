@@ -30,6 +30,9 @@ export const PhotoEditSchema = z.object({
     w: z.number().finite().min(EDIT_LIMITS.minCrop).max(1),
     h: z.number().finite().min(EDIT_LIMITS.minCrop).max(1),
   }),
+  // Added after the first edits were saved; older recipes read as neutral.
+  temperature: unit(EDIT_LIMITS.temperature).default(0),
+  exposure: unit(EDIT_LIMITS.exposure).default(0),
   brightness: unit(EDIT_LIMITS.brightness),
   contrast: unit(EDIT_LIMITS.contrast),
   saturation: unit(EDIT_LIMITS.saturation),

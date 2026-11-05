@@ -1153,6 +1153,33 @@ button.album-tree__disclosure:focus-visible {
 	accent-color: var(--pw-accent);
 }
 
+/* Temperature: a cool-to-warm track instead of the accent fill. */
+.photo-editor__slider--temperature input {
+	appearance: none;
+	-webkit-appearance: none;
+	height: 6px;
+	background: linear-gradient(to right, #5b8fd9, #d9d2c6 50%, #e3a24c);
+	border-radius: 999px;
+	cursor: pointer;
+}
+
+.photo-editor__slider--temperature input::-webkit-slider-thumb {
+	-webkit-appearance: none;
+	width: 16px;
+	height: 16px;
+	background: #f4efe6;
+	border: 2px solid #1b1712;
+	border-radius: 50%;
+}
+
+.photo-editor__slider--temperature input::-moz-range-thumb {
+	width: 12px;
+	height: 12px;
+	background: #f4efe6;
+	border: 2px solid #1b1712;
+	border-radius: 50%;
+}
+
 .photo-editor__slider output {
 	text-align: right;
 	font-family: var(--pw-font-mono);

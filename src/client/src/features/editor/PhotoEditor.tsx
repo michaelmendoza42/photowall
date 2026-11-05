@@ -45,14 +45,39 @@ const LOOK_LABELS: Record<EditLook, string> = {
   toBGR: 'Swap red & blue',
 };
 
-type Slider = 'brightness' | 'contrast' | 'saturation' | 'hue' | 'blur' | 'grain';
-const SLIDERS: { key: Slider; label: string; min: number; max: number; step: number; group: string }[] = [
-  { key: 'brightness', label: 'Brightness', min: -EDIT_LIMITS.brightness, max: EDIT_LIMITS.brightness, step: 0.01, group: 'Light' },
-  { key: 'contrast', label: 'Contrast', min: -EDIT_LIMITS.contrast, max: EDIT_LIMITS.contrast, step: 0.01, group: 'Light' },
-  { key: 'saturation', label: 'Saturation', min: -EDIT_LIMITS.saturation, max: EDIT_LIMITS.saturation, step: 0.01, group: 'Color' },
-  { key: 'hue', label: 'Hue', min: -EDIT_LIMITS.hue, max: EDIT_LIMITS.hue, step: 1, group: 'Color' },
-  { key: 'blur', label: 'Blur', min: 0, max: EDIT_LIMITS.blur, step: 1, group: 'Effects' },
-  { key: 'grain', label: 'Grain', min: 0, max: EDIT_LIMITS.grain, step: 1, group: 'Effects' },
+type Slider =
+  | 'temperature'
+  | 'exposure'
+  | 'brightness'
+  | 'contrast'
+  | 'saturation'
+  | 'hue'
+  | 'blur'
+  | 'grain';
+
+const percent = (v: number) => `${Math.round(v * 100)}`;
+const whole = (v: number) => `${v}`;
+const stops = (v: number) => `${v > 0 ? '+' : ''}${v.toFixed(2)}`;
+
+// Temperature comes first: it is the adjustment used most (Michael, 2026-11-04).
+const SLIDERS: {
+  key: Slider;
+  label: string;
+  min: number;
+  max: number;
+  step: number;
+  group: string;
+  format: (value: number) => string;
+  className?: string;
+}[] = [
+  { key: 'temperature', label: 'Temperature', min: -EDIT_LIMITS.temperature, max: EDIT_LIMITS.temperature, step: 0.01, group: 'Light', format: percent, className: 'photo-editor__slider--temperature' },
+  { key: 'exposure', label: 'Exposure', min: -EDIT_LIMITS.exposure, max: EDIT_LIMITS.exposure, step: 0.05, group: 'Light', format: stops },
+  { key: 'brightness', label: 'Brightness', min: -EDIT_LIMITS.brightness, max: EDIT_LIMITS.brightness, step: 0.01, group: 'Light', format: percent },
+  { key: 'contrast', label: 'Contrast', min: -EDIT_LIMITS.contrast, max: EDIT_LIMITS.contrast, step: 0.01, group: 'Light', format: percent },
+  { key: 'saturation', label: 'Saturation', min: -EDIT_LIMITS.saturation, max: EDIT_LIMITS.saturation, step: 0.01, group: 'Color', format: percent },
+  { key: 'hue', label: 'Hue', min: -EDIT_LIMITS.hue, max: EDIT_LIMITS.hue, step: 1, group: 'Color', format: whole },
+  { key: 'blur', label: 'Blur', min: 0, max: EDIT_LIMITS.blur, step: 1, group: 'Effects', format: whole },
+  { key: 'grain', label: 'Grain', min: 0, max: EDIT_LIMITS.grain, step: 1, group: 'Effects', format: whole },
 ];
 
 export interface PhotoEditorProps {
@@ -290,7 +315,8 @@ export function PhotoEditor(props: PhotoEditorProps): JSX.Element {
                       min={s.min}
                       max={s.max}
                       step={s.step}
-                      format={(v) => (s.step < 1 ? `${Math.round(v * 100)}` : `${v}`)}
+                      format={s.format}
+                      className={s.className}
                       onChange={(value) => update({ [s.key]: value })}
                       testId={`photo-editor-${s.key}`}
                     />
@@ -330,12 +356,13 @@ function SliderRow(props: {
   format: (value: number) => string;
   onChange: (value: number) => void;
   testId: string;
+  className?: string;
 }): JSX.Element {
-  const { label, value, min, max, step, format, onChange, testId } = props;
+  const { label, value, min, max, step, format, onChange, testId, className } = props;
   // Double-click a slider to put it back to neutral.
   const neutral = Math.min(max, Math.max(min, 0));
   return (
-    <label className="photo-editor__slider" onDoubleClick={() => onChange(neutral)}>
+    <label className={`photo-editor__slider${className ? ` ${className}` : ''}`} onDoubleClick={() => onChange(neutral)}>
       <span>{label}</span>
       <input
         type="range"
