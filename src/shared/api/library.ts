@@ -64,6 +64,8 @@ export interface LibraryFacetsResponse {
   scannedAt: string | null;
   years: YearFacet[];
   folders: FolderFacet[];
+  /** Photos in the Starred album this visitor can see. */
+  starredCount?: number;
 }
 
 export interface LibraryRootUpdateRequest {

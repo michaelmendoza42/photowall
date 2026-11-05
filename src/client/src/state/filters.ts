@@ -11,7 +11,8 @@ export interface ActiveFilters {
   folders: string[];
   /** Nested folders deselected under `folders` (deepest rule wins). */
   excludeFolders: string[];
-  playlistId: string | null;
+  /** The Starred album is picked. */
+  starred?: boolean;
 }
 
 export const ACTIVE_FILTERS_STORAGE_KEY = 'photo-wall.active-filters.v1';
@@ -20,7 +21,6 @@ export const EMPTY_FILTERS: ActiveFilters = {
   years: [],
   folders: [],
   excludeFolders: [],
-  playlistId: null,
 };
 
 export function toQueryFilters(active: ActiveFilters): PhotosQueryFilters {
@@ -28,7 +28,7 @@ export function toQueryFilters(active: ActiveFilters): PhotosQueryFilters {
   if (active.years.length > 0) out.years = active.years;
   if (active.folders.length > 0) out.folders = active.folders;
   if (active.excludeFolders.length > 0) out.excludeFolders = active.excludeFolders;
-  if (active.playlistId !== null) out.playlistId = active.playlistId;
+  if (active.starred) out.starred = true;
   return out;
 }
 
@@ -37,7 +37,7 @@ export function hasAnyFilter(active: ActiveFilters): boolean {
     active.years.length > 0 ||
     active.folders.length > 0 ||
     active.excludeFolders.length > 0 ||
-    active.playlistId !== null
+    active.starred === true
   );
 }
 
@@ -52,9 +52,7 @@ export function summarizeFilters(active: ActiveFilters): string {
   if (active.excludeFolders.length > 0) {
     parts.push(`excluded=${active.excludeFolders.length}`);
   }
-  if (active.playlistId !== null) {
-    parts.push(`playlist=${active.playlistId}`);
-  }
+  if (active.starred) parts.push('starred');
   return parts.length === 0 ? 'none' : parts.join(' · ');
 }
 
@@ -129,39 +127,6 @@ export function clearFilters(active: ActiveFilters): ActiveFilters {
   return EMPTY_FILTERS;
 }
 
-/**
- * Apply a saved playlist's filter set as the active filters and remember
- * which playlist they came from. The saved filters fully replace the
- * current inline filters so the wall reads exactly like the saved
- * preset.
- */
-export function applyPlaylistFilters(
-  playlistId: string,
-  filters: { years: number[]; folders: string[]; excludeFolders?: string[] },
-): ActiveFilters {
-  return {
-    years: [...filters.years].sort((a, b) => a - b),
-    folders: [...filters.folders].sort(),
-    excludeFolders: [...(filters.excludeFolders ?? [])].sort(),
-    playlistId,
-  };
-}
-
-/**
- * Compare a saved playlist's folder list against the current backend
- * folder facets. Any saved folder not present in `availableFolders` is
- * "stale" — the source library has changed since the playlist was saved
- * and that folder will no longer match any photos.
- */
-export function findStaleFolders(
-  saved: readonly string[],
-  availableFolders: readonly string[],
-): string[] {
-  if (saved.length === 0) return [];
-  const set = new Set(availableFolders);
-  return saved.filter((f) => !set.has(f));
-}
-
 export function parseActiveFilters(raw: string | null): ActiveFilters {
   if (!raw) return EMPTY_FILTERS;
 
@@ -177,7 +142,7 @@ export function parseActiveFilters(raw: string | null): ActiveFilters {
       excludeFolders: Array.isArray(parsed.excludeFolders)
         ? parsed.excludeFolders.filter((folder): folder is string => typeof folder === 'string').sort()
         : [],
-      playlistId: typeof parsed.playlistId === 'string' ? parsed.playlistId : null,
+      ...(parsed.starred === true ? { starred: true } : {}),
     };
   } catch {
     return EMPTY_FILTERS;

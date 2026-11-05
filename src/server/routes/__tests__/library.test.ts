@@ -14,6 +14,7 @@ import {
 } from '../../../shared/api/library.js';
 import { LibraryService } from '../../snapshots/library-service.js';
 import { registerLibraryRoutes } from '../library.js';
+import { curationOff } from '../../curation/__tests__/helpers.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, '..', '..', '..', '..');
@@ -36,7 +37,7 @@ describe('library routes', () => {
     const service = new LibraryService({ libraryRoot: smokeRoot, dataRoot });
     await service.initialize();
     await service.rescan();
-    await registerLibraryRoutes(app, service);
+    await registerLibraryRoutes(app, service, await curationOff(service, dataRoot));
 
     const statusRes = await app.inject({ method: 'GET', url: LIBRARY_STATUS_PATH });
     expect(statusRes.statusCode).toBe(200);
@@ -69,7 +70,7 @@ describe('library routes', () => {
     const service = new LibraryService({ libraryRoot: smokeRoot, dataRoot });
     await service.initialize();
     await service.rescan();
-    await registerLibraryRoutes(app, service);
+    await registerLibraryRoutes(app, service, await curationOff(service, dataRoot));
 
     const updateRes = await app.inject({
       method: 'PUT',
@@ -97,7 +98,7 @@ describe('library routes', () => {
     const app = Fastify({ logger: false });
     const service = new LibraryService({ libraryRoot: smokeRoot, dataRoot });
     await service.initialize();
-    await registerLibraryRoutes(app, service);
+    await registerLibraryRoutes(app, service, await curationOff(service, dataRoot));
 
     const statusRes = await app.inject({ method: 'GET', url: LIBRARY_STATUS_PATH });
     const status = statusRes.json() as LibraryStatusResponse;

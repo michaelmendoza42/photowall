@@ -1,5 +1,5 @@
 # `src/client/`
-Last edited: 2026-06-10
+Last edited: 2026-10-22
 Status: Active
 Related files: `../../README.md`, `../../docs/product/photo-wall-experience.md`, `../../docs/system/photo-library-source-and-runtime.md`
 
@@ -9,10 +9,10 @@ Current React + TypeScript + Vite frontend.
 - `src/main.tsx` — client entrypoint
 - `src/App.tsx` — app shell wiring
 - `src/app/` — React Query providers and shared app setup
-- `src/api/` — HTTP client helpers for library, photo, and playlist routes
-- `src/hooks/` — query hooks for library status/facets, photo pagination, and playlists
+- `src/api/` — HTTP client helpers for library, photo, curation and share routes
+- `src/hooks/` — query hooks for library status/facets, photo pagination, and curation
 - `src/state/` — camera, filter, focused-photo, and layout state helpers
-- `src/features/controls/` — filter and playlist controls UI
+- `src/features/controls/` — album picker, share link and curator controls UI
 - `src/features/debug/` — dev-only overlay diagnostics
 - `src/features/editor/` — the curator's light photo editor: Pixi preview scene, crop frame overlay and pure crop math
 - `src/features/modal/` — focused-photo lightbox adapter and related tests

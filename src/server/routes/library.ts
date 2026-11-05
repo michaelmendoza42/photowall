@@ -10,12 +10,14 @@ import {
   type LibraryStatusResponse,
 } from '../../shared/api/library.js';
 import type { LibraryService } from '../snapshots/library-service.js';
+import type { CurationService } from '../curation/service.js';
 import { DataRootError } from '../snapshots/storage.js';
 import { LibraryRootError } from '../snapshots/library-service.js';
 
 export async function registerLibraryRoutes(
   app: FastifyInstance,
   service: LibraryService,
+  curation: CurationService,
 ): Promise<void> {
   app.get(LIBRARY_STATUS_PATH, async (): Promise<LibraryStatusResponse> => {
     return buildLibraryStatusResponse(service);
@@ -27,6 +29,10 @@ export async function registerLibraryRoutes(
       req,
       reply,
     ): Promise<LibraryStatusResponse | FastifyReply> => {
+      // With curation on, only the curator may repoint the library.
+      if (curation.enabled && curation.roleOf(req) !== 'curator') {
+        return reply.code(403).send({ error: 'curator_required' });
+      }
       const body = (req.body ?? null) as Partial<LibraryRootUpdateRequest> | null;
       const nextLibraryRoot = body?.libraryRoot?.trim() ?? '';
       if (nextLibraryRoot.length === 0) {
@@ -56,14 +62,17 @@ export async function registerLibraryRoutes(
     },
   );
 
-  app.get(LIBRARY_FACETS_PATH, async (): Promise<LibraryFacetsResponse> => {
+  app.get(LIBRARY_FACETS_PATH, async (req): Promise<LibraryFacetsResponse> => {
     const active = service.getActiveSnapshot();
+    // Facets cover only what this visitor can see.
+    const catalog = curation.catalogFor(curation.viewRoleOf(req));
     return {
       schemaVersion: SNAPSHOT_SCHEMA_VERSION,
       snapshotId: active?.snapshotId ?? null,
       scannedAt: active?.scannedAt ?? null,
-      years: active?.years ?? [],
-      folders: active?.folders ?? [],
+      years: catalog?.years ?? [],
+      folders: catalog?.folders ?? [],
+      starredCount: catalog?.starred.length ?? 0,
     };
   });
 }

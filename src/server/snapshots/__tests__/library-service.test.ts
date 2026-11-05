@@ -176,4 +176,31 @@ describe('LibraryService', () => {
     await service.initialize();
     expect(service.getStateView().warmLoaded).toBe(false);
   });
+
+  it('a rescan that finds nothing new keeps the snapshot and its id', async () => {
+    const libraryRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'photo-wall-rescan-'));
+    try {
+      await fs.cp(smokeRoot, libraryRoot, { recursive: true });
+      const service = new LibraryService({ libraryRoot, dataRoot });
+      await service.initialize();
+      const first = await service.rescan();
+
+      // After a restart the warm-loaded snapshot survives an unchanged rescan.
+      const restarted = new LibraryService({ libraryRoot, dataRoot });
+      await restarted.initialize();
+      const again = await restarted.rescan();
+      expect(again.snapshotId).toBe(first.snapshotId);
+      expect(restarted.getStateView().state).toBe('ready');
+
+      // A changed file makes a new snapshot.
+      const changed = path.join(libraryRoot, '2024', 'wedding-anna', 'img_001.jpg');
+      const later = new Date(Date.now() + 60_000);
+      await fs.utimes(changed, later, later);
+      const updated = await restarted.rescan();
+      expect(updated.snapshotId).not.toBe(first.snapshotId);
+      expect(updated.photoCount).toBe(first.photoCount);
+    } finally {
+      await fs.rm(libraryRoot, { recursive: true, force: true });
+    }
+  });
 });

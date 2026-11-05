@@ -3,6 +3,7 @@ import {
   type PhotosQueryFilters,
   type PhotosQueryResponse,
 } from '../../../shared/api/photos.js';
+import { VIEW_AS_GUEST, VIEW_AS_HEADER } from '../../../shared/api/curation.js';
 import { fetchJson } from './http.js';
 
 export interface PhotoPageQueryInput {
@@ -30,18 +31,21 @@ export function buildPhotosQueryParams(
   for (const folder of input.filters.excludeFolders ?? []) {
     params.append('exclude', folder);
   }
-  if (input.filters.playlistId !== undefined) {
-    params.set('playlist', input.filters.playlistId);
-  }
+  if (input.filters.starred) params.set('starred', '1');
   return params;
 }
 
 export async function fetchPhotosPage(
   input: PhotoPageQueryInput,
   signal?: AbortSignal,
+  viewAsGuest = false,
 ): Promise<PhotosQueryResponse> {
   return fetchJson<PhotosQueryResponse>(PHOTOS_QUERY_PATH, {
     signal,
     searchParams: buildPhotosQueryParams(input),
+    ...(viewAsGuest ? { headers: GUEST_VIEW_HEADERS } : {}),
   });
 }
+
+/** Sent by a curator previewing the wall as a guest. */
+export const GUEST_VIEW_HEADERS: Record<string, string> = { [VIEW_AS_HEADER]: VIEW_AS_GUEST };

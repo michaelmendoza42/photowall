@@ -29,6 +29,13 @@ export interface WallFocusNavigator {
    * it. Returns the new photo id, or `null` when there is nowhere to go.
    */
   step(photoId: string, direction: FocusStepDirection): string | null;
+  /**
+   * Glide the wall until the photo is centered, first setting the zoom
+   * when one is given. Returns false when the photo is not on the wall.
+   */
+  centerOn(photoId: string, zoom?: number | null): boolean;
+  /** The photo nearest the middle of the screen, and the current zoom. */
+  currentView(): { photoId: string | null; zoom: number };
 }
 
 /** A band is about this many photos tall. */
@@ -117,4 +124,37 @@ export function cameraCenteredOnTile(
     targetY: tile.y + tile.height / 2,
     zoom,
   });
+}
+
+/**
+ * The tile whose center is nearest the middle of the viewport, measuring
+ * across the wall's wrap seams.
+ */
+export function tileNearestViewportCenter(
+  camera: CameraState,
+  tiles: Iterable<PackedTile>,
+  zoom: number,
+): PackedTile | null {
+  const scale = zoom > 0 ? zoom : 1;
+  const periodX = camera.world.width;
+  const periodY = camera.world.height ?? 0;
+  const centerX = camera.x + camera.viewport.width / (2 * scale);
+  const centerY = camera.y + camera.viewport.height / (2 * scale);
+  const wrappedDistance = (delta: number, period: number): number => {
+    if (!Number.isFinite(period) || period <= 0) return Math.abs(delta);
+    const wrapped = ((delta % period) + period) % period;
+    return Math.min(wrapped, period - wrapped);
+  };
+  let best: PackedTile | null = null;
+  let bestDistance = Infinity;
+  for (const tile of tiles) {
+    const dx = wrappedDistance(tile.x + tile.width / 2 - centerX, periodX);
+    const dy = wrappedDistance(tile.y + tile.height / 2 - centerY, periodY);
+    const distance = dx * dx + dy * dy;
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = tile;
+    }
+  }
+  return best;
 }

@@ -23,6 +23,10 @@ const BooleanFromEnvSchema = z
     return z.NEVER;
   });
 
+function blankToUndefined(value: unknown): unknown {
+  return typeof value === 'string' && value.trim() === '' ? undefined : value;
+}
+
 const EnvSchema = z.object({
   NODE_ENV: z
     .enum(['development', 'production', 'test'])
@@ -34,6 +38,21 @@ const EnvSchema = z.object({
   PHOTO_WALL_LOG_LEVEL: LogLevelSchema.default('info'),
   PHOTO_WALL_SCAN_TOP_LEVEL_YEARS_ONLY: BooleanFromEnvSchema.default('false'),
   PHOTO_WALL_PREWARM_DERIVATIVES: BooleanFromEnvSchema.default('true'),
+  // Curation is on only when a curator PIN is set.
+  PHOTO_WALL_CURATOR_PIN: z.preprocess(
+    blankToUndefined,
+    z.string().trim().min(4, 'curator PIN must be at least 4 characters').optional(),
+  ),
+  // Where curation settings and share links live; defaults to
+  // `<data root>/curation`. Keep it out of the throwaway cache.
+  PHOTO_WALL_CURATION_ROOT: z.preprocess(
+    blankToUndefined,
+    z.string().trim().min(1).optional(),
+  ),
+  // Lets the curator hide/restore photos by moving them inside the
+  // library. Only takes effect when the library is writable; set false
+  // to forbid it even then.
+  PHOTO_WALL_LIBRARY_WRITES: BooleanFromEnvSchema.default('true'),
 });
 
 export type AppConfig = {
@@ -45,6 +64,9 @@ export type AppConfig = {
   logLevel: z.infer<typeof LogLevelSchema>;
   scanTopLevelYearsOnly: boolean;
   prewarmDerivatives: boolean;
+  curatorPin: string | null;
+  curationRoot: string | null;
+  libraryWrites: boolean;
 };
 
 export class ConfigValidationError extends Error {
@@ -73,5 +95,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     logLevel: data.PHOTO_WALL_LOG_LEVEL,
     scanTopLevelYearsOnly: data.PHOTO_WALL_SCAN_TOP_LEVEL_YEARS_ONLY,
     prewarmDerivatives: data.PHOTO_WALL_PREWARM_DERIVATIVES,
+    curatorPin: data.PHOTO_WALL_CURATOR_PIN ?? null,
+    curationRoot: data.PHOTO_WALL_CURATION_ROOT ?? null,
+    libraryWrites: data.PHOTO_WALL_LIBRARY_WRITES,
   };
 }

@@ -37,6 +37,26 @@ export interface FocusedPhotoLightboxProps {
   onNext?: () => void;
   onPrevious?: () => void;
   mediaSourceResolver?: WallMediaSourceResolver;
+  /** Curator-only: keep the photo from guests, or show it again. */
+  curatorPrivate?: {
+    private: boolean;
+    onToggle: () => void;
+    pending?: boolean;
+  };
+  /** Curator-only: star or unstar the photo (Best of). */
+  curatorStar?: {
+    starred: boolean;
+    onToggle: () => void;
+    pending?: boolean;
+  };
+  /** Curator-only: reject the photo (moved to `_hidden`), or restore a rejected one. */
+  curatorAction?: {
+    kind: 'hide' | 'restore';
+    onRun: () => void;
+    pending?: boolean;
+  };
+  /** Curator-only: open the light editor for this photo. */
+  onEdit?: () => void;
 }
 
 export function buildFocusedPhotoLightboxSlide(
@@ -373,7 +393,17 @@ function prefersReducedMotion(): boolean {
 export function FocusedPhotoLightbox(
   props: FocusedPhotoLightboxProps,
 ): JSX.Element {
-  const { photo, onClose, onNext, onPrevious, mediaSourceResolver } = props;
+  const {
+    photo,
+    onClose,
+    onNext,
+    onPrevious,
+    mediaSourceResolver,
+    curatorAction,
+    curatorStar,
+    curatorPrivate,
+    onEdit,
+  } = props;
 
   // The lightbox only ever holds the focused photo as its one slide, so
   // its own arrow-key navigation has nothing to move to (and it stops
@@ -382,7 +412,23 @@ export function FocusedPhotoLightbox(
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent): void {
       if (event.altKey || event.ctrlKey || event.metaKey) return;
-      if (event.key === 'ArrowRight' && onNext) {
+      if ((event.key === 'r' || event.key === 'R') && curatorAction && !curatorAction.pending) {
+        event.preventDefault();
+        curatorAction.onRun();
+      } else if ((event.key === 's' || event.key === 'S') && curatorStar && !curatorStar.pending) {
+        event.preventDefault();
+        curatorStar.onToggle();
+      } else if (
+        (event.key === 'p' || event.key === 'P') &&
+        curatorPrivate &&
+        !curatorPrivate.pending
+      ) {
+        event.preventDefault();
+        curatorPrivate.onToggle();
+      } else if ((event.key === 'e' || event.key === 'E') && onEdit) {
+        event.preventDefault();
+        onEdit();
+      } else if (event.key === 'ArrowRight' && onNext) {
         event.preventDefault();
         onNext();
       } else if (event.key === 'ArrowLeft' && onPrevious) {
@@ -392,7 +438,7 @@ export function FocusedPhotoLightbox(
     }
     window.addEventListener('keydown', onKeyDown, true);
     return () => window.removeEventListener('keydown', onKeyDown, true);
-  }, [onNext, onPrevious]);
+  }, [curatorAction, curatorPrivate, curatorStar, onEdit, onNext, onPrevious]);
 
   const slide = useMemo(
     () => buildFocusedPhotoLightboxSlide(photo, mediaSourceResolver),
@@ -575,16 +621,85 @@ export function FocusedPhotoLightbox(
             </button>
           ) : null,
         controls: () => (
-          <button
-            autoFocus
-            type="button"
-            className="focused-photo__close"
-            onClick={onClose}
-            aria-label="Close focused photo"
-            data-testid="focused-photo-close"
-          >
-            ×
-          </button>
+          <>
+            {(curatorAction || curatorStar || curatorPrivate || onEdit) && (
+              <div className="focused-photo__curator">
+                {curatorStar && (
+                  <button
+                    type="button"
+                    className="focused-photo__curate"
+                    onClick={curatorStar.onToggle}
+                    disabled={curatorStar.pending}
+                    aria-pressed={curatorStar.starred}
+                    data-testid="focused-photo-star"
+                    data-starred={curatorStar.starred ? 'true' : 'false'}
+                    title={
+                      curatorStar.starred
+                        ? 'Take this photo out of Best of (S)'
+                        : 'Put this photo in Best of (S)'
+                    }
+                  >
+                    {curatorStar.starred ? '★ Best of' : '☆ Best of'}
+                  </button>
+                )}
+                {curatorPrivate && (
+                  <button
+                    type="button"
+                    className="focused-photo__curate"
+                    onClick={curatorPrivate.onToggle}
+                    disabled={curatorPrivate.pending}
+                    aria-pressed={curatorPrivate.private}
+                    data-testid="focused-photo-private"
+                    data-private={curatorPrivate.private ? 'true' : 'false'}
+                    title={
+                      curatorPrivate.private
+                        ? 'Guests can’t see this photo. Click to show it to them again (P)'
+                        : 'Keep this photo from guests; it stays where it is (P)'
+                    }
+                  >
+                    {curatorPrivate.private ? '🔒 Private' : 'Make private'}
+                  </button>
+                )}
+                {onEdit && (
+                  <button
+                    type="button"
+                    className="focused-photo__curate"
+                    onClick={onEdit}
+                    data-testid="focused-photo-edit"
+                    title="Crop, straighten and adjust this photo; the original file is kept (E)"
+                  >
+                    Edit
+                  </button>
+                )}
+                {curatorAction && (
+                  <button
+                    type="button"
+                    className="focused-photo__curate"
+                    onClick={curatorAction.onRun}
+                    disabled={curatorAction.pending}
+                    data-testid={`focused-photo-${curatorAction.kind === 'hide' ? 'reject' : 'restore'}`}
+                    title={
+                      curatorAction.kind === 'hide'
+                        ? 'Reject: move this photo into the album’s _hidden folder; nothing is deleted (R)'
+                        : 'Move this photo back into its album (R)'
+                    }
+                  >
+                    {curatorAction.kind === 'hide' ? 'Reject' : 'Restore'}
+                  </button>
+                )}
+              </div>
+            )}
+            <button
+              autoFocus
+              type="button"
+              className="focused-photo__close"
+              onClick={onClose}
+              aria-label="Close focused photo"
+              data-testid="focused-photo-close"
+            >
+              ×
+            </button>
+          </>
         ),
       }}
     />

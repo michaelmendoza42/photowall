@@ -13,6 +13,7 @@ import {
   MediaDiagnostics,
 } from '../../media/media-diagnostics.js';
 import { registerMediaRoutes } from '../media.js';
+import { curationOff } from '../../curation/__tests__/helpers.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, '..', '..', '..', '..');
@@ -43,7 +44,12 @@ describe('/api/media route', () => {
 
   async function newApp() {
     const app = Fastify({ logger: false });
-    await registerMediaRoutes(app, { library, derivatives, diagnostics });
+    await registerMediaRoutes(app, {
+      library,
+      derivatives,
+      diagnostics,
+      curation: await curationOff(library, dataRoot),
+    });
     return app;
   }
 
@@ -240,6 +246,7 @@ describe('/api/media route', () => {
       await registerMediaRoutes(app, {
         library: coldLibrary,
         derivatives: coldDerivs,
+        curation: await curationOff(coldLibrary, coldDataRoot),
       });
       const res = await app.inject({
         method: 'GET',
@@ -275,7 +282,11 @@ describe('/api/media route', () => {
       await svc.rescan();
       const derivs = new DerivativeService({ cacheRoot: svc.getCacheDir() });
       const app = Fastify({ logger: false });
-      await registerMediaRoutes(app, { library: svc, derivatives: derivs });
+      await registerMediaRoutes(app, {
+        library: svc,
+        derivatives: derivs,
+        curation: await curationOff(svc, tempData),
+      });
 
       const firstPhotoRecord = svc.getActiveSnapshot()!.photos[0];
       if (!firstPhotoRecord) throw new Error('expected at least one photo');

@@ -37,7 +37,7 @@ function makePage(
     photos: [],
     nextCursor: null,
     totalMatching: 0,
-    appliedFilters: { years: [], folders: [], excludeFolders: [], playlistId: null },
+    appliedFilters: { years: [], folders: [], excludeFolders: [] },
     ...partial,
   };
 }
@@ -47,6 +47,18 @@ const baseInput = {
 };
 
 describe('deriveWallScreenState', () => {
+  it('tells a viewer of a curated wall that nothing is on display yet', () => {
+    const input = {
+      ...baseInput,
+      statusQuery: { isLoading: false, error: null, data: makeStatus() },
+      photoPageQuery: { isLoading: false, error: null, data: makePage() },
+    };
+    expect(deriveWallScreenState({ ...input, viewerOfCuratedWall: true }).kind).toBe(
+      'nothing-on-display',
+    );
+    expect(deriveWallScreenState(input).kind).toBe('scanning');
+  });
+
   it('returns loading while status is fetching', () => {
     const state = deriveWallScreenState({
       ...baseInput,
@@ -115,7 +127,7 @@ describe('deriveWallScreenState', () => {
     const page = makePage({ totalMatching: 0 });
     const state = deriveWallScreenState({
       ...baseInput,
-      filters: { years: [1999], folders: [], excludeFolders: [], playlistId: null },
+      filters: { years: [1999], folders: [], excludeFolders: [] },
       statusQuery: { isLoading: false, error: null, data: status },
       photoPageQuery: { isLoading: false, error: null, data: page },
     });

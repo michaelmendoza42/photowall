@@ -10,9 +10,14 @@ import {
 } from '../../shared/api/photos.js';
 import { SNAPSHOT_SCHEMA_VERSION } from '../../shared/api/library.js';
 import type { LibraryService } from '../snapshots/library-service.js';
-import type { PlaylistService } from '../playlists/service.js';
+import type { CurationService } from '../curation/service.js';
+import {
+  defaultViewFolders,
+  type Catalog,
+  type CatalogPhoto,
+} from '../curation/catalog.js';
 import { decodeCursor, encodeCursor } from '../query/cursor.js';
-import { slicePhotoPage } from '../query/photos.js';
+import { matchesFilters, slicePhotoPage } from '../query/photos.js';
 
 /**
  * Query-string contract for the paginated photo endpoint.
@@ -33,7 +38,7 @@ const PhotosQuerySchema = z.object({
   year: z.preprocess(toArray, z.array(z.coerce.number().int())).optional(),
   folder: z.preprocess(toArray, z.array(z.string())).optional(),
   exclude: z.preprocess(toArray, z.array(z.string())).optional(),
-  playlist: z.string().min(1).optional(),
+  starred: z.enum(['1', 'true']).optional(),
 });
 
 function toArray(value: unknown): unknown {
@@ -43,7 +48,7 @@ function toArray(value: unknown): unknown {
 
 export async function registerPhotoRoutes(
   app: FastifyInstance,
-  deps: { library: LibraryService; playlists: PlaylistService },
+  deps: { library: LibraryService; curation: CurationService },
 ): Promise<void> {
   app.get(
     PHOTOS_QUERY_PATH,
@@ -65,7 +70,8 @@ export async function registerPhotoRoutes(
       const params = parsed.data;
 
       const snapshot = deps.library.getActiveSnapshot();
-      if (!snapshot) {
+      const catalog = deps.curation.catalogFor(deps.curation.viewRoleOf(request));
+      if (!snapshot || !catalog) {
         // No snapshot means there's nothing for a cursor to resume
         // against either, so failing fast is correct.
         return snapshotChanged(reply, 'snapshot_missing', null);
@@ -89,16 +95,20 @@ export async function registerPhotoRoutes(
         afterId = decoded.cursor.i;
       }
 
-      const resolved = await resolveFilters(deps.playlists, {
+      const resolved = resolveFilters({
         years: params.year ?? [],
         folders: params.folder ?? [],
         excludeFolders: params.exclude ?? [],
-        playlistId: params.playlist ?? null,
+        defaultFolders: defaultViewFolders(deps.curation.getSettings(), catalog),
+        starred: params.starred !== undefined,
+        defaultStarred:
+          (deps.curation.getSettings()?.defaultStarred ?? false) && catalog.starred.length > 0,
       });
 
       const slice = slicePhotoPage({
-        photos: snapshot.photos,
-        filters: resolved,
+        ...(resolved.starred
+          ? { photos: withStarred(catalog, resolved), filters: NO_FILTERS }
+          : { photos: catalog.photos, filters: resolved }),
         afterRelativePath,
         afterId,
         limit: params.limit,
@@ -143,61 +153,51 @@ function snapshotChanged(
 }
 
 /**
- * Resolve playlist + inline filters into the final filter set.
- *
- * Missing or invalid playlists do NOT crash the request; they resolve
- * to an empty saved filter, which preserves any inline filters the
- * client also sent. The applied filter set is echoed back so the
- * client can detect this case.
+ * With nothing picked, the wall shows the curator's default view (when
+ * there is one) rather than the whole library.
  */
-async function resolveFilters(
-  playlists: PlaylistService,
-  input: {
-    years: number[];
-    folders: string[];
-    excludeFolders: string[];
-    playlistId: string | null;
-  },
-): Promise<ResolvedPhotoFilters> {
-  let savedYears: number[] = [];
-  let savedFolders: string[] = [];
-  let savedExcludes: string[] = [];
-  let resolvedPlaylistId: string | null = null;
-
-  if (input.playlistId !== null) {
-    const playlist = await playlists.get(input.playlistId);
-    if (playlist) {
-      resolvedPlaylistId = playlist.id;
-      savedYears = playlist.filters.years;
-      savedFolders = playlist.filters.folders;
-      savedExcludes = playlist.filters.excludeFolders ?? [];
-    }
+function resolveFilters(input: {
+  years: number[];
+  folders: string[];
+  excludeFolders: string[];
+  defaultFolders: string[];
+  starred: boolean;
+  defaultStarred: boolean;
+}): ResolvedPhotoFilters {
+  const nothingPicked =
+    input.years.length === 0 && input.folders.length === 0 && !input.starred;
+  if (nothingPicked && (input.defaultFolders.length > 0 || input.defaultStarred)) {
+    return {
+      years: [],
+      folders: dedupe(input.defaultFolders),
+      excludeFolders: [],
+      ...(input.defaultStarred ? { starred: true } : {}),
+    };
   }
-
   return {
-    playlistId: resolvedPlaylistId,
-    years: mergeFilterAxis(savedYears, input.years),
-    folders: mergeFilterAxis(savedFolders, input.folders),
-    // Exclusions only ever narrow, so both sides apply.
-    excludeFolders: dedupe([...savedExcludes, ...input.excludeFolders]),
+    years: dedupe(input.years),
+    folders: dedupe(input.folders),
+    excludeFolders: dedupe(input.excludeFolders),
+    ...(input.starred ? { starred: true } : {}),
   };
 }
 
+const NO_FILTERS: ResolvedPhotoFilters = { years: [], folders: [], excludeFolders: [] };
+
 /**
- * Merge a saved-preset axis with an inline-request axis.
- *
- * Semantics: if both sides are non-empty the result is their
- * intersection (so the inline filter can only narrow, never widen,
- * the saved preset). If only one side is non-empty, that side wins.
+ * The Starred album plus whatever folders are picked, each photo once,
+ * in library order. With only Starred picked, just the starred photos.
  */
-function mergeFilterAxis<T extends string | number>(
-  saved: T[],
-  inline: T[],
-): T[] {
-  if (saved.length === 0) return dedupe(inline);
-  if (inline.length === 0) return dedupe(saved);
-  const inlineSet = new Set(inline);
-  return dedupe(saved.filter((v) => inlineSet.has(v)));
+function withStarred(catalog: Catalog, filters: ResolvedPhotoFilters): CatalogPhoto[] {
+  const anyFolderRule = filters.years.length > 0 || filters.folders.length > 0;
+  const picked = anyFolderRule
+    ? catalog.photos.filter((photo) => matchesFilters(photo, filters))
+    : [];
+  const byPath = new Map<string, CatalogPhoto>();
+  for (const photo of [...picked, ...catalog.starred]) byPath.set(photo.relativePath, photo);
+  return [...byPath.values()].sort((a, b) =>
+    a.relativePath < b.relativePath ? -1 : a.relativePath > b.relativePath ? 1 : 0,
+  );
 }
 
 function dedupe<T>(values: T[]): T[] {

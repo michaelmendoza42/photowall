@@ -19,6 +19,7 @@ export type WallScreenState =
     }
   | { kind: 'scanning'; status: LibraryStatusResponse }
   | { kind: 'empty-library'; status: LibraryStatusResponse }
+  | { kind: 'nothing-on-display' }
   | {
       kind: 'no-results';
       status: LibraryStatusResponse;
@@ -46,6 +47,11 @@ export interface WallScreenStateInput {
     data: PhotosQueryResponse | undefined;
   };
   filters: ActiveFilters;
+  /**
+   * Curation is on and this visitor is a viewer, so an empty wall means
+   * the curator has nothing on display yet.
+   */
+  viewerOfCuratedWall?: boolean;
 }
 
 export function deriveWallScreenState(
@@ -104,6 +110,9 @@ export function deriveWallScreenState(
   if (page.totalMatching === 0) {
     if (hasAnyFilter(filters)) {
       return { kind: 'no-results', status, filters };
+    }
+    if (input.viewerOfCuratedWall && status.scanState === 'ready') {
+      return { kind: 'nothing-on-display' };
     }
     // Filters are empty but the page is empty — this only happens
     // mid-scan when status hasn't refreshed yet. Treat as scanning.

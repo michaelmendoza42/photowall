@@ -6,7 +6,8 @@ import type {
   ScanWarning,
   YearFacet,
 } from '../../shared/api/library.js';
-import { extractImageMetadata } from './metadata.js';
+import { extractImageMetadata, type RawImageMetadata } from './metadata.js';
+import { hiddenFolderDepth } from '../../shared/api/curation.js';
 import { normalizeRelative, relativeDirname } from './paths.js';
 import {
   isHiddenName,
@@ -28,6 +29,12 @@ export interface ScanOptions {
    * Root-level files and non-year top-level directories are skipped.
    */
   topLevelYearsOnly?: boolean;
+  /**
+   * Photos from the previous scan, by relative path. A file whose size
+   * and modified time are unchanged reuses its recorded dimensions
+   * instead of being decoded again, so a rescan is mostly a directory walk.
+   */
+  previous?: ReadonlyMap<string, PhotoRecord>;
 }
 
 /**
@@ -153,7 +160,8 @@ async function walk(
     }
 
     try {
-      const meta = await extractImageMetadata(entryAbs);
+      const meta = (await reusableMetadata(entryAbs, options.previous?.get(entryRel)))
+        ?? (await extractImageMetadata(entryAbs));
       const directoryPath = relativeDirname(entryRel);
       const { year, source } = deriveYearFromRelativeDir(directoryPath);
       photos.push({
@@ -179,7 +187,23 @@ async function walk(
   }
 }
 
-function photoIdFromPath(relativePath: string): string {
+async function reusableMetadata(
+  absolutePath: string,
+  previous: PhotoRecord | undefined,
+): Promise<RawImageMetadata | null> {
+  if (!previous) return null;
+  const stat = await fs.stat(absolutePath);
+  if (stat.size !== previous.fileSize || stat.mtimeMs !== previous.mtimeMs) return null;
+  return {
+    width: previous.width,
+    height: previous.height,
+    aspectRatio: previous.aspectRatio,
+    fileSize: previous.fileSize,
+    mtimeMs: previous.mtimeMs,
+  };
+}
+
+export function photoIdFromPath(relativePath: string): string {
   return createHash('sha1').update(relativePath).digest('hex').slice(0, 16);
 }
 
@@ -188,7 +212,7 @@ function errorMessage(err: unknown): string {
   return String(err);
 }
 
-function buildFolderFacets(photos: PhotoRecord[]): FolderFacet[] {
+export function buildFolderFacets(photos: PhotoRecord[]): FolderFacet[] {
   const facetMap = new Map<string, FolderFacet>();
   facetMap.set('', { path: '', depth: 0, directPhotoCount: 0, photoCount: 0 });
 
@@ -196,10 +220,12 @@ function buildFolderFacets(photos: PhotoRecord[]): FolderFacet[] {
     // Walk the directory chain of this photo, ensuring every ancestor
     // folder exists in the facet map and bumping subtree counts.
     const segments = photo.directoryPath === '' ? [] : photo.directoryPath.split('/');
+    // A hidden photo only counts toward its `_hidden` folder and below;
+    // the albums above it don't include it.
+    const countFromDepth = Math.max(hiddenFolderDepth(photo.directoryPath), 0);
 
-    // root subtree always increments
     const rootFacet = facetMap.get('')!;
-    rootFacet.photoCount += 1;
+    if (countFromDepth === 0) rootFacet.photoCount += 1;
     if (photo.directoryPath === '') {
       rootFacet.directPhotoCount += 1;
     }
@@ -216,7 +242,7 @@ function buildFolderFacets(photos: PhotoRecord[]): FolderFacet[] {
         };
         facetMap.set(folderPath, facet);
       }
-      facet.photoCount += 1;
+      if (i + 1 >= countFromDepth) facet.photoCount += 1;
       if (i === segments.length - 1) {
         facet.directPhotoCount += 1;
       }
@@ -229,7 +255,7 @@ function buildFolderFacets(photos: PhotoRecord[]): FolderFacet[] {
   });
 }
 
-function buildYearFacets(photos: PhotoRecord[]): YearFacet[] {
+export function buildYearFacets(photos: PhotoRecord[]): YearFacet[] {
   const counts = new Map<number, number>();
   for (const photo of photos) {
     if (photo.year === null) continue;

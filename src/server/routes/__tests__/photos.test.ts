@@ -10,7 +10,7 @@ import {
   type SnapshotChangedResponse,
 } from '../../../shared/api/photos.js';
 import { LibraryService } from '../../snapshots/library-service.js';
-import { PlaylistService } from '../../playlists/service.js';
+import { CurationService } from '../../curation/service.js';
 import { registerPhotoRoutes } from '../photos.js';
 import { decodeCursor, encodeCursor } from '../../query/cursor.js';
 
@@ -21,15 +21,20 @@ const smokeRoot = path.join(repoRoot, 'fixtures', 'library-smoke');
 describe('/api/photos route', () => {
   let dataRoot: string;
   let library: LibraryService;
-  let playlists: PlaylistService;
+  let curation: CurationService;
 
   beforeEach(async () => {
     dataRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'photo-wall-photos-'));
     library = new LibraryService({ libraryRoot: smokeRoot, dataRoot });
     await library.initialize();
     await library.rescan();
-    playlists = new PlaylistService(dataRoot);
-    await playlists.initialize();
+    curation = new CurationService({
+      library,
+      curationRoot: path.join(dataRoot, 'curation'),
+      curatorPin: null,
+      libraryWrites: false,
+    });
+    await curation.initialize();
   });
 
   afterEach(async () => {
@@ -38,7 +43,7 @@ describe('/api/photos route', () => {
 
   async function newApp() {
     const app = Fastify({ logger: false });
-    await registerPhotoRoutes(app, { library, playlists });
+    await registerPhotoRoutes(app, { library, curation });
     return app;
   }
 
@@ -70,7 +75,6 @@ describe('/api/photos route', () => {
       years: [],
       folders: [],
       excludeFolders: [],
-      playlistId: null,
     });
     await app.close();
   });
@@ -179,51 +183,11 @@ describe('/api/photos route', () => {
     await app.close();
   });
 
-  it('expands a saved playlist into the resolved filter set', async () => {
-    const created = await playlists.create({
-      name: 'iceland-trip',
-      filters: { years: [2024], folders: ['2024/travel-iceland'] },
-    });
+  it('ignores a retired playlist parameter', async () => {
     const app = await newApp();
-    const body = (await getPhotos(
-      app,
-      `playlist=${encodeURIComponent(created.id)}`,
-    )) as PhotosQuerySuccessResponse;
-    expect(body.photos.map((p) => p.relativePath)).toEqual([
-      '2024/travel-iceland/img_010.jpg',
-    ]);
-    expect(body.appliedFilters.playlistId).toBe(created.id);
-    expect(body.appliedFilters.years).toEqual([2024]);
-    expect(body.appliedFilters.folders).toEqual(['2024/travel-iceland']);
-    await app.close();
-  });
-
-  it('degrades gracefully when a playlist references a missing folder', async () => {
-    const ghost = await playlists.create({
-      name: 'ghost-folder',
-      filters: { years: [], folders: ['does-not-exist'] },
-    });
-    const app = await newApp();
-    const res = await app.inject({
-      method: 'GET',
-      url: `${PHOTOS_QUERY_PATH}?playlist=${encodeURIComponent(ghost.id)}`,
-    });
-    expect(res.statusCode).toBe(200);
-    const body = res.json() as PhotosQuerySuccessResponse;
-    expect(body.photos).toEqual([]);
-    expect(body.totalMatching).toBe(0);
-    expect(body.appliedFilters.folders).toEqual(['does-not-exist']);
-    await app.close();
-  });
-
-  it('treats an unknown playlist id as no preset (resolved playlistId becomes null)', async () => {
-    const app = await newApp();
-    const body = (await getPhotos(
-      app,
-      'playlist=does-not-exist',
-    )) as PhotosQuerySuccessResponse;
+    const body = (await getPhotos(app, 'playlist=anything')) as PhotosQuerySuccessResponse;
     expect(body.photos).toHaveLength(5);
-    expect(body.appliedFilters.playlistId).toBeNull();
+    expect(body.appliedFilters).toEqual({ years: [], folders: [], excludeFolders: [] });
     await app.close();
   });
 

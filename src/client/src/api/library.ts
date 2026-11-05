@@ -7,6 +7,7 @@ import {
   type LibraryStatusResponse,
 } from '../../../shared/api/library.js';
 import { ApiError, fetchJson } from './http.js';
+import { GUEST_VIEW_HEADERS } from './photos.js';
 
 export async function fetchLibraryStatus(
   signal?: AbortSignal,
@@ -16,8 +17,12 @@ export async function fetchLibraryStatus(
 
 export async function fetchLibraryFacets(
   signal?: AbortSignal,
+  viewAsGuest = false,
 ): Promise<LibraryFacetsResponse> {
-  return fetchJson<LibraryFacetsResponse>(LIBRARY_FACETS_PATH, { signal });
+  return fetchJson<LibraryFacetsResponse>(LIBRARY_FACETS_PATH, {
+    signal,
+    ...(viewAsGuest ? { headers: GUEST_VIEW_HEADERS } : {}),
+  });
 }
 
 export async function updateLibraryRoot(

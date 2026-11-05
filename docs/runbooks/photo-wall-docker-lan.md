@@ -1,5 +1,5 @@
 # Photo Wall Docker/LAN Operator Runbook
-Last edited: 2026-07-30
+Last edited: 2026-11-01
 Status: Active
 Owner: Michael
 Related files: `../../README.md`, `../system/photo-library-source-and-runtime.md`, `../product/photo-wall-experience.md`, `../../docker-compose.yml`, `../../.env.example`
@@ -33,6 +33,12 @@ Use this runbook when you need to:
    Optional dev-only key:
 
    - `PHOTO_WALL_SCAN_TOP_LEVEL_YEARS_ONLY=true` — scan only top-level year folders like `2020/`, `2022/`, `2025/` and ignore loose root files plus non-year top-level folders such as `Lightroom/` or `Screenshots/`
+
+   Optional curation keys (see [Curation](#curation)):
+
+   - `PHOTO_WALL_CURATOR_PIN` — sets the curator PIN instead of choosing it on `/curate`
+   - `PHOTO_WALL_HOST_CURATION_PATH` — host folder for curation state, mounted at `/curation` (default: dev's `./.photo-wall-data/curation`)
+   - `PHOTO_WALL_LIBRARY_READ_ONLY=false` — mounts the library writable so the curator can hide photos
 
 2. Confirm the library path is the **source** library and the data path is a **separate writable** directory.
 
@@ -78,13 +84,39 @@ Use this runbook when you need to:
    - prefer entering the server-visible/container-visible path explicitly
    - use `Use local picker` only as a convenience prefill when the browser can reveal a compatible path
 
-8. If the library contents changed and you need a fresh scan, restart the app:
+8. If the library contents changed and you need a fresh scan, use **Rescan library** in the curator section of the menu, or restart the app:
 
    ```bash
    docker compose restart app
    ```
 
-   Current MVP behavior: a scan is triggered on startup; there is no operator-facing manual rescan endpoint yet.
+   A scan runs on startup; the curator can also start one from the menu.
+
+## Curation
+
+Curation is off until a curator PIN exists. To choose one:
+
+1. Find the setup code: the startup log line `curation is off until a curator PIN is chosen` shows it, and it's saved as `setup-code` in the curation folder (`docker compose logs app | grep setup` or `cat <curation folder>/setup-code`).
+2. Open `http://<host>:<port>/curate`, enter the setup code and a PIN, and click **Set PIN**.
+
+To start over (forgotten PIN), delete `curator-pin` from the curation folder and restart; a new setup code is printed. `PHOTO_WALL_CURATOR_PIN` in `.env` still works and overrides the chosen PIN.
+
+With curation on:
+
+- every album starts **in storage**; viewers see nothing until the curator unlocks the menu with the PIN and puts albums on display
+- the curator's settings, the photo-move log (`moves.log`) and share links live in `/curation`; this folder can't be rebuilt, so include it in backups and never delete it when clearing `/data`
+- changing the PIN signs the curator out everywhere
+
+To let the curator **hide photos**, which moves each one into a `_hidden` folder inside its album and never deletes anything:
+
+1. Set `PHOTO_WALL_LIBRARY_READ_ONLY=false` in `.env`.
+2. `docker compose up -d` so the library is remounted writable.
+
+Hide appears for the curator whenever the library is writable. Set `PHOTO_WALL_LIBRARY_WRITES=false` to forbid it anyway.
+
+The container runs as root, so `_hidden` folders it creates are owned by root on the host. Hidden photos keep their owner and dates. To put a photo back by hand, move it out of `_hidden` and rescan; `moves.log` lists every move the app made.
+
+Docker mounts `./.photo-wall-data/curation`, the same folder the native dev server uses, so dev and prod on this machine share curation with no setting. Each server notices the other's changes within a second, and a change always starts from the latest saved settings, so curating on both never undoes the other's work. To move the folder, set `PHOTO_WALL_CURATION_ROOT` (native) and `PHOTO_WALL_HOST_CURATION_PATH` (Docker) to the same path outside the library.
 
 ## Validation
 
@@ -96,7 +128,7 @@ A successful run should give you all of the following:
   - resolved library root
   - resolved data root
   - cache dir
-  - playlists dir
+  - curation root, whether curation is on, and whether library writes are on
   - scan state
   - warm-load state
   - snapshot id when available
@@ -115,7 +147,7 @@ If startup fails or the app points at the wrong paths:
 
 2. Fix `.env` or the host mount directories.
 3. Start again with `docker compose up --build`.
-4. If the writable app-data directory contains bad test state you want to discard, remove only the configured data path — never the source photo-library path.
+4. If the writable app-data directory contains bad test state you want to discard, remove only the configured data path — never the source photo-library path, and never the curation folder (by default `<data root>/curation` for native runs).
 
 ## Common failure modes
 
@@ -191,6 +223,12 @@ Both snapshots are process/page-lifetime aggregates and contain no photo IDs, fi
 - `../../.env.example`
 
 ## Changelog
+
+### 2026-11-01
+- The curator PIN is chosen on `/curate` with the logged setup code; hiding photos only needs a writable library mount.
+
+### 2026-10-22
+- Added the curation settings, the `/curation` mount, and the steps to let the curator hide photos; the curator can now start a rescan from the menu.
 
 ### 2026-07-30
 - Clarified the current operator library path and the managed LAN route without turning either into a portable repository default.

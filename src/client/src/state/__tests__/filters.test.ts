@@ -2,9 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   pruneMissingFolders,
   EMPTY_FILTERS,
-  applyPlaylistFilters,
   clearFilters,
-  findStaleFolders,
   hasAnyFilter,
   parseActiveFilters,
   summarizeFilters,
@@ -20,15 +18,9 @@ describe('filters', () => {
   });
 
   it('detects an active year filter', () => {
-    const f = { years: [2024], folders: [], excludeFolders: [], playlistId: null };
+    const f = { years: [2024], folders: [], excludeFolders: [] };
     expect(hasAnyFilter(f)).toBe(true);
     expect(summarizeFilters(f)).toContain('years=2024');
-  });
-
-  it('detects a playlist-only filter', () => {
-    const f = { years: [], folders: [], excludeFolders: [], playlistId: 'pl-1' };
-    expect(hasAnyFilter(f)).toBe(true);
-    expect(summarizeFilters(f)).toContain('playlist=pl-1');
   });
 
   it('omits empty axes from the query shape', () => {
@@ -41,18 +33,16 @@ describe('filters', () => {
         years: [2023, 2024],
         folders: [],
         excludeFolders: [],
-        playlistId: 'pl-1',
       }),
     ).toEqual({
       years: [2023, 2024],
-      playlistId: 'pl-1',
     });
   });
 
   describe('toggleYear', () => {
     it('adds a year sorted ascending', () => {
       const out = toggleYear(
-        { years: [2024], folders: [], excludeFolders: [], playlistId: null },
+        { years: [2024], folders: [], excludeFolders: [] },
         2022,
       );
       expect(out.years).toEqual([2022, 2024]);
@@ -60,7 +50,7 @@ describe('filters', () => {
 
     it('removes an already-selected year', () => {
       const out = toggleYear(
-        { years: [2022, 2024], folders: [], excludeFolders: [], playlistId: null },
+        { years: [2022, 2024], folders: [], excludeFolders: [] },
         2024,
       );
       expect(out.years).toEqual([2022]);
@@ -70,7 +60,7 @@ describe('filters', () => {
   describe('toggleFolder', () => {
     it('adds a folder path and sorts the result', () => {
       const out = toggleFolder(
-        { years: [], folders: ['2024'], excludeFolders: [], playlistId: null },
+        { years: [], folders: ['2024'], excludeFolders: [] },
         '2023',
       );
       expect(out.folders).toEqual(['2023', '2024']);
@@ -78,7 +68,7 @@ describe('filters', () => {
 
     it('removes an already-selected folder', () => {
       const out = toggleFolder(
-        { years: [], folders: ['2023', '2024'], excludeFolders: [], playlistId: null },
+        { years: [], folders: ['2023', '2024'], excludeFolders: [] },
         '2024',
       );
       expect(out.folders).toEqual(['2023']);
@@ -95,24 +85,8 @@ describe('filters', () => {
         years: [2024],
         folders: ['2024/travel'],
         excludeFolders: [],
-        playlistId: 'pl-1',
       });
       expect(out).toEqual(EMPTY_FILTERS);
-    });
-  });
-
-  describe('applyPlaylistFilters', () => {
-    it('replaces years/folders with the saved set and records the id', () => {
-      const out = applyPlaylistFilters('pl-9', {
-        years: [2024, 2022],
-        folders: ['b', 'a'],
-      });
-      expect(out).toEqual({
-        playlistId: 'pl-9',
-        years: [2022, 2024],
-        folders: ['a', 'b'],
-        excludeFolders: [],
-      });
     });
   });
 
@@ -125,7 +99,6 @@ describe('filters', () => {
           years: [],
           folders: ['2023/birthday-leo', '2024'],
           excludeFolders: ['2024/gone', '2024/trip/favs'],
-          playlistId: null,
         },
         available,
       );
@@ -135,7 +108,7 @@ describe('filters', () => {
 
     it('drops leftover exclusions when no selection remains', () => {
       const out = pruneMissingFolders(
-        { years: [], folders: ['2023/gone'], excludeFolders: ['2024/trip'], playlistId: null },
+        { years: [], folders: ['2023/gone'], excludeFolders: ['2024/trip'] },
         available,
       );
       expect(out.folders).toEqual([]);
@@ -143,23 +116,8 @@ describe('filters', () => {
     });
 
     it('keeps the same object when everything still exists', () => {
-      const f = { years: [], folders: ['2024'], excludeFolders: [], playlistId: null };
+      const f = { years: [], folders: ['2024'], excludeFolders: [] };
       expect(pruneMissingFolders(f, available)).toBe(f);
-    });
-  });
-
-  describe('findStaleFolders', () => {
-    it('returns saved folders that are not in the available set', () => {
-      const stale = findStaleFolders(
-        ['2024/travel-iceland', '2025/missing'],
-        ['', '2024', '2024/travel-iceland'],
-      );
-      expect(stale).toEqual(['2025/missing']);
-    });
-
-    it('returns an empty array when nothing is stale', () => {
-      expect(findStaleFolders([], ['2024'])).toEqual([]);
-      expect(findStaleFolders(['2024'], ['2024', '2025'])).toEqual([]);
     });
   });
 
@@ -169,7 +127,7 @@ describe('filters', () => {
       expect(parseActiveFilters(null)).toBe(EMPTY_FILTERS);
     });
 
-    it('normalizes persisted filters', () => {
+    it('normalizes persisted filters and drops a retired playlist id', () => {
       expect(
         parseActiveFilters(
           JSON.stringify({
@@ -183,7 +141,6 @@ describe('filters', () => {
         years: [2022, 2024],
         folders: ['a', 'b'],
         excludeFolders: [],
-        playlistId: 'pl-1',
       });
     });
   });

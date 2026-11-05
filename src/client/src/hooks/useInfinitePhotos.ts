@@ -23,6 +23,8 @@ export interface UseInfinitePhotosOptions {
   filters: PhotosQueryFilters;
   limit?: number;
   enabled?: boolean;
+  /** A curator previewing the wall as a guest. */
+  viewAsGuest?: boolean;
 }
 
 export type InfinitePhotosResult = UseInfiniteQueryResult<
@@ -35,7 +37,7 @@ export function useInfinitePhotos(
 ): InfinitePhotosResult {
   const limit = options.limit ?? PHOTOS_PAGE_DEFAULT_LIMIT;
   return useInfiniteQuery({
-    queryKey: queryKeys.photoPages(options.filters, limit),
+    queryKey: [...queryKeys.photoPages(options.filters, limit), options.viewAsGuest ? 'guest' : 'own'],
     queryFn: ({ pageParam, signal }) =>
       fetchPhotosPage(
         {
@@ -44,6 +46,7 @@ export function useInfinitePhotos(
           limit,
         },
         signal,
+        options.viewAsGuest ?? false,
       ),
     initialPageParam: null as string | null,
     getNextPageParam: (lastPage: PhotosQueryResponse) => {

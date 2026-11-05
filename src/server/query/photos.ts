@@ -22,11 +22,12 @@ import {
   type PhotoQueryRecord,
   type ResolvedPhotoFilters,
 } from '../../shared/api/photos.js';
+import type { PhotoEdit } from '../../shared/api/edits.js';
 
 export interface PageSliceInput {
   /** Snapshot-ordered photo list (must already be sorted). */
   photos: readonly PhotoRecord[];
-  /** Resolved filters, after playlist expansion and inline merge. */
+  /** Resolved filters, including the default view when nothing is picked. */
   filters: ResolvedPhotoFilters;
   /** Resume position; null means start from the beginning. */
   afterRelativePath: string | null;
@@ -121,7 +122,14 @@ export function slicePhotoPage(input: PageSliceInput): PageSliceOutput {
   };
 }
 
-function toQueryRecord(photo: PhotoRecord): PhotoQueryRecord {
+export function toQueryRecord(
+  photo: PhotoRecord & {
+    edit?: PhotoEdit;
+    editVersion?: string;
+    starred?: boolean;
+    private?: boolean;
+  },
+): PhotoQueryRecord {
   return {
     id: photo.id,
     relativePath: photo.relativePath,
@@ -134,5 +142,8 @@ function toQueryRecord(photo: PhotoRecord): PhotoQueryRecord {
     mtimeMs: photo.mtimeMs,
     year: photo.year,
     yearSource: photo.yearSource,
+    ...(photo.edit ? { edit: photo.edit, editVersion: photo.editVersion } : {}),
+    ...(photo.starred ? { starred: true } : {}),
+    ...(photo.private ? { private: true } : {}),
   };
 }

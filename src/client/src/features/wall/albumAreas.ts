@@ -8,7 +8,10 @@ import { hashStringToUint32, mulberry32, uniqueStable } from './seeded.js';
 
 export interface GroupedViewFilters extends ResolvedPhotoFilters {}
 
-export type AlbumAreaKind = 'folder' | 'year-root';
+export type AlbumAreaKind = 'folder' | 'year-root' | 'starred';
+
+/** Album key of the Starred album's area. */
+export const STARRED_ALBUM_KEY = 'starred';
 
 export interface AlbumAreaDescriptor {
   albumKey: string;
@@ -48,15 +51,21 @@ export function deriveAlbumAreas(input: {
     `years=${years.join(',')}`,
     `folders=${folders.join(',')}`,
     ...(excludeFolders.length > 0 ? [`exclude=${excludeFolders.join(',')}`] : []),
-    `playlist=${filters.playlistId ?? 'none'}`,
+    // Kept from when views could come from playlists, so existing walls
+    // keep their shuffle.
+    'playlist=none',
+    ...(filters.starred ? ['starred'] : []),
   ].join('|');
 
-  const albums =
+  const sourceAlbums =
     folders.length > 0
       ? deriveFolderAlbums({ folders, excludeFolders, facets, photos, viewKey, worldWidth })
       : years.length > 0
         ? deriveYearAlbums({ years, facets, photos, viewKey, worldWidth })
         : [];
+  const albums = filters.starred
+    ? withStarredAlbum(sourceAlbums, photos, viewKey, worldWidth)
+    : sourceAlbums;
 
   return {
     viewKey,
@@ -102,7 +111,43 @@ export function resolvePhotoAlbumKey(
     }
   }
 
+  // A starred photo from an album that isn't picked goes to Starred.
+  if (photo.starred && albums.some((album) => album.kind === 'starred')) {
+    return STARRED_ALBUM_KEY;
+  }
+
   return null;
+}
+
+/**
+ * Add the Starred album's area, holding the starred photos no picked
+ * album already covers. With nothing else picked it is the only area.
+ */
+function withStarredAlbum(
+  albums: readonly AlbumAreaDescriptor[],
+  photos: readonly PhotoQueryRecord[],
+  viewKey: string,
+  worldWidth: number,
+): AlbumAreaDescriptor[] {
+  const ownCount = photos.filter(
+    (photo) => photo.starred && resolvePhotoAlbumKey(photo, albums) === null,
+  ).length;
+  if (albums.length > 0 && ownCount === 0) return [...albums];
+  return placeAlbumAreas(
+    [
+      ...albums,
+      {
+        albumKey: STARRED_ALBUM_KEY,
+        kind: 'starred',
+        label: 'Starred',
+        sourcePath: null,
+        year: null,
+        photoCountEstimate: ownCount,
+      },
+    ],
+    viewKey,
+    worldWidth,
+  );
 }
 
 export function bucketPhotosByAlbum(

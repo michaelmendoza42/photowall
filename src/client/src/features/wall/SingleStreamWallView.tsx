@@ -28,6 +28,8 @@ import { PixiWallSurface } from "./PixiWallSurface.js";
 import { WallZoomControls } from "./WallZoomControls.js";
 import { useTouchPinchZoom } from "./useTouchPinchZoom.js";
 import {
+	MAX_WALL_ZOOM,
+	MIN_WALL_ZOOM,
 	stepZoom,
 	wheelZoom,
 	zoomAnchorDelta,
@@ -301,12 +303,23 @@ export function SingleStreamWallView(
 		flushCamera,
 	});
 
+	const setZoomAtCenter = useCallback(
+		(nextZoom: number) => {
+			const rect = containerRef.current?.getBoundingClientRect();
+			applyZoom(Math.min(MAX_WALL_ZOOM, Math.max(MIN_WALL_ZOOM, nextZoom)), {
+				x: (rect?.width ?? 0) / 2,
+				y: (rect?.height ?? 0) / 2,
+			});
+		},
+		[applyZoom],
+	);
 	useWallFocusNavigator({
 		navigatorRef: focusNavigatorRef,
 		packed: packedLayout,
 		cameraRef,
 		zoomRef,
 		glideTo: glideCameraTo,
+		setZoom: setZoomAtCenter,
 	});
 
 	const sceneModel = useMemo(

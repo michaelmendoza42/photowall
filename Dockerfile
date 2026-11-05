@@ -41,7 +41,7 @@ COPY --from=build /app/package.json ./package.json
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 
-VOLUME ["/photos", "/data"]
+VOLUME ["/photos", "/data", "/curation"]
 EXPOSE 3001
 
 HEALTHCHECK --interval=20s --timeout=5s --start-period=10s --retries=3 \

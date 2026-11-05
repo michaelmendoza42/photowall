@@ -16,7 +16,6 @@ interface DebugOverlayProps {
   layout: LayoutState;
   status: LibraryStatusResponse | null;
   facets: LibraryFacetsResponse | null;
-  playlistCount: number | null;
   wallStats?: WallStats | null;
   dragState?: WallDragState | null;
 }
@@ -40,7 +39,6 @@ export function DebugOverlay(props: DebugOverlayProps): JSX.Element | null {
     layout,
     status,
     facets,
-    playlistCount,
     wallStats,
     dragState,
   } = props;
@@ -102,9 +100,6 @@ export function DebugOverlay(props: DebugOverlayProps): JSX.Element | null {
             years={facets?.years.length ?? 0} ·
             folders={facets?.folders.length ?? 0}
           </dd>
-
-          <dt>playlists</dt>
-          <dd>{playlistCount ?? '—'}</dd>
 
           <dt>camera x,y</dt>
           <dd data-testid="debug-camera">

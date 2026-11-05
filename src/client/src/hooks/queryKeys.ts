@@ -6,6 +6,9 @@ import type { PhotosQueryFilters } from '../../../shared/api/photos.js';
 export const queryKeys = {
   libraryStatus: ['library', 'status'] as const,
   libraryFacets: ['library', 'facets'] as const,
+  curationSession: ['curation', 'session'] as const,
+  curationAlbums: ['curation', 'albums'] as const,
+  // Only the retired playlist files still use this; drop it with them.
   playlists: ['playlists'] as const,
   photoPage: (filters: PhotosQueryFilters, cursor: string | null) =>
     [
@@ -15,7 +18,7 @@ export const queryKeys = {
         years: [...(filters.years ?? [])].sort((a, b) => a - b),
         folders: [...(filters.folders ?? [])].sort(),
         excludeFolders: [...(filters.excludeFolders ?? [])].sort(),
-        playlistId: filters.playlistId ?? null,
+        starred: filters.starred === true,
         cursor,
       },
     ] as const,
@@ -27,7 +30,7 @@ export const queryKeys = {
         years: [...(filters.years ?? [])].sort((a, b) => a - b),
         folders: [...(filters.folders ?? [])].sort(),
         excludeFolders: [...(filters.excludeFolders ?? [])].sort(),
-        playlistId: filters.playlistId ?? null,
+        starred: filters.starred === true,
         limit,
       },
     ] as const,

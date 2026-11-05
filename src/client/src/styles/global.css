@@ -482,6 +482,33 @@ body {
 	padding: 0;
 }
 
+.focused-photo__curator {
+	position: absolute;
+	top: clamp(0.75rem, 2vw, 1.25rem);
+	right: calc(clamp(0.75rem, 2vw, 1.25rem) + 44px);
+	display: flex;
+	gap: 0.4rem;
+	z-index: 1;
+}
+
+.focused-photo__curate {
+	height: 34px;
+	padding: 0 0.9rem;
+	background: rgba(20, 17, 15, 0.6);
+	color: var(--pw-fg);
+	border: 1px solid var(--pw-rule);
+	border-radius: 999px;
+	font: inherit;
+	font-size: 12px;
+	letter-spacing: 0.04em;
+	cursor: pointer;
+}
+
+.focused-photo__curate:disabled {
+	opacity: 0.5;
+	cursor: progress;
+}
+
 .focused-photo__nav {
 	position: absolute;
 	top: 50%;
@@ -521,7 +548,7 @@ body {
 }
 
 /* ------------------------------------------------------------------ */
-/* Minimal controls (menu button + filter/playlist panel)             */
+/* Minimal controls (menu button + album/curation panel)             */
 /* ------------------------------------------------------------------ */
 
 .controls {
@@ -763,60 +790,53 @@ button.album-tree__disclosure:focus-visible {
 	white-space: nowrap;
 }
 
+.album-tree__curate {
+	appearance: none;
+	background: transparent;
+	border: 0;
+	color: var(--pw-fg-quiet);
+	font: inherit;
+	font-size: 13px;
+	line-height: 1;
+	width: 1.5rem;
+	height: 1.5rem;
+	padding: 0;
+	cursor: pointer;
+	flex: 0 0 auto;
+}
+
+.album-tree__curate:hover,
+.album-tree__curate:focus-visible,
+.album-tree__curate[aria-pressed="true"] {
+	color: var(--pw-fg);
+}
+
+.album-tree__curate {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.album-tree__curate[data-default="false"] {
+	opacity: 0.45;
+}
+
+.album-tree__name[data-hidden-folder="true"] {
+	font-style: italic;
+	color: var(--pw-fg-quiet);
+}
+
+.controls__create-input.controls__share-url {
+	width: 100%;
+	margin-top: 0.4rem;
+	font-family: var(--pw-font-mono);
+	font-size: 11px;
+}
+
 .album-tree__count {
 	color: var(--pw-fg-quiet);
 	font-family: var(--pw-font-mono);
 	font-size: 10px;
-}
-
-.controls__playlists {
-	list-style: none;
-	margin: 0 0 0.55rem;
-	padding: 0;
-	display: flex;
-	flex-direction: column;
-	gap: 0.3rem;
-}
-
-.controls__playlist {
-	display: flex;
-	align-items: center;
-	gap: 0.5rem;
-	padding: 0.3rem 0.45rem;
-	border: 1px solid var(--pw-rule);
-}
-
-.controls__playlist[data-selected="true"] {
-	border-color: var(--pw-fg-muted);
-	background: rgba(236, 230, 220, 0.04);
-}
-
-.controls__playlist-name {
-	appearance: none;
-	background: transparent;
-	border: 0;
-	color: var(--pw-fg);
-	font: inherit;
-	font-size: 13px;
-	text-align: left;
-	padding: 0;
-	margin: 0;
-	cursor: pointer;
-	flex: 1 1 auto;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-
-.controls__playlist-rename {
-	flex: 1 1 auto;
-	appearance: none;
-	background: rgba(20, 17, 15, 0.9);
-	border: 1px solid var(--pw-rule);
-	color: var(--pw-fg);
-	font: inherit;
-	font-size: 13px;
-	padding: 0.25rem 0.4rem;
 }
 
 .controls__create {
@@ -967,6 +987,30 @@ button.album-tree__disclosure:focus-visible {
 	margin: 0;
 	word-break: break-all;
 	color: var(--pw-fg);
+}
+
+/* Curation undo toast */
+.curation-toast {
+	position: fixed;
+	left: 50%;
+	bottom: clamp(1rem, 4vw, 2rem);
+	transform: translateX(-50%);
+	/* Above the focused-photo lightbox portal (--yarl__portal_zindex). */
+	z-index: 10000;
+	display: flex;
+	align-items: center;
+	gap: 0.9rem;
+	max-width: calc(100vw - 32px);
+	padding: 0.55rem 0.9rem;
+	background: rgba(20, 17, 15, 0.92);
+	border: 1px solid var(--pw-rule);
+	border-radius: 999px;
+	color: var(--pw-fg);
+	font-size: 13px;
+}
+
+.curation-toast[data-tone="error"] {
+	border-color: rgba(214, 120, 100, 0.7);
 }
 
 /* Light photo editor (curator only) */
@@ -1265,4 +1309,32 @@ button.album-tree__disclosure:focus-visible {
 	.photo-editor__title {
 		visibility: hidden;
 	}
+}
+
+/* Curator previewing the wall as a guest */
+.guest-preview-badge {
+	position: fixed;
+	top: clamp(0.75rem, 2vw, 1.25rem);
+	left: 50%;
+	transform: translateX(-50%);
+	z-index: 45;
+	padding: 0.35rem 0.85rem;
+	background: rgba(20, 17, 15, 0.88);
+	border: 1px solid var(--pw-rule);
+	border-radius: 999px;
+	color: var(--pw-fg);
+	font: inherit;
+	font-size: 12px;
+	letter-spacing: 0.04em;
+	cursor: pointer;
+}
+
+.controls__toggle {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	margin: 0.35rem 0;
+	color: var(--pw-fg-muted);
+	font-size: 12px;
+	cursor: pointer;
 }

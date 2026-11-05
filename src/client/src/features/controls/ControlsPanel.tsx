@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { LibraryFacetsResponse } from '../../../../shared/api/library.js';
-import type { PlaylistRecord } from '../../../../shared/api/playlists.js';
+import type {
+  AlbumCurationResponse,
+  CurationSessionResponse,
+} from '../../../../shared/api/curation.js';
 import {
-  applyPlaylistFilters,
   clearFilters,
-  findStaleFolders,
   hasAnyFilter,
   setFolderSelection,
   type ActiveFilters,
@@ -12,10 +13,39 @@ import {
 import {
   buildFolderTree,
   folderCheckStates,
+  folderDisplayStates,
   toggleFolderInTree,
   type FolderCheckState,
   type FolderTreeNode,
 } from '../../state/folderTree.js';
+
+export interface CurationControls {
+  session: CurationSessionResponse | null;
+  /** Present once the curator is signed in. */
+  albums: AlbumCurationResponse | null;
+  onLogin: (pin: string) => void;
+  /** First-time setup: choose the PIN, proving access with the setup code. */
+  onChoosePin: (pin: string, code: string) => void;
+  onLogout: () => void;
+  onSetDisplay: (folder: string, onDisplay: boolean) => void;
+  onToggleDefault: (folder: string) => void;
+  /** Add the Starred album to the default view, or take it out. */
+  onToggleDefaultStarred: () => void;
+  onRescan: () => void;
+  /** The wall shows what guests see; curator tools keep working. */
+  previewAsGuest: boolean;
+  onPreviewAsGuestChange: (on: boolean) => void;
+  /** Show the PIN form. Only the unlisted curator route does. */
+  pinEntry: boolean;
+  loginPending?: boolean;
+  rescanPending?: boolean;
+}
+
+export interface ShareControls {
+  onShare: () => void;
+  pending?: boolean;
+  url: string | null;
+}
 
 export interface ControlsPanelProps {
   open: boolean;
@@ -23,13 +53,8 @@ export interface ControlsPanelProps {
   filters: ActiveFilters;
   onFiltersChange: (next: ActiveFilters) => void;
   facets: LibraryFacetsResponse | null;
-  playlists: readonly PlaylistRecord[];
-  onCreatePlaylist: (name: string) => void;
-  onUpdatePlaylist: (id: string, patch: { name?: string }) => void;
-  onDeletePlaylist: (id: string) => void;
-  createPending?: boolean;
-  updatePending?: boolean;
-  deletePending?: boolean;
+  curation: CurationControls;
+  share: ShareControls;
   errorMessage?: string | null;
 }
 
@@ -40,21 +65,16 @@ export function ControlsPanel(props: ControlsPanelProps): JSX.Element {
     filters,
     onFiltersChange,
     facets,
-    playlists,
-    onCreatePlaylist,
-    onUpdatePlaylist,
-    onDeletePlaylist,
-    createPending,
-    updatePending,
-    deletePending,
+    curation,
+    share,
     errorMessage,
   } = props;
 
-  const [name, setName] = useState('');
-  const [renameDraft, setRenameDraft] = useState<{
-    id: string;
-    name: string;
-  } | null>(null);
+  const [pin, setPin] = useState('');
+  const [setupCode, setSetupCode] = useState('');
+  const choosingPin = curation.session !== null && !curation.session.enabled;
+  const isCurator = curation.session?.curator === true;
+  const albums = isCurator ? curation.albums : null;
 
   const folderTree = useMemo(
     () => (facets ? buildFolderTree(facets.folders) : []),
@@ -64,41 +84,24 @@ export function ControlsPanel(props: ControlsPanelProps): JSX.Element {
     () => folderCheckStates(folderTree, filters),
     [folderTree, filters],
   );
+  const displayStates = useMemo(
+    () => (albums ? folderDisplayStates(folderTree, new Set(albums.onDisplay)) : null),
+    [albums, folderTree],
+  );
+  const defaultView = useMemo(
+    () => new Set(albums?.defaultView ?? []),
+    [albums],
+  );
   // Folders the user opened or closed; the rest open when partially
   // selected so the deselected albums inside are visible.
   const [expandedOverrides, setExpandedOverrides] = useState<
     ReadonlyMap<string, boolean>
   >(() => new Map());
 
-  const availableFolderPaths = useMemo(
-    () => (facets ? facets.folders.map((f) => f.path) : []),
-    [facets],
-  );
-
-  const selectedPlaylist = useMemo(
-    () =>
-      filters.playlistId
-        ? playlists.find((p) => p.id === filters.playlistId) ?? null
-        : null,
-    [filters.playlistId, playlists],
-  );
-
-  const staleFolders = useMemo(() => {
-    if (!selectedPlaylist) return [];
-    return findStaleFolders(
-      selectedPlaylist.filters.folders,
-      availableFolderPaths,
-    );
-  }, [selectedPlaylist, availableFolderPaths]);
-
   const filtersActive = hasAnyFilter(filters);
-
-  function handleCreate(): void {
-    const trimmed = name.trim();
-    if (!trimmed) return;
-    onCreatePlaylist(trimmed);
-    setName('');
-  }
+  const starredCount = facets?.starredCount ?? 0;
+  // Viewers see Starred once it has photos; the curator always does.
+  const showStarred = starredCount > 0 || (isCurator && curation.session?.enabled === true);
 
   function handleToggleFolder(path: string): void {
     // Keep folders that are open only because they were partial from
@@ -119,39 +122,30 @@ export function ControlsPanel(props: ControlsPanelProps): JSX.Element {
     setExpandedOverrides((prev) => new Map(prev).set(path, !isExpanded));
   }
 
-  function handleSelectPlaylist(p: PlaylistRecord): void {
-    onFiltersChange(applyPlaylistFilters(p.id, p.filters));
-  }
-
-  function handleClearPlaylist(): void {
-    onFiltersChange({ ...filters, playlistId: null });
-  }
-
   function handleResetAll(): void {
     onFiltersChange(clearFilters(filters));
   }
 
-  function handleUpdateCurrentFilters(): void {
-    if (!selectedPlaylist) return;
-    onUpdatePlaylist(selectedPlaylist.id, {});
-    // Caller is expected to update the playlist with the current filter
-    // state — see WallShell's wiring.
-  }
-
-  function handleStartRename(p: PlaylistRecord): void {
-    setRenameDraft({ id: p.id, name: p.name });
-  }
-
-  function handleSaveRename(): void {
-    if (!renameDraft) return;
-    const trimmed = renameDraft.name.trim();
-    if (!trimmed) {
-      setRenameDraft(null);
-      return;
+  function handleLogin(): void {
+    const trimmed = pin.trim();
+    if (!trimmed) return;
+    if (choosingPin) {
+      if (trimmed.length < 4 || !setupCode.trim()) return;
+      curation.onChoosePin(trimmed, setupCode.trim());
+    } else {
+      curation.onLogin(trimmed);
     }
-    onUpdatePlaylist(renameDraft.id, { name: trimmed });
-    setRenameDraft(null);
+    setPin('');
   }
+
+  const curatorTools: CuratorTreeTools | null = displayStates
+    ? {
+        displayStates,
+        defaultView,
+        onSetDisplay: curation.onSetDisplay,
+        onToggleDefault: curation.onToggleDefault,
+      }
+    : null;
 
   return (
     <div className="controls" data-testid="controls" data-open={open ? 'true' : 'false'}>
@@ -175,6 +169,7 @@ export function ControlsPanel(props: ControlsPanelProps): JSX.Element {
           id="controls-panel"
           className="controls__panel"
           data-testid="controls-panel"
+          data-curator={isCurator ? 'true' : 'false'}
           aria-label="Wall controls"
         >
           <header className="controls__header">
@@ -199,12 +194,68 @@ export function ControlsPanel(props: ControlsPanelProps): JSX.Element {
 
           <section className="controls__section">
             <h3 className="controls__section-title">Albums</h3>
+            {showStarred && (
+              <ul className="album-tree" data-testid="controls-starred">
+                <li className="album-tree__item">
+                  <div className="album-tree__row">
+                    <span className="album-tree__disclosure" aria-hidden="true" />
+                    <label className="album-tree__label" title="The curator’s favourite photos">
+                      <input
+                        type="checkbox"
+                        className="album-tree__checkbox"
+                        data-testid="controls-folder-starred"
+                        data-selected={filters.starred ? 'true' : 'false'}
+                        checked={filters.starred === true}
+                        onChange={() =>
+                          onFiltersChange({ ...filters, starred: !filters.starred })
+                        }
+                      />
+                      <span className="album-tree__name">★ Best of</span>
+                      <span className="album-tree__count">{starredCount}</span>
+                    </label>
+                    {albums && (
+                      <button
+                        type="button"
+                        className="album-tree__curate"
+                        data-testid="controls-folder-default-starred"
+                        data-default={albums.defaultStarred ? 'true' : 'false'}
+                        aria-pressed={albums.defaultStarred}
+                        aria-label={`${albums.defaultStarred ? 'Stop opening the wall on' : 'Open the wall on'} Best of`}
+                        title={
+                          albums.defaultStarred
+                            ? 'The wall opens on this album. Click to stop.'
+                            : 'Open the wall on this album when nothing is picked.'
+                        }
+                        onClick={curation.onToggleDefaultStarred}
+                      >
+                        <span aria-hidden="true">⌂</span>
+                      </button>
+                    )}
+                  </div>
+                </li>
+              </ul>
+            )}
             {folderTree.length === 0 ? (
-              <p className="controls__hint">No albums discovered yet.</p>
+              <p className="controls__hint">
+                {curation.session?.enabled && !isCurator
+                  ? 'No albums on display yet.'
+                  : 'No albums discovered yet.'}
+              </p>
             ) : (
               <>
-                {filters.folders.length === 0 && (
-                  <p className="controls__hint">Nothing picked: the wall shows every album.</p>
+                {filters.folders.length === 0 && !filters.starred && (
+                  <p className="controls__hint">
+                    {curation.session?.enabled
+                      ? 'Nothing picked: the wall shows its default albums.'
+                      : 'Nothing picked: the wall shows every album.'}
+                  </p>
+                )}
+                {curatorTools && (
+                  <p className="controls__hint">
+                    👁 lets guests pick an album; ⌂ makes the wall open on it. In the photo
+                    view: ★ puts a photo in Best of, Make private keeps it from guests, Reject
+                    moves a bad shot to _hidden.
+                  </p>
                 )}
                 <ul className="album-tree" data-testid="controls-folders">
                   {folderTree.map((node) => (
@@ -216,6 +267,7 @@ export function ControlsPanel(props: ControlsPanelProps): JSX.Element {
                       expandedOverrides={expandedOverrides}
                       onToggle={handleToggleFolder}
                       onToggleExpanded={handleToggleExpanded}
+                      curator={curatorTools}
                     />
                   ))}
                 </ul>
@@ -225,159 +277,131 @@ export function ControlsPanel(props: ControlsPanelProps): JSX.Element {
 
           <section className="controls__section">
             <header className="controls__section-header">
-              <h3 className="controls__section-title">Playlists</h3>
-              {selectedPlaylist && (
-                <button
-                  type="button"
-                  className="controls__link"
-                  data-testid="controls-playlist-clear"
-                  onClick={handleClearPlaylist}
-                >
-                  Deselect
-                </button>
-              )}
-            </header>
-
-            {staleFolders.length > 0 && (
-              <p
-                className="controls__warning"
-                data-testid="controls-stale-warning"
-                role="status"
-              >
-                {staleFolders.length} folder
-                {staleFolders.length === 1 ? '' : 's'} from this playlist no
-                longer exist in the library.
-              </p>
-            )}
-
-            {playlists.length === 0 ? (
-              <p className="controls__hint">No saved playlists yet.</p>
-            ) : (
-              <ul className="controls__playlists" data-testid="controls-playlist-list">
-                {playlists.map((p) => {
-                  const selected = filters.playlistId === p.id;
-                  const isRenaming = renameDraft?.id === p.id;
-                  return (
-                    <li
-                      key={p.id}
-                      className="controls__playlist"
-                      data-testid={`controls-playlist-${p.id}`}
-                      data-selected={selected ? 'true' : 'false'}
-                    >
-                      {isRenaming ? (
-                        <>
-                          <input
-                            className="controls__playlist-rename"
-                            data-testid={`controls-playlist-rename-input-${p.id}`}
-                            name={`controls-playlist-rename-${p.id}`}
-                            aria-label={`Rename ${p.name}`}
-                            value={renameDraft.name}
-                            onChange={(e) =>
-                              setRenameDraft({
-                                id: p.id,
-                                name: e.target.value,
-                              })
-                            }
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') handleSaveRename();
-                              if (e.key === 'Escape') setRenameDraft(null);
-                            }}
-                            autoFocus
-                          />
-                          <button
-                            type="button"
-                            className="controls__link"
-                            data-testid={`controls-playlist-rename-save-${p.id}`}
-                            onClick={handleSaveRename}
-                          >
-                            Save
-                          </button>
-                          <button
-                            type="button"
-                            className="controls__link controls__link--quiet"
-                            onClick={() => setRenameDraft(null)}
-                          >
-                            Cancel
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <button
-                            type="button"
-                            className="controls__playlist-name"
-                            data-testid={`controls-playlist-select-${p.id}`}
-                            onClick={() => handleSelectPlaylist(p)}
-                          >
-                            {p.name}
-                          </button>
-                          <button
-                            type="button"
-                            className="controls__link controls__link--quiet"
-                            data-testid={`controls-playlist-rename-${p.id}`}
-                            onClick={() => handleStartRename(p)}
-                            aria-label={`Rename ${p.name}`}
-                          >
-                            Rename
-                          </button>
-                          <button
-                            type="button"
-                            className="controls__link controls__link--danger"
-                            data-testid={`controls-playlist-delete-${p.id}`}
-                            disabled={deletePending}
-                            onClick={() => onDeletePlaylist(p.id)}
-                            aria-label={`Delete ${p.name}`}
-                          >
-                            Delete
-                          </button>
-                        </>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-
-            <div className="controls__create">
-              <input
-                type="text"
-                className="controls__create-input"
-                data-testid="controls-playlist-name"
-                name="controls-playlist-name"
-                aria-label="New playlist name"
-                placeholder="Save current filters as…"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleCreate();
-                }}
-              />
-              <button
-                type="button"
-                className="controls__create-button"
-                data-testid="controls-playlist-save"
-                onClick={handleCreate}
-                disabled={!name.trim() || createPending}
-                aria-disabled={!name.trim() || createPending}
-              >
-                Save
-              </button>
-            </div>
-            {selectedPlaylist && (
+              <h3 className="controls__section-title">Share</h3>
               <button
                 type="button"
                 className="controls__link"
-                data-testid="controls-playlist-update"
-                onClick={handleUpdateCurrentFilters}
-                disabled={updatePending}
+                data-testid="controls-share"
+                onClick={share.onShare}
+                disabled={share.pending}
               >
-                Update “{selectedPlaylist.name}” with current filters
+                Copy link to this view
               </button>
+            </header>
+            {share.url && (
+              <input
+                className="controls__create-input controls__share-url"
+                data-testid="controls-share-url"
+                aria-label="Share link"
+                readOnly
+                value={share.url}
+                onFocus={(e) => e.currentTarget.select()}
+              />
             )}
           </section>
+
+          {curation.session && (isCurator || curation.pinEntry) && (
+            <section className="controls__section" data-testid="controls-curation">
+              <header className="controls__section-header">
+                <h3 className="controls__section-title">Curator</h3>
+                {isCurator && (
+                  <button
+                    type="button"
+                    className="controls__link"
+                    data-testid="controls-curator-logout"
+                    onClick={curation.onLogout}
+                  >
+                    Lock
+                  </button>
+                )}
+              </header>
+              {isCurator && curation.session.enabled ? (
+                <>
+                  <p className="controls__hint">
+                    {curation.session.libraryWrites
+                      ? 'Rejected photos move into a _hidden folder inside their album; nothing is deleted.'
+                      : 'Rejecting photos is off here: the library folder isn’t writable.'}
+                  </p>
+                  <label className="controls__toggle">
+                    <input
+                      type="checkbox"
+                      data-testid="controls-preview-guest"
+                      checked={curation.previewAsGuest}
+                      onChange={(e) => curation.onPreviewAsGuestChange(e.target.checked)}
+                    />
+                    <span>Preview as guest</span>
+                  </label>
+                  <button
+                    type="button"
+                    className="controls__link"
+                    data-testid="controls-rescan"
+                    onClick={curation.onRescan}
+                    disabled={curation.rescanPending}
+                  >
+                    Rescan library
+                  </button>
+                </>
+              ) : (
+                <>
+                {choosingPin && (
+                  <>
+                    <p className="controls__hint">
+                      Choose a curator PIN (4 or more characters). To prove this is your server,
+                      enter the setup code from the server log, also saved as{' '}
+                      <code>setup-code</code> in the curation folder.
+                    </p>
+                    <input
+                      className="controls__create-input controls__share-url"
+                      data-testid="controls-curator-setup-code"
+                      name="controls-curator-setup-code"
+                      aria-label="Setup code"
+                      placeholder="Setup code"
+                      autoComplete="off"
+                      value={setupCode}
+                      onChange={(e) => setSetupCode(e.target.value)}
+                    />
+                  </>
+                )}
+                <div className="controls__create">
+                  <input
+                    type="password"
+                    className="controls__create-input"
+                    data-testid="controls-curator-pin"
+                    name="controls-curator-pin"
+                    aria-label={choosingPin ? 'New curator PIN' : 'Curator PIN'}
+                    placeholder={choosingPin ? 'New curator PIN' : 'Curator PIN'}
+                    autoComplete={choosingPin ? 'new-password' : 'current-password'}
+                    value={pin}
+                    onChange={(e) => setPin(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleLogin();
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="controls__create-button"
+                    data-testid="controls-curator-login"
+                    onClick={handleLogin}
+                    disabled={!pin.trim() || curation.loginPending}
+                  >
+                    {choosingPin ? 'Set PIN' : 'Unlock'}
+                  </button>
+                </div>
+                </>
+              )}
+            </section>
+          )}
         </section>
       )}
     </div>
   );
+}
+
+interface CuratorTreeTools {
+  displayStates: ReadonlyMap<string, FolderCheckState>;
+  defaultView: ReadonlySet<string>;
+  onSetDisplay: (folder: string, onDisplay: boolean) => void;
+  onToggleDefault: (folder: string) => void;
 }
 
 interface AlbumTreeItemProps {
@@ -387,10 +411,13 @@ interface AlbumTreeItemProps {
   expandedOverrides: ReadonlyMap<string, boolean>;
   onToggle: (path: string) => void;
   onToggleExpanded: (path: string, isExpanded: boolean) => void;
+  curator: CuratorTreeTools | null;
 }
 
 function AlbumTreeItem(props: AlbumTreeItemProps): JSX.Element {
-  const { node, depth, checkStates, expandedOverrides, onToggle, onToggleExpanded } = props;
+  const { node, depth, checkStates, expandedOverrides, onToggle, onToggleExpanded, curator } =
+    props;
+  const displayState = curator?.displayStates.get(node.path);
   const state = checkStates.get(node.path) ?? 'none';
   const hasChildren = node.children.length > 0;
   const isExpanded =
@@ -428,9 +455,53 @@ function AlbumTreeItem(props: AlbumTreeItemProps): JSX.Element {
             checked={state === 'all'}
             onChange={() => onToggle(node.path)}
           />
-          <span className="album-tree__name">{node.name}</span>
+          <span className="album-tree__name" data-hidden-folder={node.hidden ? 'true' : undefined}>
+            {node.hidden ? 'Hidden' : node.name}
+          </span>
           <span className="album-tree__count">{node.photoCount}</span>
         </label>
+        {curator && displayState && (
+          <>
+            <button
+              type="button"
+              className="album-tree__curate"
+              data-testid={`controls-folder-display-${node.path}`}
+              data-display={displayState}
+              aria-pressed={displayState === 'all'}
+              aria-label={
+                displayState === 'all'
+                  ? `Put ${node.name} in storage`
+                  : `Put ${node.name} on display`
+              }
+              title={
+                displayState === 'all'
+                  ? 'On display. Click to put in storage.'
+                  : displayState === 'partial'
+                    ? 'Partly in storage. Click to put all on display.'
+                    : 'In storage. Click to put on display.'
+              }
+              onClick={() => curator.onSetDisplay(node.path, displayState !== 'all')}
+            >
+              <EyeIcon state={displayState} />
+            </button>
+            <button
+              type="button"
+              className="album-tree__curate"
+              data-testid={`controls-folder-default-${node.path}`}
+              data-default={curator.defaultView.has(node.path) ? 'true' : 'false'}
+              aria-pressed={curator.defaultView.has(node.path)}
+              aria-label={`${curator.defaultView.has(node.path) ? 'Stop opening the wall on' : 'Open the wall on'} ${node.name}`}
+              title={
+                curator.defaultView.has(node.path)
+                  ? 'The wall opens on this album. Click to stop.'
+                  : 'Open the wall on this album when nothing is picked.'
+              }
+              onClick={() => curator.onToggleDefault(node.path)}
+            >
+              <span aria-hidden="true">⌂</span>
+            </button>
+          </>
+        )}
       </div>
       {isExpanded && (
         <ul className="album-tree" role="group">
@@ -443,10 +514,32 @@ function AlbumTreeItem(props: AlbumTreeItemProps): JSX.Element {
               expandedOverrides={expandedOverrides}
               onToggle={onToggle}
               onToggleExpanded={onToggleExpanded}
+              curator={curator}
             />
           ))}
         </ul>
       )}
     </li>
+  );
+}
+
+/** Open eye: guests can pick it. Faded: partly. Slashed: only the curator sees it. */
+function EyeIcon({ state }: { state: FolderCheckState }): JSX.Element {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      width="15"
+      height="15"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      opacity={state === 'partial' ? 0.6 : 1}
+    >
+      <path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z" />
+      <circle cx="12" cy="12" r="2.8" />
+      {state === 'none' && <path d="M4 20 20 4" />}
+    </svg>
   );
 }

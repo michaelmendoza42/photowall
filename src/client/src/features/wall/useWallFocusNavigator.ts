@@ -4,6 +4,7 @@ import {
   buildFocusNavigation,
   cameraCenteredOnTile,
   stepFocusOrder,
+  tileNearestViewportCenter,
   type WallFocusNavigator,
 } from './focusNavigation.js';
 import type { PackerResult } from './packer.js';
@@ -18,8 +19,10 @@ export function useWallFocusNavigator(input: {
   cameraRef: MutableRefObject<CameraState>;
   zoomRef: MutableRefObject<number>;
   glideTo: (target: { x: number; y: number }) => void;
+  /** Zoom about the middle of the screen; views without zoom leave it out. */
+  setZoom?: (zoom: number) => void;
 }): void {
-  const { navigatorRef, packed, cameraRef, zoomRef, glideTo } = input;
+  const { navigatorRef, packed, cameraRef, zoomRef, glideTo, setZoom } = input;
   const navigation = useMemo(() => buildFocusNavigation(packed.rows), [packed.rows]);
 
   useEffect(() => {
@@ -32,10 +35,25 @@ export function useWallFocusNavigator(input: {
         glideTo(cameraCenteredOnTile(cameraRef.current, tile, zoomRef.current));
         return nextId;
       },
+      centerOn(photoId, zoom) {
+        const tile = navigation.tilesById.get(photoId);
+        if (!tile) return false;
+        if (zoom != null && setZoom) setZoom(zoom);
+        glideTo(cameraCenteredOnTile(cameraRef.current, tile, zoomRef.current));
+        return true;
+      },
+      currentView() {
+        const tile = tileNearestViewportCenter(
+          cameraRef.current,
+          navigation.tilesById.values(),
+          zoomRef.current,
+        );
+        return { photoId: tile?.photoId ?? null, zoom: zoomRef.current };
+      },
     };
     navigatorRef.current = navigator;
     return () => {
       if (navigatorRef.current === navigator) navigatorRef.current = null;
     };
-  }, [cameraRef, glideTo, navigation, navigatorRef, zoomRef]);
+  }, [cameraRef, glideTo, navigation, navigatorRef, setZoom, zoomRef]);
 }

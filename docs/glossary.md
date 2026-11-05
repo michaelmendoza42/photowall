@@ -49,20 +49,72 @@ A likely subfolder beneath a year folder that groups the actual photos for one e
 
 - **Lives in:** `docs/system/photo-library-source-and-runtime.md`
 - **Why it exists:** names the expected mid-level grouping in the initial library organization
-- **Used by:** folder discovery, folder filters, and likely playlist organization
+- **Used by:** folder discovery and folder filters
 - **Change risk:** medium — it shapes defaults, but should not become an inflexible hard requirement
 - **Surfaced to users:** indirectly — it may appear in folder-based browsing and filtering
 
-### Playlist
-A reusable, server-persisted saved-filter preset that the user can switch to from the interface. For the MVP, a playlist is a saved combination of year and folder filters, not a hand-curated photo list.
+### Curator
+Whoever has entered the curator PIN in a browser. The curator sees every album, puts albums on display or in storage, sets the default view and hides or restores photos. Everyone else is a viewer.
 
-- **Lives in:** `docs/product/photo-wall-experience.md`, `docs/system/photo-library-source-and-runtime.md`
-- **Why it exists:** gives the product a durable way to revisit meaningful filtered views of the library without a heavier curation model
-- **Used by:** filter controls, server-side persistence, and future saved-view behavior
-- **Change risk:** medium to high — changing this meaning will affect both product behavior and storage design
-- **Alias:** saved-filter playlist
-- **Surfaced to users:** yes — playlists are part of the planned UI
-- **Notes:** stale or missing folder references in a saved playlist must degrade gracefully rather than crash the app
+- **Lives in:** `docs/product/photo-wall-experience.md`; code in `src/server/curation/`
+- **Why it exists:** lets Michael decide what the household sees without accounts
+- **Change risk:** high — it decides what viewers can see and whether files move
+- **Surfaced to users:** yes — the Curator section of the menu
+- **Notes:** curation is on once a PIN exists, chosen on `/curate` with the server's one-time setup code (or set as `PHOTO_WALL_CURATOR_PIN`)
+
+### In storage / on display
+The two states of an album under curation. Viewers see and pick only albums on display; albums in storage are visible only to the curator. Albums new to the library start in storage.
+
+- **Lives in:** `docs/product/photo-wall-experience.md`; stored as the `onDisplay` list in `albums.json` in the curation folder
+- **Change risk:** high — it decides what viewers can see
+- **Surfaced to users:** yes — to the curator, as the eye control on each album
+
+### Default view
+The albums, picked by hand by the curator, that a wall shows before anyone picks albums. Picking albums replaces it.
+
+- **Lives in:** `docs/product/photo-wall-experience.md`; stored as `defaultView` in `albums.json`
+- **Surfaced to users:** yes — to the curator, as the star on each album
+
+### Hidden folder
+A `_hidden` folder inside an album, holding photos the curator rejected (Reject in the photo view; "hide" in code). Hiding moves the photo file (and the files that belong with it) there; nothing is deleted. Only the curator sees it, shown as "Hidden", and selecting its album never includes it.
+
+- **Lives in:** `docs/product/photo-wall-experience.md`; code in `src/server/curation/mover.ts`, `src/shared/api/curation.ts`
+- **Change risk:** high — it moves files in the photo library
+- **Surfaced to users:** yes — to the curator
+- **Notes:** a `_hidden` folder made by hand counts too; every move the app makes is logged in `moves.log` in the curation folder
+
+### Light edit
+The curator's non-destructive edit of one photo: crop, straighten, quarter turns, flips, temperature, exposure and the other light and color adjustments, blur, grain and a look. It is stored as a recipe in the curation folder (`edits.json`, logged in `edits.log`), never written into the photo file, and the server renders it into the photo's derivatives so everyone sees the edited photo.
+
+- **Lives in:** `docs/product/photo-wall-experience.md`; code in `src/shared/api/edits.ts`, `src/server/curation/edits.ts`, `src/server/media/edit-render.ts`, `src/client/src/features/editor/`
+- **Change risk:** medium — it changes how photos look and their shape on the wall, but never the files
+- **Surfaced to users:** yes — the curator's Edit button; viewers see the result
+- **Notes:** the editor previews with Pixi's ColorMatrixFilter using the same color matrix the server applies, so colors match exactly; blur and grain are close, not pixel-identical
+
+### Best of (Starred album)
+A virtual album of the photos the curator starred. It isn't a folder: stars are stored as a list of photo paths (`starred.json` in the curation folder). Viewers see a starred photo in it even when the photo's own album is in storage; hidden photos are left out.
+
+- **Lives in:** `docs/product/photo-wall-experience.md`; code in `src/server/curation/catalog.ts`
+- **Surfaced to users:** yes — "★ Best of" at the top of the album picker; the ☆ Best of button in the photo view for the curator
+- **Notes:** called "starred" in code and `starred.json`
+
+### Private photo
+A photo the curator marked private: guests never see it, in its album or in Best of, but it stays in place and the curator still sees it. Stored as a list of paths in `private.json` in the curation folder. Different from a rejected (hidden) photo, which is a bad shot moved into `_hidden`.
+
+- **Lives in:** `docs/product/photo-wall-experience.md`; code in `src/server/curation/catalog.ts`
+- **Surfaced to users:** to the curator — "Make private" / "🔒 Private" in the photo view
+
+### Share link
+A short link, derived from its content, to a set of albums plus the photo in the middle of the screen. Opening it shows those albums (limited to what is on display) and glides to that photo. Replaced playlists.
+
+- **Lives in:** `docs/product/photo-wall-experience.md`; stored under `shares/` in the curation folder
+- **Surfaced to users:** yes — "Copy link to this view" in the menu
+
+### Curation folder
+Where curation state lives: `albums.json`, `moves.log`, `edits.json`, `edits.log`, `shares/`, `starred.json`, `private.json`, the hashed `curator-pin`, the one-time `setup-code` and the session secret. Defaults to `<data root>/curation`; `PHOTO_WALL_CURATION_ROOT` moves it. Unlike the snapshot and thumbnail cache it can't be rebuilt, so keep it when clearing the data root and back it up.
+
+- **Lives in:** `docs/runbooks/photo-wall-docker-lan.md`
+- **Change risk:** high — losing it puts every album back in storage
 
 ### Two-axis trackpad panning
 The MVP motion model for the photo wall: trackpad wheel deltas drive simultaneous horizontal and vertical camera movement across the wall, rather than only vertical scrolling.
@@ -102,7 +154,7 @@ The simple, viewport-sized overlay opened when a user clicks a non-dragged photo
 - **Surfaced to users:** yes — it is the primary single-photo view
 
 ### Trusted-LAN-only
-The deployment posture for the MVP: the app is intended to run on the operator's home network with no auth boundary and no internet exposure. Threat scope is limited to safe filesystem handling and operator-facing diagnostics, not hostile-network defense.
+The deployment posture for the MVP: the app is intended to run on the operator's home network with no internet exposure. Browsing needs no login; the only auth is the single curator PIN. Threat scope is limited to safe filesystem handling and operator-facing diagnostics, not hostile-network defense.
 
 - **Lives in:** `docs/system/photo-library-source-and-runtime.md`
 - **Why it exists:** scopes the runtime and threat model so MVP work is not pulled into multi-user, auth, or internet-facing concerns
@@ -211,7 +263,7 @@ A finite photo wall that loops seamlessly at its left/right and top/bottom edges
 - **Surfaced to users:** yes — directly experienced during wall navigation
 
 ### Filter menu
-The secondary control surface opened from the small circular menu button. It exposes filtering controls without turning the page into a chrome-heavy application shell.
+The secondary control surface opened from the small circular menu button. It holds the album picker, the share link and the curator controls without turning the page into a chrome-heavy application shell.
 
 - **Lives in:** `docs/product/photo-wall-experience.md`
 - **Why it exists:** preserves the minimal default UI while still allowing photo set controls
@@ -238,11 +290,3 @@ The contextual directional label that appears only on navigational intent in gro
 - **Change risk:** medium to high — changing it affects navigation discoverability, chrome density, and grouped-view feel
 - **Surfaced to users:** yes — directly visible during grouped navigation
 - **Notes:** signpost labels stay hidden by default, remain suppressed while the focused-photo modal is open, use the motion itself as the destination cue after click/tap glide, and omit the album that already dominates most of the current viewport so the user is not told to navigate toward what they are clearly already viewing
-
-### Light edit
-The curator's non-destructive edit of one photo: crop, straighten, quarter turns, flips, temperature, exposure and the other light and color adjustments, blur, grain and a look. It is stored as a recipe in the curation folder (`edits.json`, logged in `edits.log`), never written into the photo file, and the server renders it into the photo's derivatives so everyone sees the edited photo.
-
-- **Lives in:** `docs/product/photo-wall-experience.md`; code in `src/shared/api/edits.ts`, `src/server/curation/edits.ts`, `src/server/media/edit-render.ts`, `src/client/src/features/editor/`
-- **Change risk:** medium — it changes how photos look and their shape on the wall, but never the files
-- **Surfaced to users:** yes — the curator's Edit button; viewers see the result
-- **Notes:** the editor previews with Pixi's ColorMatrixFilter using the same color matrix the server applies, so colors match exactly; blur and grain are close, not pixel-identical

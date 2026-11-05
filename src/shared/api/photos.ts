@@ -7,8 +7,9 @@
 // the active snapshot is rejected with an explicit reset signal rather
 // than silently returning unrelated rows.
 
-import type { YearSource } from './library.js';
+import { hiddenFolderDepth } from './curation.js';
 import type { PhotoEdit } from './edits.js';
+import type { YearSource } from './library.js';
 
 /** Server-defined hard cap on a single page request. */
 export const PHOTOS_PAGE_MAX_LIMIT = 5000;
@@ -43,6 +44,10 @@ export interface PhotoQueryRecord {
   edit?: PhotoEdit;
   /** Fingerprint of `edit`; part of the media URL so edits bust caches. */
   editVersion?: string;
+  /** The curator starred it, so it's in Best of. */
+  starred?: boolean;
+  /** Guests never see it; only the curator gets this flag. */
+  private?: boolean;
 }
 
 /** Reason a snapshot-bound cursor is no longer usable. */
@@ -72,9 +77,8 @@ export interface PhotosQuerySuccessResponse {
    */
   totalMatching: number;
   /**
-   * Filter set echoed back, after playlist expansion has been applied.
-   * Lets the client surface "this playlist resolved to years=…,
-   * folders=…" without re-fetching the playlist.
+   * Filter set echoed back after the server resolved it. With nothing
+   * picked, `folders` holds the curator's default view.
    */
   appliedFilters: ResolvedPhotoFilters;
 }
@@ -85,26 +89,24 @@ export type PhotosQueryResponse =
 
 /**
  * Filter inputs accepted by the query endpoint. All filters combine
- * with AND semantics. `playlist` expands to a saved (years, folders)
- * preset and intersects with any inline filters the client also sent.
+ * with AND semantics.
  */
 export interface PhotosQueryFilters {
   years?: number[];
   folders?: string[];
   /** Folders carved back out of `folders`; see `folderSelectionIncludes`. */
   excludeFolders?: string[];
-  playlistId?: string;
+  /** Include the Starred album (alongside any folders). */
+  starred?: boolean;
 }
 
-/**
- * Filters after playlist expansion has been applied, with the
- * remaining inline filters intersected in.
- */
+/** Filters as the server applied them. */
 export interface ResolvedPhotoFilters {
   years: number[];
   folders: string[];
   excludeFolders: string[];
-  playlistId: string | null;
+  /** The Starred album is part of the view. */
+  starred?: boolean;
 }
 
 /**
@@ -115,6 +117,10 @@ export interface ResolvedPhotoFilters {
  * so a nested folder can be excluded from a selected parent and a
  * deeper folder re-included under that exclusion. With no include
  * rules the selection starts from the whole library.
+ *
+ * A `_hidden` folder never comes along with a selected parent: its
+ * photos are included only by a rule on the `_hidden` folder itself or
+ * deeper.
  */
 export function folderSelectionIncludes(
   directoryPath: string,
@@ -137,6 +143,7 @@ export function folderSelectionIncludes(
       included = false;
     }
   }
+  if (included && depth < hiddenFolderDepth(directoryPath)) return false;
   return included;
 }
 

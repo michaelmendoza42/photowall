@@ -11,6 +11,7 @@ import {
 } from '../../shared/api/media.js';
 import type { LibraryService } from '../snapshots/library-service.js';
 import type { DerivativeService } from '../media/derivative-service.js';
+import type { CurationService } from '../curation/service.js';
 import {
   MediaDiagnostics,
   type DiagnosticMediaFormat,
@@ -22,6 +23,8 @@ import { registerMediaDiagnosticsRoute } from './media-diagnostics.js';
 const QuerySchema = z.object({
   variant: z.enum(['thumb', 'wall', 'modal', 'detail']).default('wall'),
   format: z.enum(['webp', 'jpeg']).default(DEFAULT_MEDIA_FORMAT),
+  /** `original` skips the edit; only the curator's editor asks for it. */
+  edit: z.enum(['original']).optional(),
 });
 
 const ParamsSchema = z.object({
@@ -33,6 +36,7 @@ export async function registerMediaRoutes(
   deps: {
     library: LibraryService;
     derivatives: DerivativeService;
+    curation: CurationService;
     diagnostics?: MediaDiagnostics;
   },
 ): Promise<void> {
@@ -90,10 +94,22 @@ export async function registerMediaRoutes(
         });
       }
 
+      // Photos this visitor can't see (in storage or hidden) don't exist for them.
+      const role = deps.curation.roleOf(request);
+      const catalog = deps.curation.catalogFor(role);
+      const photo = catalog?.byId.get(params.data.photoId);
+      if (!photo) {
+        record(404, 'photo_not_found');
+        return sendError(reply, 404, { error: 'photo_not_found' });
+      }
+
       const outcome = await deps.derivatives.generate(snapshot, {
         photoId: params.data.photoId,
         variant,
         format,
+        ...(photo.edit && !(query.data.edit === 'original' && role === 'curator')
+          ? { edit: photo.edit }
+          : {}),
       });
 
       if (!outcome.ok) {

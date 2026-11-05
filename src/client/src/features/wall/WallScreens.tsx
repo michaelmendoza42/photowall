@@ -130,6 +130,20 @@ export function EmptyLibraryState({
   );
 }
 
+export function NothingOnDisplayState(): JSX.Element {
+  return (
+    <StateFrame
+      testId="wall-state-nothing-on-display"
+      eyebrow="in storage"
+      title="Nothing on display yet."
+    >
+      <p className="wall__state-body">
+        Check back soon.
+      </p>
+    </StateFrame>
+  );
+}
+
 export function NoResultsState({
   status,
   filters,
@@ -144,8 +158,7 @@ export function NoResultsState({
       title="No photos match the current filters."
     >
       <p className="wall__state-body">
-        Clear the active filters or pick a different playlist to widen the
-        result set.
+        Pick other albums to widen the result set.
       </p>
       <dl className="wall__state-meta">
         <dt>library photo count</dt>

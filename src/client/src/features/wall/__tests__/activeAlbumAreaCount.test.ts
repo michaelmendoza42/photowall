@@ -37,7 +37,6 @@ function filters(partial: Partial<ResolvedPhotoFilters>): ResolvedPhotoFilters {
     years: [],
     folders: [],
     excludeFolders: [],
-    playlistId: null,
     ...partial,
   };
 }
@@ -79,13 +78,12 @@ describe('deriveActiveAlbumAreaCount', () => {
     ).toBe(2);
   });
 
-  it('returns multiple areas for a multi-album playlist context', () => {
+  it('returns multiple areas for a multi-album shared selection', () => {
     expect(
       deriveActiveAlbumAreaCount({
         filters: filters({
           folders: ['2024/a', '2024/b'],
           excludeFolders: [],
-          playlistId: 'pl-1',
         }),
         facets: FACETS,
         photos: [photo('a1', '2024/a'), photo('b1', '2024/b')],

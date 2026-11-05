@@ -20,6 +20,10 @@ export class ApiError extends Error {
 export interface FetchJsonOptions {
   signal?: AbortSignal;
   searchParams?: URLSearchParams;
+  method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
+  /** Sent as JSON. */
+  body?: unknown;
+  headers?: Record<string, string>;
 }
 
 export async function fetchJson<T>(
@@ -33,8 +37,13 @@ export async function fetchJson<T>(
   let res: Response;
   try {
     res = await fetch(url, {
-      method: 'GET',
-      headers: { accept: 'application/json' },
+      method: options.method ?? 'GET',
+      headers: {
+        accept: 'application/json',
+        ...(options.body === undefined ? {} : { 'content-type': 'application/json' }),
+        ...options.headers,
+      },
+      ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
       signal: options.signal,
     });
   } catch (err) {
@@ -57,9 +66,11 @@ export async function fetchJson<T>(
 
   if (!res.ok) {
     const detail =
-      typeof body === 'object' && body !== null && 'error' in body
-        ? String((body as { error: unknown }).error)
-        : `HTTP ${res.status}`;
+      typeof body === 'object' && body !== null && 'detail' in body
+        ? String((body as { detail: unknown }).detail)
+        : typeof body === 'object' && body !== null && 'error' in body
+          ? String((body as { error: unknown }).error)
+          : `HTTP ${res.status}`;
     throw new ApiError(detail, res.status, body);
   }
 

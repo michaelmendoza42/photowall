@@ -2,7 +2,15 @@ import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import type { ScanState } from '../../shared/api/library.js';
-import { scanLibrary } from '../scanner/walk.js';
+import {
+  buildFolderFacets,
+  buildYearFacets,
+  photoIdFromPath,
+  scanLibrary,
+} from '../scanner/walk.js';
+import { relativeDirname } from '../scanner/paths.js';
+import type { PhotoRecord } from '../scanner/types.js';
+import { deriveYearFromRelativeDir } from '../scanner/year.js';
 import { buildSnapshot, type PersistedSnapshot } from './schema.js';
 import {
   DataRootError,
@@ -187,6 +195,67 @@ export class LibraryService {
     return promise;
   }
 
+  /**
+   * Record photos that moved inside the library (curation hide/restore)
+   * without a full rescan, and persist the updated snapshot. A photo's
+   * id follows its path, so moved photos get new ids. Returns the moved
+   * records in input order.
+   */
+  async applyPhotoMoves(
+    moves: readonly { photoId: string; relativePath: string }[],
+  ): Promise<{ snapshot: PersistedSnapshot; moved: PhotoRecord[] }> {
+    // A scan that started before the move may land without it; let it
+    // finish, then apply the move on top.
+    if (this.inflight) await this.inflight.catch(() => undefined);
+    const active = this.snapshot.active;
+    if (!active) throw new Error('no active snapshot to update');
+
+    const byId = new Map(active.photos.map((photo) => [photo.id, photo]));
+    const byPath = new Map(active.photos.map((photo) => [photo.relativePath, photo]));
+    const moved: PhotoRecord[] = [];
+    for (const move of moves) {
+      const existing = byPath.get(move.relativePath);
+      if (existing) {
+        // Already at the new path, e.g. a rescan saw the move first.
+        moved.push(existing);
+        continue;
+      }
+      const source = byId.get(move.photoId);
+      if (!source) throw new Error(`photo ${move.photoId} is not in the snapshot`);
+      const directoryPath = relativeDirname(move.relativePath);
+      const { year, source: yearSource } = deriveYearFromRelativeDir(directoryPath);
+      const record: PhotoRecord = {
+        ...source,
+        id: photoIdFromPath(move.relativePath),
+        relativePath: move.relativePath,
+        directoryPath,
+        filename: move.relativePath.split('/').at(-1) ?? source.filename,
+        year,
+        yearSource,
+      };
+      byId.delete(source.id);
+      byPath.delete(source.relativePath);
+      byId.set(record.id, record);
+      byPath.set(record.relativePath, record);
+      moved.push(record);
+    }
+
+    const photos = [...byPath.values()].sort((a, b) =>
+      a.relativePath < b.relativePath ? -1 : a.relativePath > b.relativePath ? 1 : 0,
+    );
+    const snapshot: PersistedSnapshot = {
+      ...active,
+      snapshotId: randomUUID(),
+      photoCount: photos.length,
+      photos,
+      folders: buildFolderFacets(photos),
+      years: buildYearFacets(photos),
+    };
+    await writeSnapshotAtomically(this.snapshotPaths.snapshotFile, snapshot);
+    this.snapshot.active = snapshot;
+    return { snapshot, moved };
+  }
+
   private async doRescan(): Promise<PersistedSnapshot> {
     if (!this.resolvedLibraryRoot) {
       throw new Error('LibraryService.initialize must be called before rescan');
@@ -200,10 +269,29 @@ export class LibraryService {
     );
 
     try {
+      const prior =
+        this.snapshot.active?.libraryRoot === this.resolvedLibraryRoot
+          ? this.snapshot.active
+          : null;
       const scan = await scanLibrary(this.resolvedLibraryRoot, {
         logger: this.logger,
         topLevelYearsOnly: this.options.scanTopLevelYearsOnly ?? false,
+        previous: prior
+          ? new Map(prior.photos.map((photo) => [photo.relativePath, photo]))
+          : undefined,
       });
+      if (prior && sameLibraryContents(prior, scan)) {
+        // Nothing changed: keep the snapshot (and its id), so open walls
+        // keep their layout and nothing is rewritten.
+        this.snapshot.state = 'ready';
+        this.snapshot.lastRescanCompletedAt = new Date().toISOString();
+        this.snapshot.lastError = null;
+        this.logger?.info?.(
+          { snapshotId: prior.snapshotId, photoCount: prior.photoCount, durationMs: scan.scanDurationMs },
+          'library scan completed: unchanged',
+        );
+        return prior;
+      }
       const snapshot = buildSnapshot(scan, randomUUID());
       await writeSnapshotAtomically(this.snapshotPaths.snapshotFile, snapshot);
       this.snapshot.active = snapshot;
@@ -283,6 +371,34 @@ export class LibraryService {
       );
     }
   }
+}
+
+/** The scan found exactly the photos (and warnings) the snapshot already has. */
+function sameLibraryContents(
+  snapshot: PersistedSnapshot,
+  scan: { photos: readonly PhotoRecord[]; warnings: readonly { kind: string; path: string }[] },
+): boolean {
+  if (snapshot.photos.length !== scan.photos.length) return false;
+  if (snapshot.warnings.length !== scan.warnings.length) return false;
+  for (let i = 0; i < scan.photos.length; i++) {
+    const a = snapshot.photos[i]!;
+    const b = scan.photos[i]!;
+    if (
+      a.id !== b.id ||
+      a.relativePath !== b.relativePath ||
+      a.width !== b.width ||
+      a.height !== b.height ||
+      a.fileSize !== b.fileSize ||
+      a.mtimeMs !== b.mtimeMs ||
+      a.year !== b.year ||
+      a.yearSource !== b.yearSource
+    ) {
+      return false;
+    }
+  }
+  return snapshot.warnings.every(
+    (w, i) => w.kind === scan.warnings[i]!.kind && w.path === scan.warnings[i]!.path,
+  );
 }
 
 function pathsOverlap(a: string, b: string): boolean {

@@ -34,10 +34,11 @@ export function useLibraryStatus(): UseQueryResult<LibraryStatusResponse> {
 
 export function useLibraryFacets(
   enabled = true,
+  viewAsGuest = false,
 ): UseQueryResult<LibraryFacetsResponse> {
   return useQuery({
-    queryKey: queryKeys.libraryFacets,
-    queryFn: ({ signal }) => fetchLibraryFacets(signal),
+    queryKey: [...queryKeys.libraryFacets, viewAsGuest ? 'guest' : 'own'],
+    queryFn: ({ signal }) => fetchLibraryFacets(signal, viewAsGuest),
     enabled,
     staleTime: 30_000,
   });

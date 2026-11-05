@@ -9,7 +9,7 @@ export function createQueryClient(): QueryClient {
         refetchOnWindowFocus: false,
         // Surface backend errors through the typed error path rather
         // than masking them with optimistic retries on snapshot-changed
-        // or playlist-not-found responses.
+        // responses.
         retry: 1,
         staleTime: 5_000,
       },

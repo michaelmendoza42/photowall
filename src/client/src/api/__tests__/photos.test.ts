@@ -29,21 +29,13 @@ describe('buildPhotosQueryParams', () => {
     expect(params.getAll('folder')).toEqual(['2023/birthday']);
   });
 
-  it('passes through a playlist id', () => {
+  it('never sends a playlist parameter', () => {
     const params = buildPhotosQueryParams({
-      filters: { playlistId: 'pl-favourites' },
-      cursor: null,
-    });
-    expect(params.get('playlist')).toBe('pl-favourites');
-  });
-
-  it('combines playlist with inline year filters', () => {
-    const params = buildPhotosQueryParams({
-      filters: { playlistId: 'pl-1', years: [2024] },
+      filters: { years: [2024] },
       cursor: 'c',
       limit: 30,
     });
-    expect(params.get('playlist')).toBe('pl-1');
+    expect(params.has('playlist')).toBe(false);
     expect(params.getAll('year')).toEqual(['2024']);
     expect(params.get('cursor')).toBe('c');
     expect(params.get('limit')).toBe('30');

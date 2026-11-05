@@ -10,11 +10,26 @@ import {
   useInfinitePhotos,
 } from '../../hooks/useInfinitePhotos.js';
 import {
-  useCreatePlaylist,
-  useDeletePlaylist,
-  usePlaylists,
-  useUpdatePlaylist,
-} from '../../hooks/usePlaylists.js';
+  useAlbumCuration,
+  useCurationSession,
+  useChooseCuratorPin,
+  useCuratorLogin,
+  useCuratorLogout,
+  useMovePhoto,
+  usePhotoEdit,
+  useRescanLibrary,
+  useSetAlbumDisplay,
+  useSetDefaultView,
+  useSetPhotoPrivate,
+  useStarPhoto,
+} from '../../hooks/useCuration.js';
+import { createShare, fetchShare } from '../../api/curation.js';
+import { queryKeys } from '../../hooks/queryKeys.js';
+import {
+  SHARE_URL_PARAM,
+  isInHiddenFolder,
+} from '../../../../shared/api/curation.js';
+import { CurationToast, type CurationToastState } from './CurationToast.js';
 import {
   EMPTY_FILTERS,
   ACTIVE_FILTERS_STORAGE_KEY,
@@ -31,6 +46,8 @@ import {
 import { INITIAL_LAYOUT } from '../../state/layout.js';
 import { DebugOverlay } from '../debug/DebugOverlay.js';
 import { FocusedPhotoLightbox } from '../modal/FocusedPhotoLightbox.js';
+import { PhotoEditor } from '../editor/PhotoEditor.js';
+import { isNeutralEdit, type PhotoEdit } from '../../../../shared/api/edits.js';
 import { ControlsPanel } from '../controls/ControlsPanel.js';
 import {
   INITIAL_FOCUSED_PHOTO_STATE,
@@ -42,6 +59,7 @@ import {
   EmptyLibraryState,
   LoadingState,
   NoResultsState,
+  NothingOnDisplayState,
   ScanningState,
   SnapshotChangedState,
 } from './WallScreens.js';
@@ -66,6 +84,7 @@ import {
   PHOTOS_PAGE_MAX_LIMIT,
   type PhotoQueryRecord,
   type PhotosQueryResponse,
+  type PhotosQuerySuccessResponse,
 } from '../../../../shared/api/photos.js';
 
 const DEV_PAGE_SIZE_ENV = import.meta.env.VITE_PHOTOS_PAGE_SIZE as
@@ -86,7 +105,10 @@ export function WallShell(): JSX.Element {
     // back to the global wall.
     return parseActiveFilters(window.localStorage.getItem(ACTIVE_FILTERS_STORAGE_KEY));
   });
-  const [menuOpen, setMenuOpen] = useState(false);
+  // The PIN form only appears on the unlisted curator route, which opens
+  // straight onto it.
+  const [pinEntry, setPinEntry] = useState(() => isCuratorRoute());
+  const [menuOpen, setMenuOpen] = useState(pinEntry);
   const [controlsError, setControlsError] = useState<string | null>(null);
   const [libraryRootError, setLibraryRootError] = useState<string | null>(null);
   const [camera, setCamera] = useState(INITIAL_CAMERA);
@@ -100,13 +122,48 @@ export function WallShell(): JSX.Element {
 
   const statusQuery = useLibraryStatus();
   const updateLibraryRoot = useUpdateLibraryRoot();
-  const facetsQuery = useLibraryFacets(
-    statusQuery.data?.scanState === 'ready',
+  // A saved snapshot is enough to show the wall; a background rescan
+  // doesn't need to finish first.
+  const hasSnapshot = Boolean(statusQuery.data?.snapshotId);
+  const sessionQuery = useCurationSession();
+  const session = sessionQuery.data ?? null;
+  const isCurator = session?.curator === true;
+  // The curator can preview the wall as a guest sees it while keeping
+  // every curator tool. Remembered on this browser.
+  const [previewAsGuest, setPreviewAsGuest] = useState(() => readGuestPreview());
+  const guestView = isCurator && session?.enabled === true && previewAsGuest;
+  const handleGuestPreviewChange = useCallback((on: boolean) => {
+    setPreviewAsGuest(on);
+    try {
+      window.localStorage.setItem(GUEST_PREVIEW_STORAGE_KEY, on ? '1' : '0');
+    } catch {
+      // Private mode or blocked storage: the switch still works this visit.
+    }
+  }, []);
+  // The wall uses the guest's facets while previewing; the album tree
+  // keeps the curator's own, so closed albums can still be opened.
+  const facetsQuery = useLibraryFacets(hasSnapshot, guestView);
+  const curatorFacetsQuery = useLibraryFacets(hasSnapshot && guestView, false);
+  const treeFacets = guestView ? curatorFacetsQuery.data : facetsQuery.data;
+  const albumsQuery = useAlbumCuration(isCurator);
+  const curatorLogin = useCuratorLogin();
+  const choosePin = useChooseCuratorPin();
+  const curatorLogout = useCuratorLogout();
+  const setAlbumDisplay = useSetAlbumDisplay();
+  const setDefaultView = useSetDefaultView();
+  const movePhoto = useMovePhoto();
+  const photoEdit = usePhotoEdit();
+  const [editingPhoto, setEditingPhoto] = useState<PhotoQueryRecord | null>(null);
+  const [editError, setEditError] = useState<string | null>(null);
+  const rescanLibrary = useRescanLibrary();
+  const [toast, setToast] = useState<CurationToastState | null>(null);
+  const dismissToast = useCallback(() => setToast(null), []);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [sharePending, setSharePending] = useState(false);
+  // A share link opened on load: the photo to center once the wall is up.
+  const pendingShareAnchorRef = useRef<{ photoId: string; zoom: number | null } | null>(
+    null,
   );
-  const playlistsQuery = usePlaylists();
-  const createPlaylist = useCreatePlaylist();
-  const updatePlaylist = useUpdatePlaylist();
-  const deletePlaylist = useDeletePlaylist();
   const queryFilters = useMemo(() => toQueryFilters(filters), [filters]);
 
   const devPageSize = parseDevPageSize();
@@ -114,8 +171,9 @@ export function WallShell(): JSX.Element {
   // loads up front (in big pages); images still load as they come on screen.
   const photosQuery = useInfinitePhotos({
     filters: queryFilters,
-    enabled: statusQuery.data?.scanState === 'ready',
+    enabled: hasSnapshot,
     limit: devPageSize ?? PHOTOS_PAGE_MAX_LIMIT,
+    viewAsGuest: guestView,
   });
 
   useEffect(() => {
@@ -170,6 +228,17 @@ export function WallShell(): JSX.Element {
   }, [hasSnapshotChanged, queryClient, photosQuery]);
 
 
+  // The wall may have opened from the saved snapshot while a rescan ran.
+  // If that rescan found changes (a new snapshot id), reload the photos.
+  const statusSnapshotId = statusQuery.data?.snapshotId ?? null;
+  const pagesSnapshotId =
+    pages?.find((p): p is PhotosQuerySuccessResponse => !('error' in p))?.snapshotId ?? null;
+  useEffect(() => {
+    if (!statusSnapshotId || !pagesSnapshotId || statusSnapshotId === pagesSnapshotId) return;
+    void queryClient.invalidateQueries({ queryKey: ['photos'] });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.libraryFacets });
+  }, [statusSnapshotId, pagesSnapshotId, queryClient]);
+
   const successPages = useMemo(
     () => flattenPhotoPages(pages),
     [pages],
@@ -197,7 +266,7 @@ export function WallShell(): JSX.Element {
           years: filters.years,
           folders: filters.folders,
           excludeFolders: filters.excludeFolders,
-          playlistId: filters.playlistId,
+          ...(filters.starred ? { starred: true } : {}),
         },
         facets: facetsQuery.data ?? null,
         photos,
@@ -209,7 +278,7 @@ export function WallShell(): JSX.Element {
       filters.years,
       filters.folders,
       filters.excludeFolders,
-      filters.playlistId,
+      filters.starred,
       facetsQuery.data,
       photos,
       statusQuery.data?.snapshotId,
@@ -252,7 +321,9 @@ export function WallShell(): JSX.Element {
 
   // Saved selections can name folders that have since disappeared from
   // the library; drop them once the scanned folder list is known.
-  const facetFolders = facetsQuery.data?.folders;
+  // The curator's own folders, so previewing as a guest never prunes
+  // closed albums out of the curator's selection.
+  const facetFolders = treeFacets?.folders;
   useEffect(() => {
     if (!facetFolders || facetFolders.length === 0) return;
     const paths = facetFolders.map((f) => f.path);
@@ -289,8 +360,12 @@ export function WallShell(): JSX.Element {
         data: derivePhotoPageData(pages),
       },
       filters,
+      viewerOfCuratedWall: session?.enabled === true && (!isCurator || guestView),
     }),
     [
+      session?.enabled,
+      isCurator,
+      guestView,
       statusQuery.isLoading,
       statusQuery.error,
       statusQuery.data,
@@ -360,83 +435,291 @@ export function WallShell(): JSX.Element {
     [updateLibraryRoot],
   );
 
-  const handleCreatePlaylist = useCallback(
-    (name: string) => {
-      setControlsError(null);
-      createPlaylist.mutate(
-        {
-          name,
-          filters: {
-            years: filters.years,
-            folders: filters.folders,
-            excludeFolders: filters.excludeFolders,
-          },
-        },
-        {
-          onSuccess: (record) => {
-            // Adopt the new playlist as the current selection so the
-            // operator immediately sees their save as "active".
-            setFilters((prev) => ({ ...prev, playlistId: record.id }));
-          },
-          onError: (err) => {
-            setControlsError(`Could not save playlist: ${err.message}`);
-          },
-        },
-      );
-    },
-    [createPlaylist, filters.years, filters.folders, filters.excludeFolders],
-  );
+  // Once unlocked, leave the curator route so a reload is the plain wall.
+  useEffect(() => {
+    if (!pinEntry || !isCurator) return;
+    setPinEntry(false);
+    const url = new URL(window.location.href);
+    url.pathname = '/';
+    window.history.replaceState(window.history.state, '', url.toString());
+  }, [pinEntry, isCurator]);
 
-  const handleUpdatePlaylist = useCallback(
-    (id: string, patch: { name?: string }) => {
+  const handleLogin = useCallback(
+    (pin: string) => {
       setControlsError(null);
-      // A `patch` with only a name is a rename. An empty patch is the
-      // shape used by "Update with current filters" — translate it into
-      // a filters update at this layer so the ControlsPanel does not
-      // need to know the live filter state in two different places.
-      const isRename = patch.name !== undefined;
-      const payload = isRename
-        ? { name: patch.name as string }
-        : {
-            filters: {
-              years: filters.years,
-              folders: filters.folders,
-              excludeFolders: filters.excludeFolders,
-            },
-          };
-      updatePlaylist.mutate(
-        { id, patch: payload },
-        {
-          onError: (err) => {
-            setControlsError(`Could not update playlist: ${err.message}`);
-          },
-        },
-      );
-    },
-    [updatePlaylist, filters.years, filters.folders, filters.excludeFolders],
-  );
-
-  const handleDeletePlaylist = useCallback(
-    (id: string) => {
-      setControlsError(null);
-      deletePlaylist.mutate(id, {
-        onSuccess: () => {
-          // Drop the playlist out of the active selection if it was
-          // selected. Inline year/folder filters survive so the wall
-          // does not blank unexpectedly.
-          setFilters((prev) =>
-            prev.playlistId === id ? { ...prev, playlistId: null } : prev,
-          );
-        },
-        onError: (err) => {
-          setControlsError(`Could not delete playlist: ${err.message}`);
-        },
+      curatorLogin.mutate(pin, {
+        onError: (err) =>
+          setControlsError(
+            err.message === 'pin_invalid' ? 'That PIN is not right.' : `Could not unlock: ${err.message}`,
+          ),
       });
     },
-    [deletePlaylist],
+    [curatorLogin],
   );
 
-  const playlists = playlistsQuery.data?.playlists ?? [];
+  const handleChoosePin = useCallback(
+    (pin: string, code: string) => {
+      setControlsError(null);
+      choosePin.mutate(
+        { pin, code },
+        {
+          onError: (err) =>
+            setControlsError(
+              err.message === 'setup_code_invalid'
+                ? 'That setup code is not right.'
+                : `Could not set the PIN: ${err.message}`,
+            ),
+        },
+      );
+    },
+    [choosePin],
+  );
+
+  const handleLogout = useCallback(() => {
+    setControlsError(null);
+    curatorLogout.mutate(undefined, {
+      onError: (err) => setControlsError(`Could not lock: ${err.message}`),
+    });
+  }, [curatorLogout]);
+
+  const handleSetDisplay = useCallback(
+    (folder: string, onDisplay: boolean) => {
+      setControlsError(null);
+      setAlbumDisplay.mutate(
+        { folder, onDisplay },
+        { onError: (err) => setControlsError(`Could not update the album: ${err.message}`) },
+      );
+    },
+    [setAlbumDisplay],
+  );
+
+  const defaultViewFolders = albumsQuery.data?.defaultView;
+  const handleToggleDefault = useCallback(
+    (folder: string) => {
+      const current = defaultViewFolders ?? [];
+      const next = current.includes(folder)
+        ? current.filter((f) => f !== folder)
+        : [...current, folder];
+      setControlsError(null);
+      setDefaultView.mutate(
+        { folders: next },
+        { onError: (err) => setControlsError(`Could not update the default view: ${err.message}`) },
+      );
+    },
+    [defaultViewFolders, setDefaultView],
+  );
+
+  const defaultStarred = albumsQuery.data?.defaultStarred ?? false;
+  const handleToggleDefaultStarred = useCallback(() => {
+    setControlsError(null);
+    setDefaultView.mutate(
+      { folders: defaultViewFolders ?? [], starred: !defaultStarred },
+      { onError: (err) => setControlsError(`Could not update the default view: ${err.message}`) },
+    );
+  }, [defaultStarred, defaultViewFolders, setDefaultView]);
+
+  const handleRescan = useCallback(() => {
+    rescanLibrary.mutate(undefined, {
+      onSuccess: () => setToast({ message: 'Rescanning the library…' }),
+      onError: (err) => setToast({ message: `Rescan failed: ${err.message}`, tone: 'error' }),
+    });
+  }, [rescanLibrary]);
+
+  // Share the albums the wall is showing (the default view included)
+  // and the photo in the middle of the screen.
+  const appliedFilters = firstPage?.appliedFilters;
+  const handleShare = useCallback(() => {
+    const view = focusNavigatorRef.current?.currentView() ?? { photoId: null, zoom: null };
+    setSharePending(true);
+    setControlsError(null);
+    createShare({
+      folders: appliedFilters?.folders ?? filters.folders,
+      excludeFolders: appliedFilters?.excludeFolders ?? filters.excludeFolders,
+      anchorPhotoId: view.photoId,
+      zoom: view.zoom,
+      ...((appliedFilters?.starred ?? filters.starred) ? { starred: true } : {}),
+    })
+      .then((record) => {
+        const url = new URL(window.location.href);
+        url.search = '';
+        url.hash = '';
+        url.searchParams.set(SHARE_URL_PARAM, record.id);
+        setShareUrl(url.toString());
+        // The clipboard API needs a secure context; over plain LAN http
+        // the link stays in the box to copy by hand.
+        void navigator.clipboard?.writeText(url.toString()).catch(() => undefined);
+      })
+      .catch((err: Error) => setControlsError(`Could not make a share link: ${err.message}`))
+      .finally(() => setSharePending(false));
+  }, [appliedFilters, filters.folders, filters.excludeFolders, filters.starred]);
+
+  // Open a share link: adopt its albums, then center its photo once the
+  // wall has laid out. The link is dropped from the address bar so a
+  // reload keeps whatever the viewer does next.
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const id = url.searchParams.get(SHARE_URL_PARAM);
+    if (!id) return;
+    url.searchParams.delete(SHARE_URL_PARAM);
+    window.history.replaceState(window.history.state, '', url.toString());
+    fetchShare(id)
+      .then((record) => {
+        if (record.anchorPhotoId) {
+          pendingShareAnchorRef.current = { photoId: record.anchorPhotoId, zoom: record.zoom };
+        }
+        setFilters({
+          years: [],
+          folders: [...record.folders].sort(),
+          excludeFolders: [...record.excludeFolders].sort(),
+          ...(record.starred ? { starred: true } : {}),
+        });
+      })
+      .catch(() => setToast({ message: 'That share link no longer exists.', tone: 'error' }));
+  }, []);
+
+  const wallReady = screen.kind === 'ready' && Boolean(firstPage) && !photosQuery.hasNextPage;
+  useEffect(() => {
+    const anchor = pendingShareAnchorRef.current;
+    if (!wallReady || !anchor || !photosByIdRef.current.has(anchor.photoId)) return undefined;
+    // Let the wall view finish its own first centering first.
+    const frame = requestAnimationFrame(() => {
+      if (focusNavigatorRef.current?.centerOn(anchor.photoId, anchor.zoom)) {
+        pendingShareAnchorRef.current = null;
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [wallReady, photos]);
+
+  const runMove = useCallback(
+    (photo: PhotoQueryRecord, action: 'hide' | 'restore', undoable: boolean) => {
+      movePhoto.mutate(
+        { photoId: photo.id, action },
+        {
+          onSuccess: (result) => {
+            // Step on to the next photo so curating can continue.
+            if (focusedPhotoIdRef.current === photo.id) handleFocusStep('next');
+            if (focusedPhotoIdRef.current === photo.id) handlePhotoClose();
+            const verb = action === 'hide' ? 'Rejected' : 'Restored';
+            setToast({
+              message: `${verb}: ${photo.filename}`,
+              ...(undoable
+                ? {
+                    actionLabel: 'Undo',
+                    onAction: () =>
+                      runMove(result.photo, action === 'hide' ? 'restore' : 'hide', false),
+                  }
+                : {}),
+            });
+          },
+          onError: (err) =>
+            setToast({
+              message: `Could not ${action === 'hide' ? 'reject' : 'restore'} ${photo.filename}: ${err.message}`,
+              tone: 'error',
+            }),
+        },
+      );
+    },
+    [handleFocusStep, handlePhotoClose, movePhoto],
+  );
+
+  const focusedPhotoRecord = focusedPhoto.photo;
+  const curatorAction = useMemo(() => {
+    if (!focusedPhotoRecord || !isCurator || !session?.libraryWrites) return undefined;
+    const kind = isInHiddenFolder(focusedPhotoRecord.directoryPath) ? 'restore' : 'hide';
+    return {
+      kind,
+      pending: movePhoto.isPending,
+      onRun: () => runMove(focusedPhotoRecord, kind, true),
+    } as const;
+  }, [focusedPhotoRecord, isCurator, session?.libraryWrites, movePhoto.isPending, runMove]);
+
+  const starPhoto = useStarPhoto();
+  const curatorStar = useMemo(() => {
+    if (!focusedPhotoRecord || !isCurator) return undefined;
+    const starred = focusedPhotoRecord.starred === true;
+    return {
+      starred,
+      pending: starPhoto.isPending,
+      onToggle: () =>
+        starPhoto.mutate(
+          { photoId: focusedPhotoRecord.id, starred: !starred },
+          {
+            onSuccess: ({ photo }) => {
+              // Show the new state right away; the wall refetches behind.
+              setFocusedPhoto((prev) => (prev.photo?.id === photo.id ? { ...prev, photo } : prev));
+            },
+            onError: (err) =>
+              setToast({
+                message: `Could not change Best of for ${focusedPhotoRecord.filename}: ${err.message}`,
+                tone: 'error',
+              }),
+          },
+        ),
+    };
+  }, [focusedPhotoRecord, isCurator, starPhoto]);
+
+  const setPhotoPrivate = useSetPhotoPrivate();
+  const curatorPrivate = useMemo(() => {
+    if (!focusedPhotoRecord || !isCurator) return undefined;
+    const isPrivate = focusedPhotoRecord.private === true;
+    return {
+      private: isPrivate,
+      pending: setPhotoPrivate.isPending,
+      onToggle: () =>
+        setPhotoPrivate.mutate(
+          { photoId: focusedPhotoRecord.id, private: !isPrivate },
+          {
+            onSuccess: ({ photo }) =>
+              setFocusedPhoto((prev) => (prev.photo?.id === photo.id ? { ...prev, photo } : prev)),
+            onError: (err) =>
+              setToast({
+                message: `Could not change ${focusedPhotoRecord.filename}: ${err.message}`,
+                tone: 'error',
+              }),
+          },
+        ),
+    };
+  }, [focusedPhotoRecord, isCurator, setPhotoPrivate]);
+
+  const handleEditOpen = useMemo(() => {
+    if (!focusedPhotoRecord || !isCurator) return undefined;
+    return () => {
+      setEditError(null);
+      setEditingPhoto(focusedPhotoRecord);
+    };
+  }, [focusedPhotoRecord, isCurator]);
+
+  // Save (or, with null, revert) an edit; the toast can undo it.
+  const runEdit = useCallback(
+    (photo: PhotoQueryRecord, edit: PhotoEdit | null) => {
+      const apply = (target: PhotoQueryRecord, next: PhotoEdit | null, undoable: boolean) => {
+        const previous = target.edit ?? null;
+        photoEdit.mutate(
+          { photoId: target.id, edit: next },
+          {
+            onSuccess: (result) => {
+              setEditingPhoto(null);
+              setFocusedPhoto((prev) =>
+                prev.photo?.id === result.photo.id ? { photo: result.photo } : prev,
+              );
+              setToast({
+                message: `${next ? 'Edited' : 'Back to the original'}: ${target.filename}`,
+                ...(undoable
+                  ? { actionLabel: 'Undo', onAction: () => apply(result.photo, previous, false) }
+                  : {}),
+              });
+            },
+            onError: (err) => {
+              setEditError(`Could not save: ${err.message}`);
+              setToast({ message: `Could not save the edit: ${err.message}`, tone: 'error' });
+            },
+          },
+        );
+      };
+      apply(photo, edit, true);
+    },
+    [photoEdit],
+  );
 
   const sharedWallProps = {
     photos,
@@ -479,6 +762,7 @@ export function WallShell(): JSX.Element {
       {screen.kind === 'empty-library' && (
         <EmptyLibraryState status={screen.status} />
       )}
+      {screen.kind === 'nothing-on-display' && <NothingOnDisplayState />}
       {screen.kind === 'no-results' && (
         <NoResultsState status={screen.status} filters={screen.filters} />
       )}
@@ -501,25 +785,64 @@ export function WallShell(): JSX.Element {
         onToggleOpen={() => setMenuOpen((v) => !v)}
         filters={filters}
         onFiltersChange={handleFiltersChange}
-        facets={facetsQuery.data ?? null}
-        playlists={playlists}
-        onCreatePlaylist={handleCreatePlaylist}
-        onUpdatePlaylist={handleUpdatePlaylist}
-        onDeletePlaylist={handleDeletePlaylist}
-        createPending={createPlaylist.isPending}
-        updatePending={updatePlaylist.isPending}
-        deletePending={deletePlaylist.isPending}
+        facets={treeFacets ?? null}
+        curation={{
+          session,
+          albums: albumsQuery.data ?? null,
+          onLogin: handleLogin,
+          onChoosePin: handleChoosePin,
+          onLogout: handleLogout,
+          onSetDisplay: handleSetDisplay,
+          onToggleDefault: handleToggleDefault,
+          onToggleDefaultStarred: handleToggleDefaultStarred,
+          onRescan: handleRescan,
+          previewAsGuest: guestView,
+          onPreviewAsGuestChange: handleGuestPreviewChange,
+          pinEntry,
+          loginPending: curatorLogin.isPending || choosePin.isPending,
+          rescanPending: rescanLibrary.isPending,
+        }}
+        share={{ onShare: handleShare, pending: sharePending, url: shareUrl }}
         errorMessage={controlsError}
       />
 
-      {focusedPhoto.photo && (
+      {focusedPhoto.photo && !editingPhoto && (
         <FocusedPhotoLightbox
           photo={focusedPhoto.photo}
           onClose={handlePhotoClose}
           onNext={handleFocusNext}
           onPrevious={handleFocusPrevious}
+          curatorAction={curatorAction}
+          curatorStar={curatorStar}
+          curatorPrivate={curatorPrivate}
+          onEdit={handleEditOpen}
         />
       )}
+
+      {editingPhoto && (
+        <PhotoEditor
+          photo={editingPhoto}
+          saving={photoEdit.isPending}
+          error={editError}
+          onCancel={() => setEditingPhoto(null)}
+          onSave={(edit) => runEdit(editingPhoto, isNeutralEdit(edit) ? null : edit)}
+          onRevert={() => runEdit(editingPhoto, null)}
+        />
+      )}
+
+      {guestView && (
+        <button
+          type="button"
+          className="guest-preview-badge"
+          data-testid="guest-preview-badge"
+          onClick={() => handleGuestPreviewChange(false)}
+          title="The wall shows what guests see. Click to go back to your full view."
+        >
+          Previewing as guest · Exit
+        </button>
+      )}
+
+      {toast && <CurationToast toast={toast} onDismiss={dismissToast} />}
 
       {import.meta.env.DEV && (
         <DebugOverlay
@@ -529,13 +852,30 @@ export function WallShell(): JSX.Element {
           layout={layout}
           status={statusQuery.data ?? null}
           facets={facetsQuery.data ?? null}
-          playlistCount={playlistsQuery.data?.playlists.length ?? null}
           wallStats={wallStats}
           dragState={dragState}
         />
       )}
     </main>
   );
+}
+
+const GUEST_PREVIEW_STORAGE_KEY = 'photo-wall.preview-as-guest';
+
+function readGuestPreview(): boolean {
+  try {
+    return window.localStorage.getItem(GUEST_PREVIEW_STORAGE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+/** Unlisted path that shows the curator PIN form: `/curate`. */
+export const CURATOR_ROUTE = '/curate';
+
+function isCuratorRoute(): boolean {
+  if (typeof window === 'undefined') return false;
+  return window.location.pathname.replace(/\/+$/, '') === CURATOR_ROUTE;
 }
 
 /**

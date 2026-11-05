@@ -46,7 +46,6 @@ function filters(partial: Partial<ResolvedPhotoFilters>): ResolvedPhotoFilters {
     years: [],
     folders: [],
     excludeFolders: [],
-    playlistId: null,
     ...partial,
   };
 }
@@ -183,6 +182,41 @@ describe('deriveAlbumAreas', () => {
     ]);
     expect((buckets.get('folder:2024/family') ?? []).map((item) => item.id)).toEqual([
       'family-a',
+    ]);
+  });
+});
+
+describe('the Starred album area', () => {
+  const starred = (p: PhotoQueryRecord): PhotoQueryRecord => ({ ...p, starred: true });
+
+  it('is the only area when only Starred is picked, so the wall stays single', () => {
+    const areas = deriveAlbumAreas({
+      filters: filters({ starred: true }),
+      facets: FACETS,
+      photos: [starred(photo('a', '2024/trip')), starred(photo('b', '2024/family'))],
+      snapshotId: 'snap-1',
+      worldWidth: 1200,
+    });
+    expect(areas.albums.map((album) => album.albumKey)).toEqual(['starred']);
+    expect(areas.grouped).toBe(false);
+  });
+
+  it('holds starred photos no picked album covers', () => {
+    const inTrip = starred(photo('a', '2024/trip'));
+    const fromFamily = starred(photo('b', '2024/family'));
+    const plain = photo('c', '2024/trip');
+    const areas = deriveAlbumAreas({
+      filters: filters({ folders: ['2024/trip'], starred: true }),
+      facets: FACETS,
+      photos: [inTrip, fromFamily, plain],
+      snapshotId: 'snap-1',
+      worldWidth: 1200,
+    });
+    expect(areas.grouped).toBe(true);
+    expect(resolvePhotoAlbumKey(inTrip, areas.albums)).toBe('folder:2024/trip');
+    expect(resolvePhotoAlbumKey(fromFamily, areas.albums)).toBe('starred');
+    expect(bucketPhotosByAlbum([inTrip, fromFamily, plain], areas.albums).get('starred')).toEqual([
+      fromFamily,
     ]);
   });
 });
