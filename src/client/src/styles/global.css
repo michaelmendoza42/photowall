@@ -457,6 +457,10 @@ body {
 	cursor: default;
 }
 
+.focused-photo__slide[data-zoomed='true'] .focused-photo__img {
+	cursor: grab;
+}
+
 .focused-photo__close {
 	position: absolute;
 	top: clamp(0.75rem, 2vw, 1.25rem);

@@ -36,13 +36,13 @@ npm run test:browser
 - `wall-layout-modes.spec.ts` — protects the single-stream versus grouped wall-mode contract and the album-area diagnostics the shell exposes for that distinction
 - `single-stream-wrap-continuity.spec.ts` — protects seamless wrap travel and verifies that the Pixi wall does not reinitialize during full-period travel
 - `hover-cursor-pan.spec.ts` — protects the desktop hover slide: a partly off-screen (or larger-than-viewport) photo glides once until the cursor is at its center, not again while moving within it; fully visible photos never slide
-- `focused-lightbox.spec.ts` — protects focused-photo open/close return and next/previous: each step shows a different photo, glides the wall until it is centered, and stepping reaches every photo once before returning to the start; clicking outside the photo closes it, clicking the photo does not
+- `focused-lightbox.spec.ts` — protects focused-photo open/close return and next/previous: each step shows a different photo, glides the wall until it is centered, and stepping reaches every photo once before returning to the start; clicking outside the photo closes it, clicking the photo does not; a sideways trackpad swipe steps once per swipe and pans instead while zoomed in
 - `wall-hover-modal.spec.ts` — protects the hover pop (slight in-place lift with drop shadow, animating in for each photo while the previous settles back), click-vs-drag suppression, suppression while scrolling, and focused-photo return behavior
 - `album-picker.spec.ts` — protects the album-picker tree: nested folders under top-level folders, a top-level pick selecting everything inside, the partial indicator after deselecting a nested folder (surviving reload), and no year chips or root editor in the menu
 - `grouped-signposts.spec.ts` — protects grouped signpost reveal, glide, modal suppression, and grouped-selection persistence
 - `zoom-detail-tiers.spec.ts` — protects zoom-aware derivative tiers: thumbnails at overview, then screen-resolution tiers (at 2× DPR) for on-screen photos when zoomed in, plus the focused view
 - `media-diagnostics.spec.ts` — proves the real wall advances through browser texture stages, the server observes media outcomes, and neither diagnostic snapshot exposes media identifiers
-- `mobile-wall-gestures.spec.ts` — protects tap-outside-to-close and swipe next/previous on the focused photo, mobile drag/fling: velocity-responsive glide, prompt slow-release stop, pause/reduced-motion/catch cancellation, no backward jitter while a fling settles, and tap-to-open
+- `mobile-wall-gestures.spec.ts` — protects tap-outside-to-close, swipe next/previous and pinch zoom/pan on the focused photo, mobile drag/fling: velocity-responsive glide, prompt slow-release stop, pause/reduced-motion/catch cancellation, no backward jitter while a fling settles, and tap-to-open
 - `mobile-pinch-zoom.spec.ts` — protects touch pinch and zoom buttons, and that touch pinch and trackpad (ctrl/⌘-wheel) zoom pivot on the pinch point or cursor rather than the screen corner
 
 ## Changelog

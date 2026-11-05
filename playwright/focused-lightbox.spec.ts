@@ -159,6 +159,86 @@ test('clicking outside the focused photo closes it, clicking the photo does not'
   await expect(shell).toHaveAttribute('data-modal-open', 'false');
 });
 
+test('a sideways trackpad swipe steps once per swipe; zoomed in, it pans instead', async ({
+  page,
+}) => {
+  const modal = page.getByTestId('focused-photo-modal');
+  await openReadyWall(page);
+  await (await pickCenteredTile(page)).click();
+  await expect(modal).toBeVisible();
+  const box = (await page.getByTestId('focused-photo-image').boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+
+  // Fingers moving left (positive deltaX) step to the next photo, once,
+  // even with a long momentum tail.
+  const first = await requiredAttr(modal, 'data-photo-id');
+  const seen = new Set<string>([first]);
+  await trackpadSwipe(page, 1, (id) => seen.add(id));
+  const second = await requiredAttr(modal, 'data-photo-id');
+  expect(second).not.toBe(first);
+  // Only one step for the whole swipe, tail included.
+  expect([...seen]).toEqual([first, second]);
+
+  // After the wheel goes quiet, swiping the other way steps back.
+  await trackpadSwipe(page, -1);
+  await expect(modal).toHaveAttribute('data-photo-id', first);
+  await page.waitForTimeout(400);
+
+  // Vertical scrolling never steps.
+  for (let i = 0; i < 12; i += 1) await page.mouse.wheel(0, 30);
+  await page.waitForTimeout(400);
+  await expect(modal).toHaveAttribute('data-photo-id', first);
+
+  // Zoomed in, a sideways swipe pans the photo and stays on it.
+  await page.keyboard.down('Control');
+  await page.mouse.wheel(0, -200);
+  await page.keyboard.up('Control');
+  const frame = page.getByTestId('focused-photo-frame');
+  await expect.poll(async () => Number(await frame.getAttribute('data-zoom'))).toBeGreaterThan(1);
+  for (let i = 0; i < 12; i += 1) await page.mouse.wheel(30, 0);
+  await page.waitForTimeout(400);
+  await expect(modal).toHaveAttribute('data-photo-id', first);
+});
+
+/**
+ * A two-finger sideways trackpad swipe: a quick push, then a momentum
+ * tail of decaying events at frame rate for about a second and a half.
+ * `direction` 1 is fingers moving left. Reports each photo shown.
+ */
+async function trackpadSwipe(
+  page: Page,
+  direction: 1 | -1,
+  onPhoto?: (photoId: string) => void,
+): Promise<void> {
+  const seen = await page.evaluate(async (sign) => {
+    const deltas = [
+      ...[20, 40, 60, 60],
+      ...Array.from({ length: 90 }, (_, i) => Math.max(1, Math.round(60 * 0.95 ** i))),
+    ];
+    const ids: string[] = [];
+    const record = () => {
+      const id = document
+        .querySelector('[data-testid="focused-photo-modal"]')
+        ?.getAttribute('data-photo-id');
+      if (id) ids.push(id);
+    };
+    const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
+    for (const delta of deltas) {
+      // Re-query each frame: the photo's element may be replaced on a step.
+      const target = document.querySelector('[data-testid="focused-photo-image"]')!;
+      target.dispatchEvent(
+        new WheelEvent('wheel', { deltaX: sign * delta, bubbles: true, cancelable: true }),
+      );
+      record();
+      await frame();
+    }
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    record();
+    return ids;
+  }, direction);
+  seen.forEach((id) => onPhoto?.(id));
+}
+
 /** Pixels between the viewport center and the nearest copy of the photo's tile center. */
 async function distanceFromViewportCenter(page: Page, photoId: string): Promise<number> {
   return page.evaluate((id) => {

@@ -11,6 +11,20 @@ import Lightbox, { type SlideImage } from 'yet-another-react-lightbox';
 import type { PhotoQueryRecord } from '../../../../shared/api/photos.js';
 import { computeFocusedPhotoRenderSize } from '../wall/hoverPreview.js';
 import {
+  MAX_WHEEL_ZOOM_STEP,
+  WHEEL_ZOOM_SENSITIVITY,
+  type ScreenPoint,
+} from '../wall/zoomInput.js';
+import {
+  LIGHTBOX_ZOOM_FIT,
+  clampLightboxPan,
+  isLightboxZoomed,
+  panLightbox,
+  zoomLightboxAbout,
+  type LightboxSize,
+  type LightboxZoom,
+} from './lightboxZoom.js';
+import {
   resolveWallMediaSource,
   type WallMediaSourcePhoto,
   type WallMediaSourceResolver,
@@ -116,33 +130,49 @@ function useSwipeStep(input: {
       start.current = null;
       if (!from || from.id !== event.pointerId) return;
       const step = swipeStepDirection(event.clientX - from.x, event.clientY - from.y);
-      const stepTo = step === 'next' ? onNext : step === 'previous' ? onPrevious : undefined;
-      if (!step || !stepTo) {
+      if (!slideTo(step)) {
         setAnimating(true);
         setOffset(0);
         return;
       }
       swiped.current = true;
-      if (prefersReducedMotion()) {
-        setOffset(0);
-        stepTo();
-        return;
-      }
-      // Swiping left (next) sends the photo off the left; the new one
-      // comes in from the right, and the reverse for previous.
-      const away = step === 'next' ? -viewportWidth : viewportWidth;
-      setAnimating(true);
-      setOffset(away);
-      later(SWIPE_ANIMATION_MS, () => {
-        incoming.current = -away;
-        stepTo();
-      });
     },
     onPointerCancel() {
       start.current = null;
       setAnimating(true);
       setOffset(0);
     },
+  };
+
+  /**
+   * Slides the photo off toward `step` and steps to the neighbour, which
+   * slides in from the other side. False when there is nothing to step to.
+   */
+  function slideTo(step: 'next' | 'previous' | null): boolean {
+    const stepTo = step === 'next' ? onNext : step === 'previous' ? onPrevious : undefined;
+    if (!step || !stepTo) return false;
+    if (prefersReducedMotion()) {
+      setOffset(0);
+      stepTo();
+      return true;
+    }
+    // Swiping left (next) sends the photo off the left; the new one
+    // comes in from the right, and the reverse for previous.
+    const away = step === 'next' ? -viewportWidth : viewportWidth;
+    setAnimating(true);
+    setOffset(away);
+    later(SWIPE_ANIMATION_MS, () => {
+      incoming.current = -away;
+      stepTo();
+    });
+    return true;
+  }
+
+  /** Drops a swipe in progress without the spring-back (a pinch took over). */
+  const reset = () => {
+    start.current = null;
+    setAnimating(false);
+    setOffset(0);
   };
 
   /** True once for the click a swipe gesture may still deliver. */
@@ -152,7 +182,185 @@ function useSwipeStep(input: {
     return was;
   };
 
-  return { offset, animating, handlers, consumeClick };
+  return { offset, animating, handlers, reset, slideTo, consumeClick };
+}
+
+/** Quiet time that ends a trackpad swipe, including its momentum tail. */
+const WHEEL_SWIPE_IDLE_MS = 250;
+
+/**
+ * A two-finger sideways trackpad swipe steps like a touch swipe: fingers
+ * moving left (positive deltaX) bring in the next photo. One swipe steps
+ * once; the rest of it, and its momentum tail, is ignored until the
+ * wheel goes quiet. Off while the photo is zoomed in (scrolling pans).
+ */
+function useWheelSwipeStep(input: {
+  element: HTMLElement | null;
+  isZoomed: () => boolean;
+  slideTo: (step: 'next' | 'previous' | null) => boolean;
+}) {
+  const latest = useRef(input);
+  latest.current = input;
+  const { element } = input;
+  // Lives outside the listener: the slide element is replaced when the
+  // photo steps, and the swipe's tail must stay locked across that.
+  const gesture = useRef({ dx: 0, dy: 0, stepped: false, idleTimer: 0 });
+
+  useEffect(() => () => window.clearTimeout(gesture.current.idleTimer), []);
+
+  useEffect(() => {
+    if (!element) return undefined;
+    function onWheel(event: WheelEvent): void {
+      if (event.ctrlKey || event.metaKey || latest.current.isZoomed()) return;
+      // Keeps the browser's swipe-to-go-back from taking a sideways swipe.
+      if (Math.abs(event.deltaX) > Math.abs(event.deltaY)) event.preventDefault();
+      const state = gesture.current;
+      window.clearTimeout(state.idleTimer);
+      state.idleTimer = window.setTimeout(() => {
+        state.dx = 0;
+        state.dy = 0;
+        state.stepped = false;
+      }, WHEEL_SWIPE_IDLE_MS);
+      if (state.stepped) return;
+      state.dx += event.deltaX;
+      state.dy += event.deltaY;
+      state.stepped = latest.current.slideTo(swipeStepDirection(-state.dx, -state.dy));
+    }
+    element.addEventListener('wheel', onWheel, { passive: false });
+    return () => element.removeEventListener('wheel', onWheel);
+  }, [element]);
+}
+
+/** Pointer travel, in CSS px, after which a press no longer counts as a tap. */
+const TAP_SLOP_PX = 6;
+
+/**
+ * Pinch zoom on the focused photo. Two fingers zoom about their midpoint
+ * and pan with it; once zoomed in, one finger (or a mouse drag, or a
+ * trackpad scroll) pans, never past the photo's edges. A trackpad pinch
+ * (ctrl/⌘ + wheel) zooms about the cursor. Each new photo opens fitted.
+ */
+function useLightboxPinchZoom(input: {
+  photoId: string;
+  frame: LightboxSize;
+  viewport: LightboxSize;
+  element: HTMLElement | null;
+}) {
+  const { photoId, frame, viewport, element } = input;
+  const [zoom, setZoom] = useState<LightboxZoom>(LIGHTBOX_ZOOM_FIT);
+  const zoomRef = useRef(zoom);
+  const sizes = useRef({ frame, viewport });
+  sizes.current = { frame, viewport };
+  const pointers = useRef(new Map<number, ScreenPoint>());
+  const downAt = useRef<ScreenPoint | null>(null);
+  const moved = useRef(false);
+
+  const apply = (next: LightboxZoom) => {
+    zoomRef.current = next;
+    setZoom(next);
+  };
+  const centered = (point: ScreenPoint): ScreenPoint => ({
+    x: point.x - sizes.current.viewport.width / 2,
+    y: point.y - sizes.current.viewport.height / 2,
+  });
+
+  useLayoutEffect(() => {
+    pointers.current.clear();
+    apply(LIGHTBOX_ZOOM_FIT);
+  }, [photoId]);
+
+  useEffect(() => {
+    apply(clampLightboxPan(zoomRef.current, frame, viewport));
+  }, [frame.width, frame.height, viewport.width, viewport.height]);
+
+  useEffect(() => {
+    if (!element) return undefined;
+    function onWheel(event: WheelEvent): void {
+      const { frame: f, viewport: v } = sizes.current;
+      const current = zoomRef.current;
+      if (event.ctrlKey || event.metaKey) {
+        event.preventDefault();
+        const factor = Math.min(
+          MAX_WHEEL_ZOOM_STEP,
+          Math.max(1 / MAX_WHEEL_ZOOM_STEP, Math.exp(-event.deltaY * WHEEL_ZOOM_SENSITIVITY)),
+        );
+        const at = centered({ x: event.clientX, y: event.clientY });
+        apply(zoomLightboxAbout(current, current.scale * factor, at, at, f, v));
+      } else if (isLightboxZoomed(current)) {
+        event.preventDefault();
+        apply(panLightbox(current, -event.deltaX, -event.deltaY, f, v));
+      }
+    }
+    element.addEventListener('wheel', onWheel, { passive: false });
+    return () => element.removeEventListener('wheel', onWheel);
+  }, [element]);
+
+  const handlers = {
+    onPointerDown(event: PointerEvent<HTMLElement>) {
+      const point = { x: event.clientX, y: event.clientY };
+      pointers.current.set(event.pointerId, point);
+      if (pointers.current.size === 1) {
+        downAt.current = point;
+        moved.current = false;
+      } else {
+        moved.current = true;
+      }
+    },
+    /** True when the move zoomed or panned, so it is not a swipe. */
+    onPointerMove(event: PointerEvent<HTMLElement>): boolean {
+      const map = pointers.current;
+      const previous = map.get(event.pointerId);
+      if (!previous) return false;
+      const point = { x: event.clientX, y: event.clientY };
+      const { frame: f, viewport: v } = sizes.current;
+      const current = zoomRef.current;
+      if (map.size >= 2) {
+        const [a, b] = [...map.values()];
+        const beforeMid = { x: (a!.x + b!.x) / 2, y: (a!.y + b!.y) / 2 };
+        const beforeDistance = Math.hypot(b!.x - a!.x, b!.y - a!.y);
+        map.set(event.pointerId, point);
+        const [c, d] = [...map.values()];
+        const afterMid = { x: (c!.x + d!.x) / 2, y: (c!.y + d!.y) / 2 };
+        const afterDistance = Math.hypot(d!.x - c!.x, d!.y - c!.y);
+        if (beforeDistance > 0 && afterDistance > 0) {
+          apply(
+            zoomLightboxAbout(
+              current,
+              (current.scale * afterDistance) / beforeDistance,
+              centered(beforeMid),
+              centered(afterMid),
+              f,
+              v,
+            ),
+          );
+        }
+        return true;
+      }
+      map.set(event.pointerId, point);
+      if (!isLightboxZoomed(current)) return false;
+      const from = downAt.current;
+      if (from && Math.hypot(point.x - from.x, point.y - from.y) > TAP_SLOP_PX) {
+        moved.current = true;
+      }
+      apply(panLightbox(current, point.x - previous.x, point.y - previous.y, f, v));
+      return true;
+    },
+    onPointerUp(event: PointerEvent<HTMLElement>) {
+      pointers.current.delete(event.pointerId);
+    },
+  };
+
+  /** Pointers currently pressed on the photo. */
+  const pointerCount = () => pointers.current.size;
+
+  /** True once for the click a pinch or pan may still deliver. */
+  const consumeClick = (): boolean => {
+    const was = moved.current;
+    moved.current = false;
+    return was;
+  };
+
+  return { zoom, zoomRef, handlers, pointerCount, consumeClick };
 }
 
 function prefersReducedMotion(): boolean {
@@ -220,6 +428,59 @@ export function FocusedPhotoLightbox(
     [photo.height, photo.width, viewportSize],
   );
 
+  const [slideElement, setSlideElement] = useState<HTMLDivElement | null>(null);
+  const pinch = useLightboxPinchZoom({
+    photoId: photo.id,
+    frame: renderSize,
+    viewport: viewportSize,
+    element: slideElement,
+  });
+  const zoomed = isLightboxZoomed(pinch.zoom);
+  useWheelSwipeStep({
+    element: slideElement,
+    isZoomed: () => isLightboxZoomed(pinch.zoomRef.current),
+    slideTo: swipe.slideTo,
+  });
+
+  // Zooming in swaps to the larger detail derivative for this photo.
+  const [wantsDetail, setWantsDetail] = useState(false);
+  useLayoutEffect(() => setWantsDetail(false), [photo.id]);
+  useEffect(() => {
+    if (zoomed) setWantsDetail(true);
+  }, [zoomed]);
+  const imageVariant = wantsDetail ? 'detail' : 'modal';
+  const imageSrc = wantsDetail
+    ? resolveWallMediaSource(photo, 'detail', mediaSourceResolver)
+    : slide.src;
+
+  const gestureHandlers = {
+    onPointerDown(event: PointerEvent<HTMLElement>) {
+      pinch.handlers.onPointerDown(event);
+      if (pinch.pointerCount() > 1) swipe.reset();
+      else if (!isLightboxZoomed(pinch.zoomRef.current)) swipe.handlers.onPointerDown(event);
+    },
+    onPointerMove(event: PointerEvent<HTMLElement>) {
+      if (!pinch.handlers.onPointerMove(event)) swipe.handlers.onPointerMove(event);
+    },
+    onPointerUp(event: PointerEvent<HTMLElement>) {
+      pinch.handlers.onPointerUp(event);
+      swipe.handlers.onPointerUp(event);
+    },
+    onPointerCancel(event: PointerEvent<HTMLElement>) {
+      pinch.handlers.onPointerUp(event);
+      swipe.handlers.onPointerCancel();
+    },
+    onPointerLeave(event: PointerEvent<HTMLElement>) {
+      if (event.pointerType === 'mouse') pinch.handlers.onPointerUp(event);
+    },
+  };
+
+  const frameX = swipe.offset + pinch.zoom.x;
+  const frameTransform =
+    frameX || pinch.zoom.y || zoomed
+      ? `translate(${frameX}px, ${pinch.zoom.y}px) scale(${pinch.zoom.scale})`
+      : undefined;
+
   const portalContainer = {
     className: 'focused-photo--lightbox',
     'data-testid': 'focused-photo-modal',
@@ -255,20 +516,25 @@ export function FocusedPhotoLightbox(
           <div
             className="focused-photo__slide"
             data-testid="focused-photo-backdrop"
+            data-zoomed={zoomed ? 'true' : 'false'}
+            ref={setSlideElement}
             onClick={(event) => {
-              if (swipe.consumeClick()) return;
+              const swiped = swipe.consumeClick();
+              const pinched = pinch.consumeClick();
+              if (swiped || pinched) return;
               if (event.target === event.currentTarget) onClose();
             }}
-            {...swipe.handlers}
+            {...gestureHandlers}
           >
             <div
               className="focused-photo__frame"
               data-testid="focused-photo-frame"
+              data-zoom={pinch.zoom.scale.toFixed(3)}
               style={{
                 width: renderSize.width,
                 height: renderSize.height,
-                transform: swipe.offset ? `translateX(${swipe.offset}px)` : undefined,
-                transition: swipe.animating
+                transform: frameTransform,
+                transition: swipe.animating && !zoomed
                   ? `transform ${SWIPE_ANIMATION_MS}ms ease-out`
                   : undefined,
               }}
@@ -276,8 +542,8 @@ export function FocusedPhotoLightbox(
               <img
                 className="focused-photo__img"
                 data-testid="focused-photo-image"
-                data-media-variant="modal"
-                src={slide.src}
+                data-media-variant={imageVariant}
+                src={imageSrc}
                 alt=""
                 draggable={false}
               />

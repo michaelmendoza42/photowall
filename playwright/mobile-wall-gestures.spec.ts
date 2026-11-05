@@ -254,7 +254,78 @@ test.describe("mobile wall gestures", () => {
 		await performTouchDrag(page, { x: mid - 100, y }, { x: mid + 100, y });
 		await expect(modal).toHaveAttribute("data-photo-id", candidate.photoId);
 	});
+
+	test("pinching the focused photo zooms it; dragging then pans instead of stepping", async ({
+		page,
+	}) => {
+		const candidate = await findTileOverlappedByLaterRow(page);
+		expect(candidate).not.toBeNull();
+		if (!candidate) return;
+		await page.touchscreen.tap(candidate.x, candidate.y);
+		const modal = page.getByTestId("focused-photo-modal");
+		await expect(modal).toHaveAttribute("data-photo-id", candidate.photoId);
+
+		const frame = page.getByTestId("focused-photo-frame");
+		const box = (await page.getByTestId("focused-photo-image").boundingBox())!;
+		const center = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+		await performTwoFingerPinch(page, center, 40, 160);
+		const zoom = Number(await frame.getAttribute("data-zoom"));
+		expect(zoom).toBeGreaterThan(2.5);
+		await expect(page.getByTestId("focused-photo-image")).toHaveAttribute(
+			"data-media-variant",
+			"detail",
+		);
+
+		// One finger now pans the zoomed photo instead of swiping to the next.
+		const beforePan = await frameTranslateX(page);
+		await performTouchDrag(page, { x: center.x + 60, y: center.y }, { x: center.x - 60, y: center.y });
+		await page.waitForTimeout(400);
+		await expect(modal).toHaveAttribute("data-photo-id", candidate.photoId);
+		expect(await frameTranslateX(page)).toBeLessThan(beforePan - 50);
+
+		// Pinching back in returns to the fitted photo, and swiping steps again.
+		await performTwoFingerPinch(page, center, 160, 30);
+		await expect(frame).toHaveAttribute("data-zoom", "1.000");
+		const mid = page.viewportSize()!.width / 2;
+		await performTouchDrag(page, { x: mid + 100, y: center.y }, { x: mid - 100, y: center.y });
+		await expect(modal).not.toHaveAttribute("data-photo-id", candidate.photoId);
+		await expect(frame).toHaveAttribute("data-zoom", "1.000");
+	});
 });
+
+async function frameTranslateX(page: Page): Promise<number> {
+	return page.getByTestId("focused-photo-frame").evaluate((element) => {
+		const transform = getComputedStyle(element).transform;
+		return transform === "none" ? 0 : new DOMMatrix(transform).m41;
+	});
+}
+
+/** Two fingers about `center`, spreading from `fromGap` to `toGap` px apart. */
+async function performTwoFingerPinch(
+	page: Page,
+	center: { x: number; y: number },
+	fromGap: number,
+	toGap: number,
+): Promise<void> {
+	const client = await page.context().newCDPSession(page);
+	const fingers = (gap: number) => [
+		{ id: 61, x: center.x - gap / 2, y: center.y, radiusX: 6, radiusY: 6, force: 1 },
+		{ id: 62, x: center.x + gap / 2, y: center.y, radiusX: 6, radiusY: 6, force: 1 },
+	];
+	await client.send("Input.dispatchTouchEvent", {
+		type: "touchStart",
+		touchPoints: fingers(fromGap),
+	});
+	for (const progress of [0.2, 0.4, 0.6, 0.8, 1]) {
+		await page.waitForTimeout(16);
+		await client.send("Input.dispatchTouchEvent", {
+			type: "touchMove",
+			touchPoints: fingers(fromGap + (toGap - fromGap) * progress),
+		});
+	}
+	await client.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+	await client.detach();
+}
 
 /** A point beside the photo, clear of the side nav buttons and top close button. */
 function pointOutsideBox(
