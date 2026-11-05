@@ -19,6 +19,7 @@ import {
   type PhotoEdit,
 } from '../../../../shared/api/edits.js';
 import type { ScreenRect } from './cropMath.js';
+import { destroyPixiApp } from '../wall/destroyPixiApp.js';
 
 /** Share of the stage the crop fills when the editor fits it. */
 const FIT_VIEW = 0.94;
@@ -55,7 +56,7 @@ export class EditorScene {
       resizeTo: host,
     });
     if (this.destroyed) {
-      this.app.destroy(true, { children: true });
+      destroyPixiApp(this.app);
       return;
     }
     this.app.canvas.classList.add('photo-editor__canvas');
@@ -165,7 +166,7 @@ export class EditorScene {
     if (this.destroyed) return;
     this.destroyed = true;
     if (!this.ready) return;
-    this.app.destroy(true, { children: true });
+    destroyPixiApp(this.app);
     this.texture?.destroy(true);
     this.color.destroy();
     this.blur.destroy();

@@ -12,6 +12,7 @@ import {
   type PixiSceneTileInput,
 } from './pixiScene.js';
 import type { WallMediaSourceResolver } from './mediaSourceResolver.js';
+import { destroyPixiApp } from './destroyPixiApp.js';
 import {
   browserMediaDiagnostics,
   mediaVariantFromSource,
@@ -117,7 +118,7 @@ export const PixiWallSurface = memo(function PixiWallSurface(
         resizeTo: host,
       });
       if (disposed) {
-        app.destroy(true, { children: true });
+        destroyPixiApp(app);
         return;
       }
 
@@ -150,7 +151,7 @@ export const PixiWallSurface = memo(function PixiWallSurface(
       const currentApp = appRef.current;
       appRef.current = null;
       currentApp?.stop();
-      currentApp?.destroy(true, { children: true });
+      if (currentApp) destroyPixiApp(currentApp);
       spriteEntriesRef.current.clear();
       for (const texture of textureCacheRef.current.values()) {
         texture.destroy(true);
