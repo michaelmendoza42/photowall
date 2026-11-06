@@ -5,12 +5,14 @@ import type { PersistedSnapshot } from '../snapshots/schema.js';
 import type { AlbumSettings } from './storage.js';
 import type { EditedPhotoRecord } from './edits.js';
 
-export type CurationRole = 'curator' | 'viewer';
+/** `vip` is an authorized guest: a viewer who also sees private photos. */
+export type CurationRole = 'curator' | 'vip' | 'viewer';
 
 /**
  * The part of the library one kind of visitor can see. Viewers never
  * see `_hidden` folders, and with curation on they only see folders
- * the curator put on display. The curator sees everything.
+ * the curator put on display. Authorized guests see the same, private
+ * photos included. The curator sees everything.
  */
 /** A photo as a visitor sees it: with its edit, star and privacy. */
 export type CatalogPhoto = EditedPhotoRecord & { starred?: boolean; private?: boolean };
@@ -60,11 +62,12 @@ export function buildCatalog(input: {
           };
         });
   const curator = settings !== null && role === 'curator';
+  const seesPrivate = curator || role === 'vip';
   const starred = all.filter(
     (photo) =>
       photo.starred === true &&
       !isInHiddenFolder(photo.directoryPath) &&
-      (curator || photo.private !== true),
+      (seesPrivate || photo.private !== true),
   );
   if (curator) {
     return {
@@ -80,7 +83,7 @@ export function buildCatalog(input: {
   const photos = all.filter(
     (photo) =>
       !isInHiddenFolder(photo.directoryPath) &&
-      photo.private !== true &&
+      (seesPrivate || photo.private !== true) &&
       (onDisplay === null || onDisplay.has(photo.directoryPath)),
   );
   const byId = new Map<string, CatalogPhoto>(photos.map((photo) => [photo.id, photo]));

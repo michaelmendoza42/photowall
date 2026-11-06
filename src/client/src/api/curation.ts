@@ -2,6 +2,7 @@ import {
   CURATION_ALBUM_DISPLAY_PATH,
   CURATION_ALBUMS_PATH,
   CURATION_DEFAULT_VIEW_PATH,
+  CURATION_VIP_PIN_PATH,
   CURATION_PIN_PATH,
   CURATION_RESCAN_PATH,
   CURATION_SESSION_PATH,
@@ -36,6 +37,14 @@ export function chooseCuratorPin(pin: string, code: string): Promise<CurationSes
 
 export function logoutCurator(): Promise<CurationSessionResponse> {
   return fetchJson(CURATION_SESSION_PATH, { method: 'DELETE' });
+}
+
+export function setVipPin(pin: string): Promise<CurationSessionResponse> {
+  return fetchJson(CURATION_VIP_PIN_PATH, { method: 'PUT', body: { pin } });
+}
+
+export function clearVipPin(): Promise<CurationSessionResponse> {
+  return fetchJson(CURATION_VIP_PIN_PATH, { method: 'DELETE' });
 }
 
 export function fetchAlbumCuration(signal?: AbortSignal): Promise<AlbumCurationResponse> {

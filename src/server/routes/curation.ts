@@ -4,6 +4,7 @@ import {
   CURATION_ALBUM_DISPLAY_PATH,
   CURATION_ALBUMS_PATH,
   CURATION_DEFAULT_VIEW_PATH,
+  CURATION_VIP_PIN_PATH,
   CURATION_PIN_PATH,
   CURATION_RESCAN_PATH,
   CURATION_SESSION_PATH,
@@ -28,6 +29,7 @@ import type { PhotoEditResponse } from '../../shared/api/curation.js';
 
 const FolderSchema = z.string().max(1024).regex(FOLDER_PATH_PATTERN);
 const LoginSchema = z.object({ pin: z.string().min(1).max(256) });
+const VipPinSchema = z.object({ pin: z.string().trim().min(4).max(256) });
 const ChoosePinSchema = z.object({
   pin: z.string().trim().min(4).max(256),
   code: z.string().min(1).max(64),
@@ -52,11 +54,16 @@ export async function registerCurationRoutes(
 ): Promise<void> {
   const { curation, library, shares } = deps;
 
-  const sessionView = (request: FastifyRequest): CurationSessionResponse => ({
-    enabled: curation.enabled,
-    curator: curation.roleOf(request) === 'curator',
-    libraryWrites: curation.libraryWrites,
-  });
+  const sessionView = (request: FastifyRequest): CurationSessionResponse => {
+    const role = curation.roleOf(request);
+    return {
+      enabled: curation.enabled,
+      curator: role === 'curator',
+      vip: role === 'vip',
+      vipPinSet: role === 'curator' && curation.vipPinSet,
+      libraryWrites: curation.libraryWrites,
+    };
+  };
 
   /** Replies 403/404 and returns false unless the request is the curator's. */
   const requireCurator = (request: FastifyRequest, reply: FastifyReply): boolean => {
@@ -76,13 +83,19 @@ export async function registerCurationRoutes(
   app.post(CURATION_SESSION_PATH, async (request, reply) => {
     if (!curation.enabled) return sendError(reply, 404, { error: 'curation_disabled' });
     const body = LoginSchema.safeParse(request.body);
-    const cookie = body.success ? await curation.login(body.data.pin) : null;
-    if (!cookie) {
+    const session = body.success ? await curation.login(body.data.pin) : null;
+    if (!session) {
       await new Promise((resolve) => setTimeout(resolve, WRONG_PIN_DELAY_MS));
       return sendError(reply, 401, { error: 'pin_invalid' });
     }
-    reply.header('Set-Cookie', cookie);
-    return { enabled: true, curator: true, libraryWrites: curation.libraryWrites };
+    reply.header('Set-Cookie', session.cookie);
+    return {
+      enabled: true,
+      curator: session.role === 'curator',
+      vip: session.role === 'vip',
+      vipPinSet: session.role === 'curator' && curation.vipPinSet,
+      libraryWrites: curation.libraryWrites,
+    } satisfies CurationSessionResponse;
   });
 
   // First visit to /curate on a server without a PIN: choose one.
@@ -97,12 +110,41 @@ export async function registerCurationRoutes(
     }
     request.log.info('curator PIN chosen');
     reply.header('Set-Cookie', cookie);
-    return { enabled: true, curator: true, libraryWrites: curation.libraryWrites };
+    return {
+      enabled: true,
+      curator: true,
+      vip: false,
+      vipPinSet: false,
+      libraryWrites: curation.libraryWrites,
+    } satisfies CurationSessionResponse;
   });
 
   app.delete(CURATION_SESSION_PATH, async (request, reply) => {
-    reply.header('Set-Cookie', curation.logoutCookie());
-    return { ...sessionView(request), curator: false };
+    reply.header('Set-Cookie', curation.logoutCookies());
+    return { ...sessionView(request), curator: false, vip: false, vipPinSet: false };
+  });
+
+  // The VIP PIN: authorized guests enter it on /vip to see private photos.
+  app.put(CURATION_VIP_PIN_PATH, async (request, reply) => {
+    if (!requireCurator(request, reply)) return reply;
+    const body = VipPinSchema.safeParse(request.body);
+    if (!body.success) return sendError(reply, 400, { error: 'vip_pin_invalid' });
+    const result = await curation.setVipPin(body.data.pin);
+    if (result === 'same_as_curator') {
+      return sendError(reply, 409, {
+        error: 'vip_pin_invalid',
+        detail: 'the VIP PIN must differ from the curator PIN',
+      });
+    }
+    request.log.info('VIP PIN set');
+    return sessionView(request);
+  });
+
+  app.delete(CURATION_VIP_PIN_PATH, async (request, reply) => {
+    if (!requireCurator(request, reply)) return reply;
+    await curation.clearVipPin();
+    request.log.info('VIP PIN turned off');
+    return sessionView(request);
   });
 
   app.get(CURATION_ALBUMS_PATH, async (request, reply) => {

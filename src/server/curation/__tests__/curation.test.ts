@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   CURATION_ALBUM_DISPLAY_PATH,
   CURATION_DEFAULT_VIEW_PATH,
+  CURATION_VIP_PIN_PATH,
   CURATION_PIN_PATH,
   CURATION_SESSION_PATH,
   SHARES_PATH,
@@ -16,6 +17,7 @@ import {
   curationPhotoRestorePath,
   curationPhotoPrivatePath,
   curationPhotoStarPath,
+  type CurationSessionResponse,
   type PhotoMoveResponse,
   type ShareRecord,
 } from '../../../shared/api/curation.js';
@@ -233,7 +235,7 @@ describe('curation routes', () => {
     await start({ pin: null, libraryWrites: true });
 
     const session = await app.inject({ method: 'GET', url: CURATION_SESSION_PATH });
-    expect(session.json()).toEqual({ enabled: false, curator: false, libraryWrites: false });
+    expect(session.json()).toEqual({ enabled: false, curator: false, vip: false, vipPinSet: false, libraryWrites: false });
     expect((await photos()).totalMatching).toBe(4);
     // Even asked for directly, viewers never get hidden photos.
     expect((await photos(undefined, `folder=${WEDDING}/_hidden`)).totalMatching).toBe(0);
@@ -419,6 +421,70 @@ describe('curation routes', () => {
 
     await flag(curationPhotoPrivatePath, { private: false });
     expect((await photos(undefined, 'starred=1')).photos.map((p) => p.id)).toEqual([target.id]);
+  });
+
+  it('shows private photos in place to authorized guests until the VIP PIN changes', async () => {
+    await start({ pin: PIN, libraryWrites: false });
+    const cookie = await login();
+    await curatorPut(cookie, CURATION_ALBUM_DISPLAY_PATH, { folder: WEDDING, onDisplay: true });
+    const target = (await photos(cookie, `folder=${WEDDING}`)).photos[0]!;
+    await app.inject({
+      method: 'POST',
+      url: curationPhotoPrivatePath(target.id),
+      payload: { private: true },
+      headers: { cookie },
+    });
+    await app.inject({
+      method: 'POST',
+      url: curationPhotoStarPath(target.id),
+      payload: { starred: true },
+      headers: { cookie },
+    });
+    const enter = (pin: string) =>
+      app.inject({ method: 'POST', url: CURATION_SESSION_PATH, payload: { pin } });
+
+    // No VIP PIN yet, and only the curator may set one, never equal to the curator PIN.
+    expect((await enter('1357')).statusCode).toBe(401);
+    expect((await curatorPut('', CURATION_VIP_PIN_PATH, { pin: '1357' })).statusCode).toBe(403);
+    expect((await curatorPut(cookie, CURATION_VIP_PIN_PATH, { pin: PIN })).statusCode).toBe(409);
+    const set = await curatorPut(cookie, CURATION_VIP_PIN_PATH, { pin: '1357' });
+    expect(set.json()).toMatchObject({ curator: true, vipPinSet: true });
+
+    const entered = await enter('1357');
+    expect(entered.json()).toMatchObject({ curator: false, vip: true, vipPinSet: false });
+    const vip = String(entered.headers['set-cookie']).split(';')[0]!;
+
+    // The authorized guest sees the private photo in its album, in Best of and as media...
+    const ids = async (who: string | undefined, query: string) =>
+      (await photos(who, query)).photos.map((p) => p.id);
+    expect(await ids(vip, `folder=${WEDDING}`)).toContain(target.id);
+    expect(await ids(vip, 'starred=1')).toEqual([target.id]);
+    const media = (who: string) =>
+      app.inject({
+        method: 'GET',
+        url: `${MEDIA_BASE_PATH}/${target.id}?variant=thumb`,
+        headers: { cookie: who },
+      });
+    expect((await media(vip)).statusCode).toBe(200);
+    // ...but only open albums, and no curator tools.
+    expect((await photos(vip)).totalMatching).toBe((await photos(cookie, `folder=${WEDDING}`)).totalMatching);
+    expect((await curatorPut(vip, CURATION_ALBUM_DISPLAY_PATH, { folder: '', onDisplay: true })).statusCode).toBe(403);
+    // A plain guest still doesn't see it.
+    expect(await ids(undefined, `folder=${WEDDING}`)).not.toContain(target.id);
+
+    // Changing the PIN signs the old browser out; turning it off signs everyone out.
+    await curatorPut(cookie, CURATION_VIP_PIN_PATH, { pin: '8642' });
+    expect(await ids(vip, `folder=${WEDDING}`)).not.toContain(target.id);
+    const again = String((await enter('8642')).headers['set-cookie']).split(';')[0]!;
+    expect(await ids(again, `folder=${WEDDING}`)).toContain(target.id);
+    const off = await app.inject({
+      method: 'DELETE',
+      url: CURATION_VIP_PIN_PATH,
+      headers: { cookie },
+    });
+    expect((off.json() as CurationSessionResponse).vipPinSet).toBe(false);
+    expect(await ids(again, `folder=${WEDDING}`)).not.toContain(target.id);
+    expect((await enter('8642')).statusCode).toBe(401);
   });
 
   it('lets the curator preview the wall as a guest without losing curator powers', async () => {

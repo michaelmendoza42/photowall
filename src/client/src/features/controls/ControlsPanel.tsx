@@ -27,6 +27,9 @@ export interface CurationControls {
   /** First-time setup: choose the PIN, proving access with the setup code. */
   onChoosePin: (pin: string, code: string) => void;
   onLogout: () => void;
+  /** Set or change the VIP PIN; null turns authorized guests off. */
+  onSetVipPin: (pin: string | null) => void;
+  vipPinPending?: boolean;
   onSetDisplay: (folder: string, onDisplay: boolean) => void;
   onToggleDefault: (folder: string) => void;
   /** Add the Starred album to the default view, or take it out. */
@@ -35,8 +38,8 @@ export interface CurationControls {
   /** The wall shows what guests see; curator tools keep working. */
   previewAsGuest: boolean;
   onPreviewAsGuestChange: (on: boolean) => void;
-  /** Show the PIN form. Only the unlisted curator route does. */
-  pinEntry: boolean;
+  /** Show a PIN form: the curator's on /curate, the VIP PIN on /vip. */
+  pinEntry: 'curator' | 'vip' | null;
   loginPending?: boolean;
   rescanPending?: boolean;
 }
@@ -72,8 +75,11 @@ export function ControlsPanel(props: ControlsPanelProps): JSX.Element {
 
   const [pin, setPin] = useState('');
   const [setupCode, setSetupCode] = useState('');
-  const choosingPin = curation.session !== null && !curation.session.enabled;
+  const [vipPin, setVipPin] = useState('');
+  const vipEntry = curation.pinEntry === 'vip';
+  const choosingPin = curation.session !== null && !curation.session.enabled && !vipEntry;
   const isCurator = curation.session?.curator === true;
+  const isVip = curation.session?.vip === true;
   const albums = isCurator ? curation.albums : null;
 
   const folderTree = useMemo(
@@ -136,6 +142,13 @@ export function ControlsPanel(props: ControlsPanelProps): JSX.Element {
       curation.onLogin(trimmed);
     }
     setPin('');
+  }
+
+  function handleSetVipPin(): void {
+    const trimmed = vipPin.trim();
+    if (trimmed.length < 4) return;
+    curation.onSetVipPin(trimmed);
+    setVipPin('');
   }
 
   const curatorTools: CuratorTreeTools | null = displayStates
@@ -253,8 +266,8 @@ export function ControlsPanel(props: ControlsPanelProps): JSX.Element {
                 {curatorTools && (
                   <p className="controls__hint">
                     👁 lets guests pick an album; ⌂ makes the wall open on it. In the photo
-                    view: ★ puts a photo in Favorites, Make private keeps it from guests, Reject
-                    moves a bad shot to _hidden.
+                    view: ★ puts a photo in Favorites, Make private shows it only to
+                    guests with the VIP PIN, Reject moves a bad shot to _hidden.
                   </p>
                 )}
                 <ul className="album-tree" data-testid="controls-folders">
@@ -300,10 +313,30 @@ export function ControlsPanel(props: ControlsPanelProps): JSX.Element {
             )}
           </section>
 
-          {curation.session && (isCurator || curation.pinEntry) && (
+          {isVip && !isCurator && (
+            <section className="controls__section" data-testid="controls-vip">
+              <header className="controls__section-header">
+                <h3 className="controls__section-title">VIP</h3>
+                <button
+                  type="button"
+                  className="controls__link"
+                  data-testid="controls-vip-logout"
+                  onClick={curation.onLogout}
+                >
+                  Sign out
+                </button>
+              </header>
+              <p className="controls__hint">This browser also sees the private photos.</p>
+            </section>
+          )}
+
+          {curation.session &&
+            (isCurator || (curation.pinEntry !== null && !(vipEntry && isVip))) && (
             <section className="controls__section" data-testid="controls-curation">
               <header className="controls__section-header">
-                <h3 className="controls__section-title">Curator</h3>
+                <h3 className="controls__section-title">
+                  {vipEntry && !isCurator ? 'VIP' : 'Curator'}
+                </h3>
                 {isCurator && (
                   <button
                     type="button"
@@ -331,6 +364,47 @@ export function ControlsPanel(props: ControlsPanelProps): JSX.Element {
                     />
                     <span>Preview as guest</span>
                   </label>
+                  <p className="controls__hint" data-testid="controls-vip-pin-status">
+                    {curation.session.vipPinSet
+                      ? 'VIP PIN is on: guests who enter it at /vip see private photos. Changing it signs them all out.'
+                      : 'Set a VIP PIN to let guests who enter it at /vip see private photos.'}
+                  </p>
+                  <div className="controls__create">
+                    <input
+                      type="password"
+                      className="controls__create-input"
+                      data-testid="controls-vip-pin"
+                      name="controls-vip-pin"
+                      aria-label={curation.session.vipPinSet ? 'New VIP PIN' : 'VIP PIN'}
+                      placeholder={curation.session.vipPinSet ? 'New VIP PIN' : 'VIP PIN'}
+                      autoComplete="new-password"
+                      value={vipPin}
+                      onChange={(e) => setVipPin(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleSetVipPin();
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="controls__create-button"
+                      data-testid="controls-vip-pin-set"
+                      onClick={handleSetVipPin}
+                      disabled={vipPin.trim().length < 4 || curation.vipPinPending}
+                    >
+                      {curation.session.vipPinSet ? 'Change' : 'Set'}
+                    </button>
+                  </div>
+                  {curation.session.vipPinSet && (
+                    <button
+                      type="button"
+                      className="controls__link"
+                      data-testid="controls-vip-pin-off"
+                      onClick={() => curation.onSetVipPin(null)}
+                      disabled={curation.vipPinPending}
+                    >
+                      Turn off VIP PIN
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="controls__link"
@@ -368,8 +442,12 @@ export function ControlsPanel(props: ControlsPanelProps): JSX.Element {
                     className="controls__create-input"
                     data-testid="controls-curator-pin"
                     name="controls-curator-pin"
-                    aria-label={choosingPin ? 'New curator PIN' : 'Curator PIN'}
-                    placeholder={choosingPin ? 'New curator PIN' : 'Curator PIN'}
+                    aria-label={
+                      vipEntry ? 'VIP PIN' : choosingPin ? 'New curator PIN' : 'Curator PIN'
+                    }
+                    placeholder={
+                      vipEntry ? 'VIP PIN' : choosingPin ? 'New curator PIN' : 'Curator PIN'
+                    }
                     autoComplete={choosingPin ? 'new-password' : 'current-password'}
                     value={pin}
                     onChange={(e) => setPin(e.target.value)}

@@ -17,6 +17,7 @@ import { FOLDER_PATH_PATTERN } from '../../shared/api/curation.js';
  *   shares/<id>.json share links
  *   session-secret   signs curator sessions
  *   curator-pin      the PIN chosen on /curate, hashed (delete it to choose again)
+ *   vip-pin          the VIP PIN that authorizes guests to see private photos, hashed
  *   setup-code       one-time code for choosing that PIN; also printed in the log
  */
 
@@ -56,6 +57,8 @@ export interface CurationPaths {
   secretFile: string;
   /** The curator PIN chosen in the browser, stored hashed. */
   pinFile: string;
+  /** The VIP PIN, stored hashed; absent when authorized guests are off. */
+  vipPinFile: string;
   /** One-time code that proves you run the server, needed to choose the PIN. */
   setupCodeFile: string;
 }
@@ -89,6 +92,7 @@ export async function ensureCurationPaths(root: string): Promise<CurationPaths> 
     sharesDir: path.join(real, 'shares'),
     secretFile: path.join(real, 'session-secret'),
     pinFile: path.join(real, 'curator-pin'),
+    vipPinFile: path.join(real, 'vip-pin'),
     setupCodeFile: path.join(real, 'setup-code'),
   };
 }
@@ -192,9 +196,12 @@ const scrypt = promisify(scryptCallback) as (
 ) => Promise<Buffer>;
 
 /** The stored PIN hash (`scrypt$salt$hash`), or null when none was chosen. */
-export async function readPinHash(paths: CurationPaths): Promise<string | null> {
+export async function readPinHash(
+  paths: CurationPaths,
+  file: string = paths.pinFile,
+): Promise<string | null> {
   try {
-    const stored = (await fs.readFile(paths.pinFile, 'utf8')).trim();
+    const stored = (await fs.readFile(file, 'utf8')).trim();
     return stored.startsWith('scrypt$') ? stored : null;
   } catch (err) {
     if (isNodeNotFound(err)) return null;
@@ -202,12 +209,22 @@ export async function readPinHash(paths: CurationPaths): Promise<string | null> 
   }
 }
 
-export async function writePinHash(paths: CurationPaths, pin: string): Promise<string> {
+export async function writePinHash(
+  paths: CurationPaths,
+  pin: string,
+  file: string = paths.pinFile,
+): Promise<string> {
   const salt = randomBytes(16).toString('hex');
   const hash = (await scrypt(pin, salt, 32)).toString('hex');
   const stored = `scrypt$${salt}$${hash}`;
-  await writeFileAtomically(paths.pinFile, stored, 0o600);
+  await writeFileAtomically(file, stored, 0o600);
   return stored;
+}
+
+export async function removeVipPin(paths: CurationPaths): Promise<void> {
+  await fs.unlink(paths.vipPinFile).catch((err) => {
+    if (!isNodeNotFound(err)) throw err;
+  });
 }
 
 export async function pinMatchesHash(pin: string, stored: string): Promise<boolean> {

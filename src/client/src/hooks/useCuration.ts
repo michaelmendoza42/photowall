@@ -11,6 +11,7 @@ import type {
 } from '../../../shared/api/curation.js';
 import {
   chooseCuratorPin,
+  clearVipPin,
   fetchAlbumCuration,
   fetchCurationSession,
   hidePhoto,
@@ -22,6 +23,7 @@ import {
   savePhotoEdit,
   setAlbumDisplay,
   setDefaultView,
+  setVipPin,
   setPhotoPrivate,
   starPhoto,
 } from '../api/curation.js';
@@ -82,6 +84,23 @@ export function useCuratorLogout() {
       qc.removeQueries({ queryKey: queryKeys.curationAlbums });
       refreshWall(qc);
     },
+  });
+}
+
+/** Set, change or turn off the VIP PIN; old authorized browsers are signed out. */
+export function useSetVipPin() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (pin: string) => setVipPin(pin),
+    onSuccess: (session) => qc.setQueryData(queryKeys.curationSession, session),
+  });
+}
+
+export function useClearVipPin() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => clearVipPin(),
+    onSuccess: (session) => qc.setQueryData(queryKeys.curationSession, session),
   });
 }
 

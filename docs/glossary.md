@@ -99,10 +99,17 @@ A virtual album of the photos the curator starred. It isn't a folder: stars are 
 - **Notes:** called "starred" in code and `starred.json`
 
 ### Private photo
-A photo the curator marked private: guests never see it, in its album or in Favorites, but it stays in place and the curator still sees it. Stored as a list of paths in `private.json` in the curation folder. Different from a rejected (hidden) photo, which is a bad shot moved into `_hidden`.
+A photo the curator marked private: guests never see it (authorized guests do), in its album or in Favorites, but it stays in place and the curator still sees it. Stored as a list of paths in `private.json` in the curation folder. Different from a rejected (hidden) photo, which is a bad shot moved into `_hidden`.
 
 - **Lives in:** `docs/product/photo-wall-experience.md`; code in `src/server/curation/catalog.ts`
 - **Surfaced to users:** to the curator — "Make private" / "🔒 Private" in the photo view
+
+### Authorized guest
+A guest whose browser entered the VIP PIN on `/vip`. Sees what any guest sees plus the private photos in it, shown in place with no switch. Stays authorized until the curator changes or turns off the VIP PIN. Never gets curator tools.
+
+- **Lives in:** `docs/product/photo-wall-experience.md`; code in `src/server/curation/catalog.ts` (role `vip`) and `service.ts`
+- **Surfaced to users:** "VIP PIN" on `/vip` and in the Curator section; a VIP section with Sign out
+- **Notes:** called "vip" in code, the cookie and `vip-pin`
 
 ### Share link
 A short link, derived from its content, to a set of albums plus the photo in the middle of the screen. Opening it shows those albums (limited to what is on display) and glides to that photo. Replaced playlists.

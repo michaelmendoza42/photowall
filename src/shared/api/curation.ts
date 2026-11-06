@@ -13,6 +13,8 @@ export const HIDDEN_FOLDER_NAME = '_hidden';
 export const CURATION_SESSION_PATH = '/api/curation/session';
 /** Choose the curator PIN, allowed only while none exists. */
 export const CURATION_PIN_PATH = '/api/curation/pin';
+/** Set (PUT) or turn off (DELETE) the VIP PIN that authorizes guests. */
+export const CURATION_VIP_PIN_PATH = '/api/curation/vip-pin';
 export const CURATION_ALBUMS_PATH = '/api/curation/albums';
 export const CURATION_ALBUM_DISPLAY_PATH = '/api/curation/albums/display';
 export const CURATION_DEFAULT_VIEW_PATH = '/api/curation/albums/default';
@@ -60,11 +62,19 @@ export interface CurationSessionResponse {
   enabled: boolean;
   /** This browser holds a curator session. */
   curator: boolean;
+  /** This browser entered the VIP PIN: an authorized guest, who sees private photos. */
+  vip: boolean;
+  /** A VIP PIN is set. Told only to the curator; false for everyone else. */
+  vipPinSet: boolean;
   /** The server may move photos inside the library (hide/restore). */
   libraryWrites: boolean;
 }
 
 export interface CurationLoginRequest {
+  pin: string;
+}
+
+export interface VipPinRequest {
   pin: string;
 }
 
@@ -113,6 +123,7 @@ export type CurationErrorCode =
   | 'curator_required'
   | 'pin_invalid'
   | 'pin_already_set'
+  | 'vip_pin_invalid'
   | 'setup_code_invalid'
   | 'library_writes_disabled'
   | 'photo_not_found'

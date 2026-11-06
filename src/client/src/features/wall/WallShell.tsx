@@ -13,8 +13,10 @@ import {
   useAlbumCuration,
   useCurationSession,
   useChooseCuratorPin,
+  useClearVipPin,
   useCuratorLogin,
   useCuratorLogout,
+  useSetVipPin,
   useMovePhoto,
   usePhotoEdit,
   useRescanLibrary,
@@ -106,10 +108,10 @@ export function WallShell(): JSX.Element {
     // back to the global wall.
     return parseActiveFilters(window.localStorage.getItem(ACTIVE_FILTERS_STORAGE_KEY));
   });
-  // The PIN form only appears on the unlisted curator route, which opens
-  // straight onto it.
-  const [pinEntry, setPinEntry] = useState(() => isCuratorRoute());
-  const [menuOpen, setMenuOpen] = useState(pinEntry);
+  // The PIN form only appears on the unlisted curator and VIP routes,
+  // which open straight onto it.
+  const [pinEntry, setPinEntry] = useState(() => pinEntryRoute());
+  const [menuOpen, setMenuOpen] = useState(pinEntry !== null);
   const [controlsError, setControlsError] = useState<string | null>(null);
   const [libraryRootError, setLibraryRootError] = useState<string | null>(null);
   const [camera, setCamera] = useState(INITIAL_CAMERA);
@@ -150,6 +152,8 @@ export function WallShell(): JSX.Element {
   const curatorLogin = useCuratorLogin();
   const choosePin = useChooseCuratorPin();
   const curatorLogout = useCuratorLogout();
+  const setVipPin = useSetVipPin();
+  const clearVipPin = useClearVipPin();
   const setAlbumDisplay = useSetAlbumDisplay();
   const setDefaultView = useSetDefaultView();
   const movePhoto = useMovePhoto();
@@ -472,14 +476,15 @@ export function WallShell(): JSX.Element {
     [updateLibraryRoot],
   );
 
-  // Once unlocked, leave the curator route so a reload is the plain wall.
+  // Once unlocked, leave the PIN route so a reload is the plain wall.
+  const isVip = session?.vip === true;
   useEffect(() => {
-    if (!pinEntry || !isCurator) return;
-    setPinEntry(false);
+    if (pinEntry === null || !(isCurator || isVip)) return;
+    setPinEntry(null);
     const url = new URL(window.location.href);
     url.pathname = '/';
     window.history.replaceState(window.history.state, '', url.toString());
-  }, [pinEntry, isCurator]);
+  }, [pinEntry, isCurator, isVip]);
 
   const handleLogin = useCallback(
     (pin: string) => {
@@ -518,6 +523,21 @@ export function WallShell(): JSX.Element {
       onError: (err) => setControlsError(`Could not lock: ${err.message}`),
     });
   }, [curatorLogout]);
+
+  const handleSetVipPin = useCallback(
+    (pin: string | null) => {
+      setControlsError(null);
+      const onError = (err: Error) =>
+        setControlsError(
+          err.message === 'vip_pin_invalid'
+            ? 'The VIP PIN needs 4 or more characters.'
+            : `Could not change the VIP PIN: ${err.message}`,
+        );
+      if (pin === null) clearVipPin.mutate(undefined, { onError });
+      else setVipPin.mutate(pin, { onError });
+    },
+    [setVipPin, clearVipPin],
+  );
 
   const handleSetDisplay = useCallback(
     (folder: string, onDisplay: boolean) => {
@@ -851,6 +871,8 @@ export function WallShell(): JSX.Element {
           onLogin: handleLogin,
           onChoosePin: handleChoosePin,
           onLogout: handleLogout,
+          onSetVipPin: handleSetVipPin,
+          vipPinPending: setVipPin.isPending || clearVipPin.isPending,
           onSetDisplay: handleSetDisplay,
           onToggleDefault: handleToggleDefault,
           onToggleDefaultStarred: handleToggleDefaultStarred,
@@ -933,10 +955,13 @@ function readGuestPreview(): boolean {
 
 /** Unlisted path that shows the curator PIN form: `/curate`. */
 export const CURATOR_ROUTE = '/curate';
+/** Unlisted path where a guest enters the VIP PIN: `/vip`. */
+export const VIP_ROUTE = '/vip';
 
-function isCuratorRoute(): boolean {
-  if (typeof window === 'undefined') return false;
-  return window.location.pathname.replace(/\/+$/, '') === CURATOR_ROUTE;
+function pinEntryRoute(): 'curator' | 'vip' | null {
+  if (typeof window === 'undefined') return null;
+  const path = window.location.pathname.replace(/\/+$/, '');
+  return path === CURATOR_ROUTE ? 'curator' : path === VIP_ROUTE ? 'vip' : null;
 }
 
 /**

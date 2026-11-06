@@ -26,6 +26,7 @@ import {
   createSetupCode,
   pinMatchesHash,
   readPinHash,
+  removeVipPin,
   removeSetupCode,
   writePinHash,
   readAlbumSettings,
@@ -40,6 +41,8 @@ import {
 } from './storage.js';
 
 export const CURATOR_COOKIE = 'photo_wall_curator';
+/** Marks an authorized guest's browser; valid until the VIP PIN changes. */
+export const VIP_COOKIE = 'photo_wall_vip';
 const PHOTO_FLAGS: readonly PhotoFlag[] = ['starred', 'private'];
 /** How often, at most, a request checks albums.json for changes from another server. */
 const SETTINGS_CHECK_MS = 1000;
@@ -84,6 +87,8 @@ export class CurationService {
   private catalogCache = new Map<string, Catalog>();
   private settingsMtimeMs: number | null = null;
   private pinHash: string | null = null;
+  private vipPinHash: string | null = null;
+  private vipPinMtimeMs: number | null = null;
   private libraryWritable = false;
   private setupCode: string | null = null;
   private lastSettingsCheck = 0;
@@ -103,6 +108,7 @@ export class CurationService {
     await this.reloadFlag('private');
     this.secret = await readOrCreateSessionSecret(this.paths);
     this.pinHash = await readPinHash(this.paths);
+    await this.reloadVipPin();
     // No PIN yet: whoever chooses it must show this code, which only
     // someone with access to the server's log or files can read.
     this.setupCode = this.enabled ? null : await createSetupCode(this.paths);
@@ -126,6 +132,9 @@ export class CurationService {
       if ((await statMtime(photoFlagFile(this.getPaths(), flag))) !== this.flagMtimes[flag]) {
         await this.reloadFlag(flag);
       }
+    }
+    if ((await statMtime(this.getPaths().vipPinFile)) !== this.vipPinMtimeMs) {
+      await this.reloadVipPin();
     }
   }
 
@@ -159,8 +168,44 @@ export class CurationService {
       this.setupCode = null;
       await removeSetupCode(this.getPaths());
       this.catalogCache.clear();
-      return serializeCookie(this.sessionToken(), SESSION_MAX_AGE_S);
+      return serializeCookie(CURATOR_COOKIE, this.sessionToken(), SESSION_MAX_AGE_S);
     });
+  }
+
+  /** A VIP PIN is set, so guests can become authorized. */
+  get vipPinSet(): boolean {
+    return this.enabled && this.vipPinHash !== null;
+  }
+
+  /**
+   * Set or change the VIP PIN. Every browser authorized with the old
+   * one is signed out, since its cookie was signed with the old hash.
+   */
+  setVipPin(pin: string): Promise<'ok' | 'same_as_curator'> {
+    return this.serialize(async () => {
+      const entered = pin.trim();
+      if (await this.matchesCuratorPin(entered)) return 'same_as_curator';
+      this.vipPinHash = await writePinHash(this.getPaths(), entered, this.getPaths().vipPinFile);
+      this.vipPinMtimeMs = await statMtime(this.getPaths().vipPinFile);
+      this.catalogCache.clear();
+      return 'ok';
+    });
+  }
+
+  /** Turn authorized guests off, signing every one of them out. */
+  clearVipPin(): Promise<void> {
+    return this.serialize(async () => {
+      await removeVipPin(this.getPaths());
+      this.vipPinHash = null;
+      this.vipPinMtimeMs = null;
+      this.catalogCache.clear();
+    });
+  }
+
+  private async reloadVipPin(): Promise<void> {
+    const paths = this.getPaths();
+    this.vipPinMtimeMs = await statMtime(paths.vipPinFile);
+    this.vipPinHash = await readPinHash(paths, paths.vipPinFile);
   }
 
   getPaths(): CurationPaths {
@@ -176,7 +221,12 @@ export class CurationService {
   roleOf(request: FastifyRequest): CurationRole {
     if (!this.enabled) return 'viewer';
     const token = readCookie(request.headers.cookie, CURATOR_COOKIE);
-    return token !== null && safeEqual(token, this.sessionToken()) ? 'curator' : 'viewer';
+    if (token !== null && safeEqual(token, this.sessionToken())) return 'curator';
+    const vipToken = this.vipToken();
+    const vip = readCookie(request.headers.cookie, VIP_COOKIE);
+    return vipToken !== null && vip !== null && safeEqual(vip, vipToken)
+      ? 'vip'
+      : 'viewer';
   }
 
   /**
@@ -190,19 +240,38 @@ export class CurationService {
       : role;
   }
 
-  /** Session cookie for a correct PIN, else null. */
-  async login(pin: string): Promise<string | null> {
+  /**
+   * The role and session cookie a PIN earns: the curator PIN makes a
+   * curator, the VIP PIN an authorized guest. Null for a wrong PIN.
+   */
+  async login(pin: string): Promise<{ role: 'curator' | 'vip'; cookie: string } | null> {
     const entered = pin.trim();
-    const envPin = this.options.curatorPin;
-    const ok =
-      envPin !== null
-        ? safeEqual(entered, envPin)
-        : this.pinHash !== null && (await pinMatchesHash(entered, this.pinHash));
-    return ok ? serializeCookie(this.sessionToken(), SESSION_MAX_AGE_S) : null;
+    if (await this.matchesCuratorPin(entered)) {
+      return {
+        role: 'curator',
+        cookie: serializeCookie(CURATOR_COOKIE, this.sessionToken(), SESSION_MAX_AGE_S),
+      };
+    }
+    const vipToken = this.vipToken();
+    if (vipToken !== null && (await pinMatchesHash(entered, this.vipPinHash!))) {
+      return {
+        role: 'vip',
+        cookie: serializeCookie(VIP_COOKIE, vipToken, SESSION_MAX_AGE_S),
+      };
+    }
+    return null;
   }
 
-  logoutCookie(): string {
-    return serializeCookie('', 0);
+  /** Clears both sessions: Lock and Sign out end whichever this browser has. */
+  logoutCookies(): string[] {
+    return [serializeCookie(CURATOR_COOKIE, '', 0), serializeCookie(VIP_COOKIE, '', 0)];
+  }
+
+  private async matchesCuratorPin(entered: string): Promise<boolean> {
+    const envPin = this.options.curatorPin;
+    return envPin !== null
+      ? safeEqual(entered, envPin)
+      : this.pinHash !== null && (await pinMatchesHash(entered, this.pinHash));
   }
 
   catalogFor(role: CurationRole): Catalog | null {
@@ -472,6 +541,14 @@ export class CurationService {
       .update(this.options.curatorPin ?? this.pinHash ?? '')
       .digest('base64url');
   }
+
+  /** Signed with the VIP PIN's hash, so changing the PIN revokes it. */
+  private vipToken(): string | null {
+    if (!this.vipPinSet) return null;
+    return createHmac('sha256', this.secret)
+      .update(`vip:${this.vipPinHash}`)
+      .digest('base64url');
+  }
 }
 
 export { PhotoMoveError };
@@ -499,6 +576,6 @@ function readCookie(header: string | undefined, name: string): string | null {
   return null;
 }
 
-function serializeCookie(value: string, maxAgeSeconds: number): string {
-  return `${CURATOR_COOKIE}=${encodeURIComponent(value)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${maxAgeSeconds}`;
+function serializeCookie(name: string, value: string, maxAgeSeconds: number): string {
+  return `${name}=${encodeURIComponent(value)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${maxAgeSeconds}`;
 }
