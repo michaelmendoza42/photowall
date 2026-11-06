@@ -44,7 +44,7 @@ export interface PhotoQueryRecord {
   edit?: PhotoEdit;
   /** Fingerprint of `edit`; part of the media URL so edits bust caches. */
   editVersion?: string;
-  /** The curator starred it, so it's in Best of. */
+  /** The curator starred it, so it's in Favorites. */
   starred?: boolean;
   /** Guests never see it; only the curator gets this flag. */
   private?: boolean;

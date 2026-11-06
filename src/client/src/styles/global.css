@@ -509,6 +509,26 @@ body {
 	cursor: progress;
 }
 
+.focused-photo__album {
+	position: absolute;
+	left: 50%;
+	bottom: clamp(0.75rem, 2vw, 1.25rem);
+	transform: translateX(-50%);
+	max-width: calc(100% - 2rem);
+	margin: 0;
+	padding: 0.2rem 0.7rem;
+	background: rgba(20, 17, 15, 0.6);
+	color: var(--pw-fg-muted);
+	border-radius: 999px;
+	font-size: 12px;
+	letter-spacing: 0.04em;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	pointer-events: none;
+	z-index: 1;
+}
+
 .focused-photo__nav {
 	position: absolute;
 	top: 50%;

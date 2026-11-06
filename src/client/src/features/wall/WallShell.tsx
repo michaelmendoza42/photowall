@@ -71,6 +71,7 @@ import {
 } from './WallCanvas.js';
 import { PhotoWallSurface } from './PhotoWallSurface.js';
 import { deriveGroupedWallFoundation } from './groupedWall.js';
+import { deriveAlbumAreas, isShownFromBestOf, photoAlbumName } from './albumAreas.js';
 import {
   computeWorldWidth,
   WORLD_WIDTH_MAX,
@@ -258,6 +259,22 @@ export function WallShell(): JSX.Element {
       worldWidth,
     });
   }, [firstPage, facetsQuery.data, photos, worldWidth]);
+
+  // The wall's album areas, Favorites included, even when it lays out as
+  // one stream.
+  const albumAreas = useMemo(
+    () =>
+      firstPage
+        ? deriveAlbumAreas({
+            filters: firstPage.appliedFilters,
+            facets: facetsQuery.data ?? null,
+            photos,
+            snapshotId: firstPage.snapshotId,
+            worldWidth,
+          }).albums
+        : [],
+    [firstPage, facetsQuery.data, photos, worldWidth],
+  );
 
   const activeAlbumAreaCount = useMemo(
     () =>
@@ -653,30 +670,52 @@ export function WallShell(): JSX.Element {
     } as const;
   }, [focusedPhotoRecord, isCurator, session?.libraryWrites, movePhoto.isPending, runMove]);
 
+  const focusedFromBestOf =
+    focusedPhotoRecord !== null && isShownFromBestOf(focusedPhotoRecord, albumAreas);
+
   const starPhoto = useStarPhoto();
+  const runStar = useCallback(
+    (photo: PhotoQueryRecord, starred: boolean, leavesWall: boolean) => {
+      starPhoto.mutate(
+        { photoId: photo.id, starred },
+        {
+          onSuccess: (result) => {
+            if (!leavesWall) {
+              // Show the new state right away; the wall refetches behind.
+              setFocusedPhoto((prev) =>
+                prev.photo?.id === result.photo.id ? { ...prev, photo: result.photo } : prev,
+              );
+              return;
+            }
+            // Unstarred while showing in Favorites: it leaves the wall, so
+            // step on to the next photo, as Reject does.
+            if (focusedPhotoIdRef.current === photo.id) handleFocusStep('next');
+            if (focusedPhotoIdRef.current === photo.id) handlePhotoClose();
+            setToast({
+              message: `Taken out of Favorites: ${photo.filename}`,
+              actionLabel: 'Undo',
+              onAction: () => runStar(result.photo, true, false),
+            });
+          },
+          onError: (err) =>
+            setToast({
+              message: `Could not change Favorites for ${photo.filename}: ${err.message}`,
+              tone: 'error',
+            }),
+        },
+      );
+    },
+    [handleFocusStep, handlePhotoClose, starPhoto],
+  );
   const curatorStar = useMemo(() => {
     if (!focusedPhotoRecord || !isCurator) return undefined;
     const starred = focusedPhotoRecord.starred === true;
     return {
       starred,
       pending: starPhoto.isPending,
-      onToggle: () =>
-        starPhoto.mutate(
-          { photoId: focusedPhotoRecord.id, starred: !starred },
-          {
-            onSuccess: ({ photo }) => {
-              // Show the new state right away; the wall refetches behind.
-              setFocusedPhoto((prev) => (prev.photo?.id === photo.id ? { ...prev, photo } : prev));
-            },
-            onError: (err) =>
-              setToast({
-                message: `Could not change Best of for ${focusedPhotoRecord.filename}: ${err.message}`,
-                tone: 'error',
-              }),
-          },
-        ),
+      onToggle: () => runStar(focusedPhotoRecord, !starred, starred && focusedFromBestOf),
     };
-  }, [focusedPhotoRecord, isCurator, starPhoto]);
+  }, [focusedPhotoRecord, isCurator, starPhoto.isPending, runStar, focusedFromBestOf]);
 
   const setPhotoPrivate = useSetPhotoPrivate();
   const curatorPrivate = useMemo(() => {
@@ -835,6 +874,7 @@ export function WallShell(): JSX.Element {
           curatorAction={curatorAction}
           curatorStar={curatorStar}
           curatorPrivate={curatorPrivate}
+          sourceAlbum={focusedFromBestOf ? photoAlbumName(focusedPhoto.photo) : undefined}
           onEdit={handleEditOpen}
           onImageError={handleFocusedImageError}
         />

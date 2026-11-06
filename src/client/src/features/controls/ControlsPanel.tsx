@@ -210,7 +210,7 @@ export function ControlsPanel(props: ControlsPanelProps): JSX.Element {
                           onFiltersChange({ ...filters, starred: !filters.starred })
                         }
                       />
-                      <span className="album-tree__name">★ Best of</span>
+                      <span className="album-tree__name">★ Favorites</span>
                       <span className="album-tree__count">{starredCount}</span>
                     </label>
                     {albums && (
@@ -220,7 +220,7 @@ export function ControlsPanel(props: ControlsPanelProps): JSX.Element {
                         data-testid="controls-folder-default-starred"
                         data-default={albums.defaultStarred ? 'true' : 'false'}
                         aria-pressed={albums.defaultStarred}
-                        aria-label={`${albums.defaultStarred ? 'Stop opening the wall on' : 'Open the wall on'} Best of`}
+                        aria-label={`${albums.defaultStarred ? 'Stop opening the wall on' : 'Open the wall on'} Favorites`}
                         title={
                           albums.defaultStarred
                             ? 'The wall opens on this album. Click to stop.'
@@ -253,7 +253,7 @@ export function ControlsPanel(props: ControlsPanelProps): JSX.Element {
                 {curatorTools && (
                   <p className="controls__hint">
                     👁 lets guests pick an album; ⌂ makes the wall open on it. In the photo
-                    view: ★ puts a photo in Best of, Make private keeps it from guests, Reject
+                    view: ★ puts a photo in Favorites, Make private keeps it from guests, Reject
                     moves a bad shot to _hidden.
                   </p>
                 )}

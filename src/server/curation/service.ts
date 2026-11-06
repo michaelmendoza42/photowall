@@ -89,7 +89,7 @@ export class CurationService {
   private lastSettingsCheck = 0;
   private edits = new Map<string, PhotoEdit>();
   private editsMtimeMs: number | null = null;
-  /** Photo paths per flag: starred (Best of) and private (never for guests). */
+  /** Photo paths per flag: starred (Favorites) and private (never for guests). */
   private flags: Record<PhotoFlag, Set<string>> = { starred: new Set(), private: new Set() };
   private flagMtimes: Record<PhotoFlag, number | null> = { starred: null, private: null };
 
@@ -261,7 +261,7 @@ export class CurationService {
   }
 
   /**
-   * Set a photo flag: `starred` puts it in Best of, `private` keeps it
+   * Set a photo flag: `starred` puts it in Favorites, `private` keeps it
    * from guests. Only a list of paths changes; the file is untouched.
    */
   setPhotoFlag(photoId: string, flag: PhotoFlag, on: boolean): Promise<PhotoRecord> {
@@ -400,7 +400,7 @@ export class CurationService {
       this.edits.set(movedPhoto.relativePath, edit);
       await this.saveEdits();
     }
-    // So do its star and privacy (a rejected photo stays out of Best of
+    // So do its star and privacy (a rejected photo stays out of Favorites
     // until restored).
     for (const flag of PHOTO_FLAGS) {
       await this.reloadFlag(flag);

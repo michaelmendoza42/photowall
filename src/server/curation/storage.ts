@@ -47,7 +47,7 @@ export interface CurationPaths {
   albumsFile: string;
   movesLog: string;
   editsFile: string;
-  /** Paths of the photos the curator starred (Best of). */
+  /** Paths of the photos the curator starred (Favorites). */
   starsFile: string;
   /** Paths of the photos guests never see. */
   privateFile: string;
@@ -237,7 +237,7 @@ const PathSetFileSchema = z.object({
 
 /**
  * A per-photo flag kept as a list of root-relative paths: `starred.json`
- * (Best of) and `private.json` (never shown to guests).
+ * (Favorites) and `private.json` (never shown to guests).
  */
 export type PhotoFlag = 'starred' | 'private';
 

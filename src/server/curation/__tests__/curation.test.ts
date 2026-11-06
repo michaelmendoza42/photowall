@@ -365,7 +365,7 @@ describe('curation routes', () => {
     expect((await photos(undefined, 'starred=1')).photos.map((p) => p.id)).toEqual([shown.id]);
   });
 
-  it('keeps private photos from guests, even in Best of, without moving them', async () => {
+  it('keeps private photos from guests, even in Favorites, without moving them', async () => {
     await start({ pin: PIN, libraryWrites: true });
     const cookie = await login();
     await curatorPut(cookie, CURATION_ALBUM_DISPLAY_PATH, { folder: '', onDisplay: true });
@@ -382,7 +382,7 @@ describe('curation routes', () => {
     expect(made.json()).toMatchObject({ photo: { id: target.id, private: true } });
     await flag(curationPhotoStarPath, { starred: true });
 
-    // Guests: gone from its album, from Best of, and from media.
+    // Guests: gone from its album, from Favorites, and from media.
     expect((await photos(undefined, `folder=${WEDDING}`)).photos.map((p) => p.id)).not.toContain(
       target.id,
     );

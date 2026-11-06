@@ -364,6 +364,7 @@ interface PhotoRow {
   filename: string;
   relativePath: string;
   directoryPath: string;
+  starred?: boolean;
 }
 
 async function allPhotos(api: APIRequestContext): Promise<PhotoRow[]> {
@@ -414,7 +415,7 @@ async function exists(file: string): Promise<boolean> {
   );
 }
 
-test('the curator stars photos into Best of, which viewers can pick', async ({
+test('the curator stars photos into Favorites, which viewers can pick', async ({
   page,
   browser,
 }) => {
@@ -453,6 +454,56 @@ test('the curator stars photos into Best of, which viewers can pick', async ({
     })
     .toEqual([photoId]);
   await other.close();
+});
+
+test('in Favorites, a photo shows its album and unstarring takes it off the wall', async ({
+  page,
+}) => {
+  await page.request.post('/api/curation/session', { data: { pin: PIN } });
+  // The previous test starred one photo; star a second from another album.
+  const photos = await allPhotos(page.request);
+  const first = photos.find((p) => p.starred)!;
+  const second = photos.find((p) => !p.starred && p.directoryPath !== first.directoryPath)!;
+  await page.request.post(`/api/curation/photos/${second.id}/star`, { data: { starred: true } });
+
+  await page.goto('/');
+  await expect(page.getByTestId('wall-shell')).toHaveAttribute('data-screen', 'ready', {
+    timeout: 60_000,
+  });
+  await openControls(page);
+  await page.getByTestId('controls-folder-starred').click();
+  await closeControls(page);
+  const shownIds = async () => [
+    ...new Set(
+      await page
+        .getByTestId('wall-photo-tile')
+        .evaluateAll((nodes) => nodes.map((node) => (node as HTMLElement).dataset['photoId'])),
+    ),
+  ];
+  await expect.poll(async () => (await shownIds()).sort()).toEqual([first.id, second.id].sort());
+
+  const tile = await pickCenteredTile(page);
+  const openedId = (await tile.getAttribute('data-photo-id'))!;
+  const opened = openedId === first.id ? first : second;
+  await tile.click();
+  const star = page.getByTestId('focused-photo-star');
+  await expect(star).toHaveAttribute('data-starred', 'true');
+  await expect(page.getByTestId('focused-photo-album')).toHaveText(
+    `From ${opened.directoryPath.split('/').at(-1)}`,
+  );
+
+  await star.click();
+  await expect(page.getByTestId('curation-toast')).toContainText(
+    `Taken out of Favorites: ${opened.filename}`,
+  );
+  // The lightbox stepped on to the other Favorites photo, which stays starred.
+  await expect(page.getByTestId('focused-photo-star')).toHaveAttribute('data-starred', 'true');
+  await expect.poll(shownIds).toEqual([openedId === first.id ? second.id : first.id]);
+
+  // Undo puts it back in Favorites.
+  await page.getByTestId('curation-toast-action').click();
+  await expect.poll(async () => (await shownIds()).sort()).toEqual([first.id, second.id].sort());
+  await page.request.post(`/api/curation/photos/${second.id}/star`, { data: { starred: false } });
 });
 
 test('a private photo stays where it is but guests never see it', async ({ page, browser }) => {

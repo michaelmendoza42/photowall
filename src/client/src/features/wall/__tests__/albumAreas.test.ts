@@ -4,6 +4,8 @@ import type { PhotoQueryRecord, ResolvedPhotoFilters } from '../../../../../shar
 import {
   bucketPhotosByAlbum,
   deriveAlbumAreas,
+  isShownFromBestOf,
+  photoAlbumName,
   resolvePhotoAlbumKey,
 } from '../albumAreas.js';
 
@@ -218,5 +220,44 @@ describe('the Starred album area', () => {
     expect(bucketPhotosByAlbum([inTrip, fromFamily, plain], areas.albums).get('starred')).toEqual([
       fromFamily,
     ]);
+  });
+
+  it('knows which photos show only because they are in Favorites', () => {
+    const inTrip = starred(photo('a', '2024/trip'));
+    const fromFamily = starred(photo('b', '2024/family'));
+    const mixed = deriveAlbumAreas({
+      filters: filters({ folders: ['2024/trip'], starred: true }),
+      facets: FACETS,
+      photos: [inTrip, fromFamily],
+      snapshotId: 'snap-1',
+      worldWidth: 1200,
+    });
+    expect(isShownFromBestOf(inTrip, mixed.albums)).toBe(false);
+    expect(isShownFromBestOf(fromFamily, mixed.albums)).toBe(true);
+
+    const bestOfOnly = deriveAlbumAreas({
+      filters: filters({ starred: true }),
+      facets: FACETS,
+      photos: [inTrip, fromFamily],
+      snapshotId: 'snap-1',
+      worldWidth: 1200,
+    });
+    expect(isShownFromBestOf(inTrip, bestOfOnly.albums)).toBe(true);
+
+    const noBestOf = deriveAlbumAreas({
+      filters: filters({ folders: ['2024/trip'] }),
+      facets: FACETS,
+      photos: [inTrip],
+      snapshotId: 'snap-1',
+      worldWidth: 1200,
+    });
+    expect(isShownFromBestOf(inTrip, noBestOf.albums)).toBe(false);
+  });
+
+  it('names a photo’s album by its own folder', () => {
+    expect(photoAlbumName({ directoryPath: '2023/feb 2023 - hong kong' })).toBe(
+      'feb 2023 - hong kong',
+    );
+    expect(photoAlbumName({ directoryPath: '2023' })).toBe('2023');
   });
 });

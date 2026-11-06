@@ -91,15 +91,15 @@ The curator's non-destructive edit of one photo: crop, straighten, quarter turns
 - **Surfaced to users:** yes — the curator's Edit button; viewers see the result
 - **Notes:** the editor previews with Pixi's ColorMatrixFilter using the same color matrix the server applies, so colors match exactly; blur and grain are close, not pixel-identical
 
-### Best of (Starred album)
+### Favorites (Starred album, formerly Best of)
 A virtual album of the photos the curator starred. It isn't a folder: stars are stored as a list of photo paths (`starred.json` in the curation folder). Viewers see a starred photo in it even when the photo's own album is in storage; hidden photos are left out.
 
 - **Lives in:** `docs/product/photo-wall-experience.md`; code in `src/server/curation/catalog.ts`
-- **Surfaced to users:** yes — "★ Best of" at the top of the album picker; the ☆ Best of button in the photo view for the curator
+- **Surfaced to users:** yes — "★ Favorites" at the top of the album picker; the ☆ Favorite button (★ Unfavorite once starred) in the photo view for the curator
 - **Notes:** called "starred" in code and `starred.json`
 
 ### Private photo
-A photo the curator marked private: guests never see it, in its album or in Best of, but it stays in place and the curator still sees it. Stored as a list of paths in `private.json` in the curation folder. Different from a rejected (hidden) photo, which is a bad shot moved into `_hidden`.
+A photo the curator marked private: guests never see it, in its album or in Favorites, but it stays in place and the curator still sees it. Stored as a list of paths in `private.json` in the curation folder. Different from a rejected (hidden) photo, which is a bad shot moved into `_hidden`.
 
 - **Lives in:** `docs/product/photo-wall-experience.md`; code in `src/server/curation/catalog.ts`
 - **Surfaced to users:** to the curator — "Make private" / "🔒 Private" in the photo view

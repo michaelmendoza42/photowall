@@ -43,7 +43,7 @@ export interface FocusedPhotoLightboxProps {
     onToggle: () => void;
     pending?: boolean;
   };
-  /** Curator-only: star or unstar the photo (Best of). */
+  /** Curator-only: star or unstar the photo (Favorites). */
   curatorStar?: {
     starred: boolean;
     onToggle: () => void;
@@ -55,6 +55,8 @@ export interface FocusedPhotoLightboxProps {
     onRun: () => void;
     pending?: boolean;
   };
+  /** The album a Favorites photo came from, shown small at the bottom. */
+  sourceAlbum?: string;
   /** Curator-only: open the light editor for this photo. */
   onEdit?: () => void;
   /** The photo's image would not load (it may no longer be visible to this viewer). */
@@ -467,6 +469,7 @@ export function FocusedPhotoLightbox(
     curatorAction,
     curatorStar,
     curatorPrivate,
+    sourceAlbum,
     onEdit,
     onImageError,
   } = props;
@@ -702,11 +705,11 @@ export function FocusedPhotoLightbox(
                     data-starred={curatorStar.starred ? 'true' : 'false'}
                     title={
                       curatorStar.starred
-                        ? 'Take this photo out of Best of (S)'
-                        : 'Put this photo in Best of (S)'
+                        ? 'Take this photo out of Favorites (S)'
+                        : 'Put this photo in Favorites (S)'
                     }
                   >
-                    {curatorStar.starred ? '★ Best of' : '☆ Best of'}
+                    {curatorStar.starred ? '★ Unfavorite' : '☆ Favorite'}
                   </button>
                 )}
                 {curatorPrivate && (
@@ -766,6 +769,11 @@ export function FocusedPhotoLightbox(
             >
               ×
             </button>
+            {sourceAlbum && (
+              <p className="focused-photo__album" data-testid="focused-photo-album">
+                From {sourceAlbum}
+              </p>
+            )}
           </>
         ),
       }}

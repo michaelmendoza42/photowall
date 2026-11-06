@@ -124,7 +124,7 @@ export async function registerCurationRoutes(
     return toAlbumResponse(await curation.setDefaultView(body.data.folders, body.data.starred));
   });
 
-  // Photo flags: star (Best of) and private (never for guests).
+  // Photo flags: star (Favorites) and private (never for guests).
   for (const [route, flag, schema] of [
     ['star', 'starred', StarSchema],
     ['private', 'private', PrivateSchema],

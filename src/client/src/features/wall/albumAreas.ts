@@ -120,6 +120,22 @@ export function resolvePhotoAlbumKey(
 }
 
 /**
+ * The photo is on this wall only because it is in Favorites: no picked
+ * album covers it. Unstarring it takes it off the wall.
+ */
+export function isShownFromBestOf(
+  photo: PhotoQueryRecord,
+  albums: readonly AlbumAreaDescriptor[],
+): boolean {
+  return resolvePhotoAlbumKey(photo, albums) === STARRED_ALBUM_KEY;
+}
+
+/** The album a photo came from, as its folder's own name. */
+export function photoAlbumName(photo: Pick<PhotoQueryRecord, 'directoryPath'>): string {
+  return photo.directoryPath.split('/').at(-1) || photo.directoryPath;
+}
+
+/**
  * Add the Starred album's area, holding the starred photos no picked
  * album already covers. With nothing else picked it is the only area.
  */
@@ -139,7 +155,7 @@ function withStarredAlbum(
       {
         albumKey: STARRED_ALBUM_KEY,
         kind: 'starred',
-        label: 'Starred',
+        label: 'Favorites',
         sourcePath: null,
         year: null,
         photoCountEstimate: ownCount,

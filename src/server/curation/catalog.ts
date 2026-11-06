@@ -19,7 +19,7 @@ export interface Catalog {
   /** Photos folder selections draw from. */
   photos: readonly CatalogPhoto[];
   /**
-   * Best of: starred photos outside `_hidden` folders. Viewers see these
+   * Favorites: starred photos outside `_hidden` folders. Viewers see these
    * even when their album is in storage (starring a photo is the curator
    * putting it on display), but never private ones.
    */
