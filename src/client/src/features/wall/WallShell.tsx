@@ -47,6 +47,7 @@ import {
 } from '../../state/camera.js';
 import { INITIAL_LAYOUT } from '../../state/layout.js';
 import { DebugOverlay } from '../debug/DebugOverlay.js';
+import { readWallSpot, writeWallSpot, type WallSpot } from './wallSpot.js';
 import { FocusedPhotoLightbox } from '../modal/FocusedPhotoLightbox.js';
 import { PhotoEditor } from '../editor/PhotoEditor.js';
 import { isNeutralEdit, type PhotoEdit } from '../../../../shared/api/edits.js';
@@ -169,6 +170,15 @@ export function WallShell(): JSX.Element {
   const pendingShareAnchorRef = useRef<{ photoId: string; zoom: number | null } | null>(
     null,
   );
+  // Where this tab was before a reload; a share link in the address bar
+  // takes over instead.
+  const [initialSpot] = useState(() =>
+    typeof window === 'undefined' ||
+    new URL(window.location.href).searchParams.has(SHARE_URL_PARAM)
+      ? null
+      : readWallSpot(),
+  );
+  const pendingSpotRef = useRef<WallSpot | null>(initialSpot);
   const queryFilters = useMemo(() => toQueryFilters(filters), [filters]);
 
   const devPageSize = parseDevPageSize();
@@ -646,6 +656,47 @@ export function WallShell(): JSX.Element {
     });
     return () => cancelAnimationFrame(frame);
   }, [wallReady, photos]);
+
+  // A reload comes back to the same spot on the wall, and reopens the
+  // photo that was open, unless a share link takes over. Saved per tab
+  // when the page goes away.
+  useEffect(() => {
+    const spot = pendingSpotRef.current;
+    if (!wallReady || !spot) return undefined;
+    const frame = requestAnimationFrame(() => {
+      const navigator = focusNavigatorRef.current;
+      if (!navigator) return;
+      pendingSpotRef.current = null;
+      if (photosByIdRef.current.has(spot.photoId)) navigator.centerOn(spot.photoId, spot.zoom);
+      const focused = spot.focusedPhotoId
+        ? photosByIdRef.current.get(spot.focusedPhotoId)
+        : undefined;
+      if (focused) handlePhotoOpen(focused);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [wallReady, photos, handlePhotoOpen]);
+
+  useEffect(() => {
+    const save = () => {
+      // Still restoring: keep the spot from before the reload.
+      if (pendingSpotRef.current) return;
+      const view = focusNavigatorRef.current?.currentView();
+      writeWallSpot(
+        view?.photoId
+          ? { photoId: view.photoId, zoom: view.zoom, focusedPhotoId: focusedPhotoIdRef.current }
+          : null,
+      );
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') save();
+    };
+    window.addEventListener('pagehide', save);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('pagehide', save);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, []);
 
   const runMove = useCallback(
     (photo: PhotoQueryRecord, action: 'hide' | 'restore', undoable: boolean) => {

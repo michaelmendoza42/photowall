@@ -209,6 +209,43 @@ test('a sideways trackpad swipe steps once per swipe; zoomed in, it pans instead
   await expect(modal).toHaveAttribute('data-photo-id', second);
 });
 
+test('a reload comes back to the same spot on the wall and the open photo', async ({
+  page,
+}) => {
+  const shell = page.getByTestId('wall-shell');
+  const wall = page.getByTestId('wall-canvas');
+  const modal = page.getByTestId('focused-photo-modal');
+  await openReadyWall(page);
+  await zoomWall(page, wall);
+  const zoom = Number(await requiredAttr(wall, 'data-zoom'));
+
+  // Step a few photos away from where the wall opened, then reload.
+  await (await pickCenteredTile(page)).click();
+  for (let i = 0; i < 4; i += 1) {
+    const before = await requiredAttr(modal, 'data-photo-id');
+    await page.keyboard.press('ArrowRight');
+    await expect(modal).not.toHaveAttribute('data-photo-id', before);
+  }
+  const openId = await requiredAttr(modal, 'data-photo-id');
+  await expect.poll(() => distanceFromViewportCenter(page, openId)).toBeLessThan(3);
+  await page.reload();
+  await expect(shell).toHaveAttribute('data-screen', 'ready', { timeout: 60_000 });
+  await expect(modal).toHaveAttribute('data-photo-id', openId);
+  await expect.poll(() => distanceFromViewportCenter(page, openId)).toBeLessThan(3);
+  expect(Number(await requiredAttr(wall, 'data-zoom'))).toBeCloseTo(zoom, 2);
+
+  // With the photo closed, a reload keeps the wall spot and leaves it closed.
+  // The cursor rests on the menu button so no hovered photo slides the wall.
+  await page.getByTestId('focused-photo-close').click();
+  await expect(shell).toHaveAttribute('data-modal-open', 'false');
+  await page.getByTestId('controls-trigger').hover();
+  await page.reload();
+  await expect(shell).toHaveAttribute('data-screen', 'ready', { timeout: 60_000 });
+  await expect.poll(() => distanceFromViewportCenter(page, openId)).toBeLessThan(3);
+  await page.waitForTimeout(300);
+  await expect(shell).toHaveAttribute('data-modal-open', 'false');
+});
+
 /**
  * A two-finger sideways trackpad swipe: a quick push, then a momentum
  * tail of decaying events at frame rate for about a second and a half.
