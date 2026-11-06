@@ -7,6 +7,7 @@ import {
   type HTMLAttributes,
   type PointerEvent,
 } from 'react';
+import { WheelGestures, type WheelEventData } from 'wheel-gestures';
 import Lightbox, { type SlideImage } from 'yet-another-react-lightbox';
 import type { PhotoQueryRecord } from '../../../../shared/api/photos.js';
 import { computeFocusedPhotoRenderSize } from '../wall/hoverPreview.js';
@@ -209,65 +210,68 @@ function useSwipeStep(input: {
   return { offset, animating, handlers, reset, slideTo, consumeClick };
 }
 
-/** Quiet time that ends a trackpad swipe, including its momentum tail. */
-const WHEEL_SWIPE_IDLE_MS = 250;
-
-/** What is known about the rest of a trackpad swipe that already stepped. */
-export interface WheelSwipeTail {
-  /** Sign of deltaX for the swipe that stepped. */
-  sign: number;
-  /** Largest sideways delta seen since the step. */
-  peak: number;
-  /** Smallest sideways delta seen once the tail started fading. */
-  low: number;
-  fading: boolean;
-  /** Consecutive events rising well above `low`. */
-  rising: number;
-}
-
-export function newWheelSwipeTail(deltaX: number): WheelSwipeTail {
-  const size = Math.abs(deltaX);
-  return { sign: Math.sign(deltaX), peak: size, low: size, fading: false, rising: 0 };
-}
-
-/** Sideways delta, in px, that counts as a swipe back the other way. */
-const WHEEL_SWIPE_REVERSE_PX = 4;
-
 /**
- * Follows the rest of a swipe that already stepped, one wheel event at a
- * time, and returns true when the event is really the start of a new
- * swipe. A momentum tail only ever fades, so sideways deltas turning the
- * other way, or climbing back up after the tail began to fade, mean the
- * fingers are on the trackpad again.
+ * Steps once per two-finger sideways trackpad swipe. wheel-gestures splits
+ * the wheel stream into gestures and flags the momentum tail, so only
+ * finger travel counts, and only until the swipe has stepped; the next
+ * step needs a new gesture, which can start while the last tail runs.
+ *
+ * A new swipe ends the last one's gesture either way the library sees it:
+ * after a pause, or by cutting into the tail when an event jumps to twice
+ * the one before. A tail can jump like that too, when the browser merges
+ * frames late in it, so a cut only counts after a touch: fingers landing
+ * on the trackpad send an event a frame or more late and much slower than
+ * the tail before it, while a merged frame comes late at the tail's own
+ * speed. In the 2026-11-06 recording touches ran at 0.1-0.4x the speed
+ * before them and merged frames at about 0.95x.
  */
-export function wheelSwipeTailRestarts(tail: WheelSwipeTail, deltaX: number, deltaY: number): boolean {
-  const size = Math.abs(deltaX);
-  if (size < 1 || size < Math.abs(deltaY)) return false;
-  if (Math.sign(deltaX) !== tail.sign) return size >= WHEEL_SWIPE_REVERSE_PX;
-  if (!tail.fading) {
-    tail.peak = Math.max(tail.peak, size);
-    if (size < tail.peak / 2) {
-      tail.fading = true;
-      tail.low = size;
+export function createWheelSwipeStepper(
+  slideTo: (step: 'next' | 'previous' | null) => boolean,
+): (event: WheelEventData) => void {
+  const gestures = WheelGestures({ preventWheelAction: false, reverseSign: false });
+  let locked = false;
+  let lastEventAt = Number.NEGATIVE_INFINITY;
+  let lastSpeed = 0;
+  let eventCount = 0;
+  let touchedAt = Number.NEGATIVE_INFINITY;
+  gestures.on('wheel', (state) => {
+    if (state.isEnding) {
+      const touched = eventCount - touchedAt <= WHEEL_TOUCH_LEAD_EVENTS;
+      if (!state.isMomentumCancel || touched) locked = false;
+      return;
     }
-    return false;
-  }
-  if (size > Math.max(tail.low * 2, tail.low + 4)) {
-    // Two in a row, so one jittery event in the tail is not a new swipe.
-    tail.rising += 1;
-    return tail.rising >= 2;
-  }
-  tail.rising = 0;
-  tail.low = Math.min(tail.low, size);
-  return false;
+    if (state.isMomentum || locked) return;
+    const [dx, dy] = state.axisMovement;
+    const step = swipeStepDirection(-dx, -dy);
+    if (step) locked = slideTo(step);
+  });
+  return (event) => {
+    const gapMs = event.timeStamp - lastEventAt;
+    // Pixels per ms, so a merged frame (twice the travel in twice the
+    // time) matches the tail around it.
+    const speed = Math.hypot(event.deltaX, event.deltaY) / Math.max(gapMs, 1);
+    eventCount += 1;
+    if (gapMs >= WHEEL_TOUCH_GAP_MS && speed < lastSpeed * WHEEL_TOUCH_SPEED_RATIO) {
+      touchedAt = eventCount;
+    }
+    lastEventAt = event.timeStamp;
+    lastSpeed = speed;
+    gestures.feedWheel(event);
+  };
 }
+
+/** A touch event arrives at least this late: a frame and a half. */
+const WHEEL_TOUCH_GAP_MS = 25;
+/** A touch is at most this fraction of the speed of the event before it. */
+const WHEEL_TOUCH_SPEED_RATIO = 0.6;
+/** How many events before the cut the touch may come (touch, maybe a crawl, then the jump). */
+const WHEEL_TOUCH_LEAD_EVENTS = 2;
 
 /**
  * A two-finger sideways trackpad swipe steps like a touch swipe: fingers
- * moving left (positive deltaX) bring in the next photo. One swipe steps
- * once; the rest of it, and its momentum tail, is ignored until the
- * wheel goes quiet or a new swipe starts within the tail. Off while the
- * photo is zoomed in (scrolling pans).
+ * moving left (positive deltaX) bring in the next photo, one photo per
+ * swipe whatever its momentum tail does. Off while the photo is zoomed
+ * in (scrolling pans).
  */
 function useWheelSwipeStep(input: {
   element: HTMLElement | null;
@@ -279,14 +283,8 @@ function useWheelSwipeStep(input: {
   const { element } = input;
   // Lives outside the listener: the slide element is replaced when the
   // photo steps, and the swipe's tail must stay locked across that.
-  const gesture = useRef({
-    dx: 0,
-    dy: 0,
-    tail: null as WheelSwipeTail | null,
-    idleTimer: 0,
-  });
-
-  useEffect(() => () => window.clearTimeout(gesture.current.idleTimer), []);
+  const stepper = useRef<((event: WheelEventData) => void) | null>(null);
+  stepper.current ??= createWheelSwipeStepper((step) => latest.current.slideTo(step));
 
   useEffect(() => {
     if (!element) return undefined;
@@ -294,24 +292,7 @@ function useWheelSwipeStep(input: {
       if (event.ctrlKey || event.metaKey || latest.current.isZoomed()) return;
       // Keeps the browser's swipe-to-go-back from taking a sideways swipe.
       if (Math.abs(event.deltaX) > Math.abs(event.deltaY)) event.preventDefault();
-      const state = gesture.current;
-      window.clearTimeout(state.idleTimer);
-      state.idleTimer = window.setTimeout(() => {
-        state.dx = 0;
-        state.dy = 0;
-        state.tail = null;
-      }, WHEEL_SWIPE_IDLE_MS);
-      if (state.tail) {
-        if (!wheelSwipeTailRestarts(state.tail, event.deltaX, event.deltaY)) return;
-        state.tail = null;
-        state.dx = 0;
-        state.dy = 0;
-      }
-      state.dx += event.deltaX;
-      state.dy += event.deltaY;
-      if (latest.current.slideTo(swipeStepDirection(-state.dx, -state.dy))) {
-        state.tail = newWheelSwipeTail(event.deltaX);
-      }
+      stepper.current?.(event);
     }
     element.addEventListener('wheel', onWheel, { passive: false });
     return () => element.removeEventListener('wheel', onWheel);

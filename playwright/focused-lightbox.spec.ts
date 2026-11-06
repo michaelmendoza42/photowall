@@ -179,15 +179,24 @@ test('a sideways trackpad swipe steps once per swipe; zoomed in, it pans instead
   // Only one step for the whole swipe, tail included.
   expect([...seen]).toEqual([first, second]);
 
-  // After the wheel goes quiet, swiping the other way steps back.
-  await trackpadSwipe(page, -1);
-  await expect(modal).toHaveAttribute('data-photo-id', first);
-  await page.waitForTimeout(400);
+  // A new swipe while the last one's tail still runs steps right away
+  // (fingers landing on the trackpad stop the tail), again only once.
+  const quick = new Set<string>([second]);
+  await trackpadSwipe(page, 1, (id) => quick.add(id), { tailFrames: 20, settle: false });
+  await trackpadSwipe(page, 1, (id) => quick.add(id), { pauseMs: 80 });
+  const fourth = await requiredAttr(modal, 'data-photo-id');
+  expect(quick.size).toBe(3);
+  expect([...quick].at(-1)).toBe(fourth);
+
+  // Swiping the other way steps back, also mid-tail.
+  await trackpadSwipe(page, -1, undefined, { tailFrames: 20, settle: false });
+  await trackpadSwipe(page, -1, undefined, { pauseMs: 80 });
+  await expect(modal).toHaveAttribute('data-photo-id', second);
 
   // Vertical scrolling never steps.
   for (let i = 0; i < 12; i += 1) await page.mouse.wheel(0, 30);
   await page.waitForTimeout(400);
-  await expect(modal).toHaveAttribute('data-photo-id', first);
+  await expect(modal).toHaveAttribute('data-photo-id', second);
 
   // Zoomed in, a sideways swipe pans the photo and stays on it.
   await page.keyboard.down('Control');
@@ -197,23 +206,32 @@ test('a sideways trackpad swipe steps once per swipe; zoomed in, it pans instead
   await expect.poll(async () => Number(await frame.getAttribute('data-zoom'))).toBeGreaterThan(1);
   for (let i = 0; i < 12; i += 1) await page.mouse.wheel(30, 0);
   await page.waitForTimeout(400);
-  await expect(modal).toHaveAttribute('data-photo-id', first);
+  await expect(modal).toHaveAttribute('data-photo-id', second);
 });
 
 /**
  * A two-finger sideways trackpad swipe: a quick push, then a momentum
  * tail of decaying events at frame rate for about a second and a half.
  * `direction` 1 is fingers moving left. Reports each photo shown.
+ * `tailFrames` cuts the tail short, `settle: false` skips waiting for the
+ * wheel to go quiet, and `pauseMs` waits before the push (fingers landing
+ * on the trackpad), so a swipe can land inside the last one's tail.
  */
 async function trackpadSwipe(
   page: Page,
   direction: 1 | -1,
   onPhoto?: (photoId: string) => void,
+  {
+    tailFrames = 90,
+    settle = true,
+    pauseMs = 0,
+  }: { tailFrames?: number; settle?: boolean; pauseMs?: number } = {},
 ): Promise<void> {
-  const seen = await page.evaluate(async (sign) => {
+  const seen = await page.evaluate(async ({ sign, tailFrames, settle, pauseMs }) => {
+    await new Promise((resolve) => setTimeout(resolve, pauseMs));
     const deltas = [
       ...[20, 40, 60, 60],
-      ...Array.from({ length: 90 }, (_, i) => Math.max(1, Math.round(60 * 0.95 ** i))),
+      ...Array.from({ length: tailFrames }, (_, i) => Math.max(1, Math.round(60 * 0.95 ** i))),
     ];
     const ids: string[] = [];
     const record = () => {
@@ -232,10 +250,10 @@ async function trackpadSwipe(
       record();
       await frame();
     }
-    await new Promise((resolve) => setTimeout(resolve, 400));
+    if (settle) await new Promise((resolve) => setTimeout(resolve, 400));
     record();
     return ids;
-  }, direction);
+  }, { sign: direction, tailFrames, settle, pauseMs });
   seen.forEach((id) => onPhoto?.(id));
 }
 

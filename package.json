@@ -33,6 +33,7 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "sharp": "^0.33.5",
+    "wheel-gestures": "^2.3.0",
     "yet-another-react-lightbox": "^3.32.0",
     "zod": "^3.23.8"
   },
