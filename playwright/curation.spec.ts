@@ -144,7 +144,7 @@ test('the server owner chooses the PIN on /curate, then albums start in storage'
   expect(directories.every((dir) => dir.startsWith('2024/'))).toBe(true);
 });
 
-test('the curator rejects a photo by moving it into _hidden, and can undo', async ({ page }) => {
+test('the curator hides a photo by moving it into _hidden, and can undo', async ({ page }) => {
   await page.request.post('/api/curation/session', { data: { pin: PIN } });
   await page.goto('/');
   await expect(page.getByTestId('wall-shell')).toHaveAttribute('data-screen', 'ready', {
@@ -155,10 +155,10 @@ test('the curator rejects a photo by moving it into _hidden, and can undo', asyn
   const photoId = await tile.getAttribute('data-photo-id');
   const photo = await photoById(page.request, photoId!);
   await tile.click();
-  await page.getByTestId('focused-photo-reject').click();
+  await page.getByTestId('focused-photo-hide').click();
 
   const toast = page.getByTestId('curation-toast');
-  await expect(toast).toContainText(`Rejected: ${photo.filename}`);
+  await expect(toast).toContainText(`Hidden: ${photo.filename}`);
   const original = path.join(libraryRoot, photo.relativePath);
   const hidden = path.join(libraryRoot, photo.directoryPath, '_hidden', photo.filename);
   await expect.poll(() => exists(hidden)).toBe(true);

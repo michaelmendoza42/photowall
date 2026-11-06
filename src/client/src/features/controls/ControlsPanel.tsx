@@ -267,7 +267,7 @@ export function ControlsPanel(props: ControlsPanelProps): JSX.Element {
                   <p className="controls__hint">
                     👁 lets guests pick an album; ⌂ makes the wall open on it. In the photo
                     view: ★ puts a photo in Favorites, Make private shows it only to
-                    guests with the VIP PIN, Reject moves a bad shot to _hidden.
+                    guests with the VIP PIN, Hide moves a bad shot to _hidden.
                   </p>
                 )}
                 <ul className="album-tree" data-testid="controls-folders">
@@ -352,8 +352,8 @@ export function ControlsPanel(props: ControlsPanelProps): JSX.Element {
                 <>
                   <p className="controls__hint">
                     {curation.session.libraryWrites
-                      ? 'Rejected photos move into a _hidden folder inside their album; nothing is deleted.'
-                      : 'Rejecting photos is off here: the library folder isn’t writable.'}
+                      ? 'Hidden photos move into a _hidden folder inside their album; nothing is deleted.'
+                      : 'Hiding photos is off here: the library folder isn’t writable.'}
                   </p>
                   <label className="controls__toggle">
                     <input

@@ -656,7 +656,7 @@ export function WallShell(): JSX.Element {
             // Step on to the next photo so curating can continue.
             if (focusedPhotoIdRef.current === photo.id) handleFocusStep('next');
             if (focusedPhotoIdRef.current === photo.id) handlePhotoClose();
-            const verb = action === 'hide' ? 'Rejected' : 'Restored';
+            const verb = action === 'hide' ? 'Hidden' : 'Restored';
             setToast({
               message: `${verb}: ${photo.filename}`,
               ...(undoable
@@ -670,7 +670,7 @@ export function WallShell(): JSX.Element {
           },
           onError: (err) =>
             setToast({
-              message: `Could not ${action === 'hide' ? 'reject' : 'restore'} ${photo.filename}: ${err.message}`,
+              message: `Could not ${action === 'hide' ? 'hide' : 'restore'} ${photo.filename}: ${err.message}`,
               tone: 'error',
             }),
         },
@@ -708,7 +708,7 @@ export function WallShell(): JSX.Element {
               return;
             }
             // Unstarred while showing in Favorites: it leaves the wall, so
-            // step on to the next photo, as Reject does.
+            // step on to the next photo, as Hide does.
             if (focusedPhotoIdRef.current === photo.id) handleFocusStep('next');
             if (focusedPhotoIdRef.current === photo.id) handlePhotoClose();
             setToast({

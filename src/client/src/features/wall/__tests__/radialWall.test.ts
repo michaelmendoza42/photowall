@@ -168,6 +168,38 @@ describe('buildRadialWallLayout', () => {
     }
   });
 
+  it('pulls starred photos toward the center within their own album', () => {
+    // Star every 9th photo, so most stars sit late in each album's order.
+    const starred = THREE_ALBUMS.map((group) => ({
+      ...group,
+      photos: group.photos.map((p, index) => (index % 9 === 8 ? { ...p, starred: true } : p)),
+    }));
+    const plain = layout(THREE_ALBUMS);
+    const result = layout(starred);
+    // Only which photo shows where changes; the tiles stay put.
+    const rects = (r: RadialWallLayout) =>
+      tilesOf(r).map((tile) => [tile.x, tile.y, tile.width, tile.height].join(','));
+    expect(rects(result)).toEqual(rects(plain));
+
+    const byId = new Map(originalsOf(result).map((tile) => [tile.photoId, tile]));
+    const cx = result.worldWidth / 2;
+    const cy = result.contentHeight / 2;
+    const distance = (id: string) => {
+      const c = center(byId.get(id)!);
+      return Math.hypot(c.x - cx, c.y - cy);
+    };
+    for (const group of starred) {
+      const shapes = new Set(group.photos.map((p) => p.aspectRatio));
+      for (const shape of shapes) {
+        const same = group.photos.filter((p) => p.aspectRatio === shape);
+        const stars = same.filter((p) => p.starred).map((p) => distance(p.id));
+        const rest = same.filter((p) => !p.starred).map((p) => distance(p.id));
+        if (stars.length === 0 || rest.length === 0) continue;
+        expect(Math.max(...stars)).toBeLessThanOrEqual(Math.min(...rest));
+      }
+    }
+  });
+
   it('starts the largest share of the first album at the center', () => {
     const result = layout(THREE_ALBUMS);
     const first = result.groupCenters.get('g0')!;

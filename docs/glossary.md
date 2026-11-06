@@ -76,7 +76,7 @@ The albums, picked by hand by the curator, that a wall shows before anyone picks
 - **Surfaced to users:** yes — to the curator, as the star on each album
 
 ### Hidden folder
-A `_hidden` folder inside an album, holding photos the curator rejected (Reject in the photo view; "hide" in code). Hiding moves the photo file (and the files that belong with it) there; nothing is deleted. Only the curator sees it, shown as "Hidden", and selecting its album never includes it.
+A `_hidden` folder inside an album, holding photos the curator hid (Hide in the photo view). Hiding moves the photo file (and the files that belong with it) there; nothing is deleted. Only the curator sees it, shown as "Hidden", and selecting its album never includes it.
 
 - **Lives in:** `docs/product/photo-wall-experience.md`; code in `src/server/curation/mover.ts`, `src/shared/api/curation.ts`
 - **Change risk:** high — it moves files in the photo library
@@ -99,7 +99,7 @@ A virtual album of the photos the curator starred. It isn't a folder: stars are 
 - **Notes:** called "starred" in code and `starred.json`
 
 ### Private photo
-A photo the curator marked private: guests never see it (authorized guests do), in its album or in Favorites, but it stays in place and the curator still sees it. Stored as a list of paths in `private.json` in the curation folder. Different from a rejected (hidden) photo, which is a bad shot moved into `_hidden`.
+A photo the curator marked private: guests never see it (authorized guests do), in its album or in Favorites, but it stays in place and the curator still sees it. Stored as a list of paths in `private.json` in the curation folder. Different from a hidden photo, which is a bad shot moved into `_hidden`.
 
 - **Lives in:** `docs/product/photo-wall-experience.md`; code in `src/server/curation/catalog.ts`
 - **Surfaced to users:** to the curator — "Make private" / "🔒 Private" in the photo view

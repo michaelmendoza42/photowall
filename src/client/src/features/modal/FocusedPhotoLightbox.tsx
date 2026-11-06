@@ -49,7 +49,7 @@ export interface FocusedPhotoLightboxProps {
     onToggle: () => void;
     pending?: boolean;
   };
-  /** Curator-only: reject the photo (moved to `_hidden`), or restore a rejected one. */
+  /** Curator-only: hide the photo (moved to `_hidden`), or restore a hidden one. */
   curatorAction?: {
     kind: 'hide' | 'restore';
     onRun: () => void;
@@ -747,14 +747,14 @@ export function FocusedPhotoLightbox(
                     className="focused-photo__curate"
                     onClick={curatorAction.onRun}
                     disabled={curatorAction.pending}
-                    data-testid={`focused-photo-${curatorAction.kind === 'hide' ? 'reject' : 'restore'}`}
+                    data-testid={`focused-photo-${curatorAction.kind === 'hide' ? 'hide' : 'restore'}`}
                     title={
                       curatorAction.kind === 'hide'
-                        ? 'Reject: move this photo into the album’s _hidden folder; nothing is deleted (R)'
+                        ? 'Hide: move this photo into the album’s _hidden folder; nothing is deleted (R)'
                         : 'Move this photo back into its album (R)'
                     }
                   >
-                    {curatorAction.kind === 'hide' ? 'Reject' : 'Restore'}
+                    {curatorAction.kind === 'hide' ? 'Hide' : 'Restore'}
                   </button>
                 )}
               </div>

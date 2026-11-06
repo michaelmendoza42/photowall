@@ -16,8 +16,8 @@
 //    with best-fitting photos. H is the smallest height whose interior
 //    (every tile not touching the outer edge) holds all the photos.
 // 3. Center-out. Within each group, photos of the same shape trade tiles
-//    so earlier photos sit nearer the wall center. The outer ring of tiles
-//    gets repeats of the group's photos.
+//    so starred photos, then earlier ones, sit nearer the wall center. The
+//    outer ring of tiles gets repeats of the group's photos.
 // 4. Ragged edge. The rectangle alone already covers the looping plane,
 //    so the outer ring can safely reach past the edge and overlap the
 //    neighbouring copy's outer ring, each tile randomly over or under.
@@ -557,6 +557,11 @@ function chooseColumn(
   return best;
 }
 
+/** Starred photos first; otherwise the order is kept. */
+function starredFirst(photos: readonly PhotoQueryRecord[]): PhotoQueryRecord[] {
+  return [...photos.filter((photo) => photo.starred), ...photos.filter((photo) => !photo.starred)];
+}
+
 function aspectBucket(photo: Pick<PhotoQueryRecord, 'width' | 'height' | 'aspectRatio'>): number {
   const aspect =
     Number.isFinite(photo.aspectRatio) && photo.aspectRatio > 0
@@ -572,8 +577,8 @@ function aspectBucket(photo: Pick<PhotoQueryRecord, 'width' | 'height' | 'aspect
 }
 
 /**
- * Within each group, photos of the same shape trade tiles so earlier
- * photos sit nearer the wall center. Each group shaped its interior tiles
+ * Within each group, photos of the same shape trade tiles so starred
+ * photos, then earlier ones, sit nearer the wall center. Each group shaped its interior tiles
  * with its own photos, so those counts match exactly; tiles shaped by
  * repeats (the outer ring) show the group's center-most photos again.
  */
@@ -612,7 +617,7 @@ function placeCenterOut(
   const groupCenters = new Map<string, { x: number; y: number }>();
   groups.forEach((group, groupIndex) => {
     const byBucket: PhotoQueryRecord[][] = Array.from({ length: bucketCount }, () => []);
-    for (const photo of group.photos) byBucket[aspectBucket(photo)]!.push(photo);
+    for (const photo of starredFirst(group.photos)) byBucket[aspectBucket(photo)]!.push(photo);
     let sumX = 0;
     let sumY = 0;
     let count = 0;
