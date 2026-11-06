@@ -17,6 +17,7 @@ test-results/
 .env
 .env.local
 .photo-wall-data/
+.photo-wall-data-local/
 
 # Editor / OS
 .idea/

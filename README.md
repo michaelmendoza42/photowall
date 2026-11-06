@@ -14,18 +14,20 @@ cp .env.example .env   # then edit PHOTO_WALL_HOST_LIBRARY_PATH
 npm run dev            # client on :5176, server on :3001
 ```
 
-Docker (production-style single image):
+Production is the Portainer stack `photo-wall` on mmdebian, port 8092. It deploys only when you push `main` from mmdebian (see `AGENTS.md` "Production deploy"); never run `deploy/compose.portainer.yaml` yourself.
+
+Local Docker preview of the production image (project `photo-wall-local`, port 8093):
 
 ```bash
-cp .env.example .env   # then edit PHOTO_WALL_HOST_LIBRARY_PATH and PHOTO_WALL_HOST_DATA_PATH
-docker compose up --build
-# health: curl http://localhost:3001/healthz
-# LAN access: http://<your-lan-ip>:3001
+cp .env.example .env   # then edit PHOTO_WALL_HOST_LIBRARY_PATH
+mkdir -p .photo-wall-data-local
+docker compose up -d --build
+# health: curl http://localhost:8093/healthz
 ```
 
 The container expects:
 
-- `/photos` — read-only bind of the host photo-library root
+- `/photos` — bind of the host photo-library root (read-only unless the curator may hide photos)
 - `/data` — writable bind for snapshots and derivative cache
 - `/curation` — writable bind for curation settings, the photo-move log and share links (optional curator PIN; see the Docker runbook)
 
@@ -81,7 +83,7 @@ Month filtering is out of MVP scope.
 ## Troubleshooting shortcuts
 
 - `startup failed: library root invalid` usually means `PHOTO_WALL_HOST_LIBRARY_PATH` points at a missing path, a file instead of a directory, or a mount the container cannot read.
-- `startup failed: data root invalid` usually means `PHOTO_WALL_HOST_DATA_PATH` points at a non-directory path, an unwritable location, or a path that overlaps the photo-library root instead of staying on a separate writable mount.
+- `startup failed: data root invalid` usually means the data mount (`PHOTO_WALL_LOCAL_DATA_PATH` for the preview) points at a non-directory path, an unwritable location, or a path that overlaps the photo-library root instead of staying on a separate writable mount.
 - `startup summary` in the server logs reports the resolved library root, data root, cache dir, curation root, scan state, warm-load state, snapshot id, and discovered photo count.
 - Dev-only escape hatch: set `PHOTO_WALL_SCAN_TOP_LEVEL_YEARS_ONLY=true` to scan only top-level year folders and ignore loose root files plus non-year top-level folders.
 - A fresh scan is triggered on startup. Today, the operator-facing way to force a rescan is to restart the container after changing the library contents.

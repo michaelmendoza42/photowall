@@ -1,0 +1,72 @@
+# Local preview of the production image, for checking a container-only
+# problem before you push. It never touches production: its own project name,
+# image tag, port (8093) and data folder (./.photo-wall-data-local).
+#
+# Production is the Portainer stack `photo-wall` (see deploy/compose.portainer.yaml),
+# deployed only by pushing `main` from mmdebian. Never run a Compose file as
+# project `photo-wall`.
+#
+# Configure host paths via .env (copy .env.example -> .env):
+#   PHOTO_WALL_HOST_LIBRARY_PATH  -> bound to /photos (the source library)
+#   PHOTO_WALL_LOCAL_DATA_PATH    -> bound to /data       (writable app state)
+#   PHOTO_WALL_HOST_CURATION_PATH -> bound to /curation   (curation settings, move log, share links)
+#   PHOTO_WALL_LOCAL_PORT         -> host port (default 8093)
+#
+# The data folder is separate from the native dev server's because the
+# snapshot and library-root override record the library path each server sees
+# (/photos here, /mnt/... natively). Curation is shared with dev on purpose.
+#
+# Bring up: mkdir -p .photo-wall-data-local   # so it's owned by you, not root
+#           docker compose up -d --build
+# Health:   curl http://localhost:${PHOTO_WALL_LOCAL_PORT:-8093}/healthz
+# Stop:     docker compose down
+name: photo-wall-local
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: photo-wall:local
+    user: "1000:1000"
+    environment:
+      NODE_ENV: production
+      PHOTO_WALL_LIBRARY_ROOT: /photos
+      PHOTO_WALL_DATA_ROOT: /data
+      PHOTO_WALL_BIND_HOST: 0.0.0.0
+      PHOTO_WALL_PORT: 3001
+      PHOTO_WALL_LOG_LEVEL: ${PHOTO_WALL_LOG_LEVEL:-info}
+      PHOTO_WALL_CURATION_ROOT: /curation
+      PHOTO_WALL_CURATOR_PIN: ${PHOTO_WALL_CURATOR_PIN:-}
+      PHOTO_WALL_LIBRARY_WRITES: ${PHOTO_WALL_LIBRARY_WRITES:-true}
+    ports:
+      - "${PHOTO_WALL_LOCAL_PORT:-8093}:3001"
+    volumes:
+      # Source library — read-only unless the curator may hide photos.
+      - type: bind
+        source: ${PHOTO_WALL_HOST_LIBRARY_PATH:-./fixtures/library-smoke}
+        target: /photos
+        read_only: ${PHOTO_WALL_LIBRARY_READ_ONLY:-true}
+      # Writable app data — snapshots and derivatives (rebuildable).
+      - type: bind
+        source: ${PHOTO_WALL_LOCAL_DATA_PATH:-./.photo-wall-data-local}
+        target: /data
+        bind:
+          create_host_path: true
+      # Curation state — not rebuildable; back it up. Defaults to the same
+      # folder the native dev server uses, so dev and preview share curation.
+      - type: bind
+        source: ${PHOTO_WALL_HOST_CURATION_PATH:-./.photo-wall-data/curation}
+        target: /curation
+        bind:
+          create_host_path: true
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3001/healthz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

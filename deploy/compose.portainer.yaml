@@ -1,0 +1,42 @@
+# The Portainer stack `photo-wall`. Reference copy only: never run this file
+# with `docker compose` (that replaces the production container outside
+# Portainer). Production deploys only when you push `main` from mmdebian: the
+# hook runs project-admin's portfolio-deploy-sync, which builds the pushed
+# commit and updates this stack. Policy: project-admin docs/standards/app-deployment.md
+# It lives in deploy/ because a Compose file at the repo root with no `name:`
+# would run as project `photo-wall` (the folder name), which is production.
+#
+# Host paths:
+#   library   /mnt/hateno/.../Photography  -> /photos   (writable: the curator can hide photos)
+#   data      /home/michael/docker/photo-wall/data -> /data (prod-only; rebuildable)
+#   curation  the dev checkout's .photo-wall-data/curation -> /curation
+#             (shared with the native dev server on purpose; back it up)
+# Runs as uid 1000 so files it creates in shared folders stay owned by michael.
+
+services:
+  app:
+    image: photo-wall:latest
+    pull_policy: never
+    user: "1000:1000"
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PHOTO_WALL_LIBRARY_ROOT: /photos
+      PHOTO_WALL_DATA_ROOT: /data
+      PHOTO_WALL_CURATION_ROOT: /curation
+      PHOTO_WALL_BIND_HOST: 0.0.0.0
+      PHOTO_WALL_PORT: "3001"
+      PHOTO_WALL_LOG_LEVEL: info
+      PHOTO_WALL_LIBRARY_WRITES: "true"
+    ports:
+      - "8092:3001"
+    volumes:
+      - /mnt/hateno/Files/users/michael/Projects/Photography:/photos
+      - /home/michael/docker/photo-wall/data:/data
+      - /home/michael/Projects/Code/photo-wall/.photo-wall-data/curation:/curation
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/healthz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 20s
+      timeout: 5s
+      start_period: 10s
+      retries: 3

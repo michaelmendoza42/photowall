@@ -1,10 +1,25 @@
 # Photo Wall Docker/LAN Operator Runbook
-Last edited: 2026-11-01
+Last edited: 2026-11-05
 Status: Active
 Owner: Michael
-Related files: `../../README.md`, `../system/photo-library-source-and-runtime.md`, `../product/photo-wall-experience.md`, `../../docker-compose.yml`, `../../.env.example`
+Related files: `../../README.md`, `../system/photo-library-source-and-runtime.md`, `../product/photo-wall-experience.md`, `../../compose.yaml`, `../../deploy/compose.portainer.yaml`, `../../.env.example`
 
 Repeatable setup, startup, and troubleshooting procedure for running `photo-wall` on a trusted home LAN.
+
+## Production
+
+Production is the Portainer stack `photo-wall` on mmdebian: `http://mmdebian.local:8092/`. It deploys only when Michael pushes `main` from mmdebian. A post-push hook starts project-admin's `portfolio-deploy-sync@photo-wall`, which builds the exact pushed commit, checks a candidate container's `/healthz`, then updates the stack through homelab-admin's `portainer-control`. Never start, rebuild, recreate, or retag the production container by hand; policy is `~/Projects/Code/project-admin/docs/standards/app-deployment.md`.
+
+`deploy/compose.portainer.yaml` is the reference copy of the stack. Production:
+
+- mounts the library writable at `/photos`, so the curator can hide photos;
+- keeps its own data root at `/home/michael/docker/photo-wall/data` (snapshot, thumbnail cache, playlists). It is separate from the native dev server's `.photo-wall-data` because the snapshot and the library-root override record the library path each server sees (`/photos` in the container, `/mnt/hateno/...` natively), so a shared data root would make each server rescan over the other's snapshot;
+- shares curation with the native dev server by mounting the dev checkout's `.photo-wall-data/curation` at `/curation`;
+- runs as uid 1000, so files it creates (including `_hidden` folders) stay owned by michael.
+
+The native dev server managed by the LAN Services dashboard stays on `http://mmdebian.local:5176/`.
+
+The steps below run a **local Docker preview** (`compose.yaml`: project `photo-wall-local`, image `photo-wall:local`, port 8093). Use it to debug a container-only problem before pushing; it never touches production.
 
 ## Purpose
 
@@ -27,8 +42,8 @@ Use this runbook when you need to:
    Required keys:
 
    - `PHOTO_WALL_HOST_LIBRARY_PATH` — host path to the source photo library (the current operator host uses `/mnt/sigma/Files/users/michael/Projects/Photography`)
-   - `PHOTO_WALL_HOST_DATA_PATH` — host path for writable app state
-   - `PHOTO_WALL_PORT` — host/container port (default `3001`)
+   - `PHOTO_WALL_LOCAL_DATA_PATH` — host path for the preview's writable app state (default `./.photo-wall-data-local`; create it first so it's owned by you)
+   - `PHOTO_WALL_LOCAL_PORT` — preview host port (default `8093`)
 
    Optional dev-only key:
 
@@ -49,10 +64,11 @@ Use this runbook when you need to:
 
    Do not point the data path into the photo library tree.
 
-3. Start the production-style stack:
+3. Start the preview:
 
    ```bash
-   docker compose up --build
+   mkdir -p .photo-wall-data-local
+   docker compose up -d --build
    ```
 
 4. Watch the early startup logs. A healthy boot should include:
@@ -65,16 +81,16 @@ Use this runbook when you need to:
 5. Validate localhost reachability:
 
    ```bash
-   curl http://localhost:${PHOTO_WALL_PORT:-3001}/healthz
+   curl http://localhost:${PHOTO_WALL_LOCAL_PORT:-8093}/healthz
    ```
 
-6. Validate LAN reachability from another device on the same network using the configured Compose port:
+6. Validate LAN reachability from another device on the same network:
 
    ```text
-   http://mmdebian.local:<PHOTO_WALL_PORT>/
+   http://mmdebian.local:8093/
    ```
 
-   The portable default is `3001`. The current operator deployment explicitly sets `PHOTO_WALL_PORT=5176`, so its managed route is `http://mmdebian.local:5176/`. The bare hostname (`http://mmdebian.local/`) is a different service on port 80.
+   Production is on `8092` and the native dev server on `5176`. The bare hostname (`http://mmdebian.local/`) is a different service on port 80.
 
 7. If the app opens with the wrong or missing root, use the in-app root editor:
 
@@ -87,7 +103,7 @@ Use this runbook when you need to:
 8. If the library contents changed and you need a fresh scan, use **Rescan library** in the curator section of the menu, or restart the app:
 
    ```bash
-   docker compose restart app
+   docker compose restart app   # preview only; production restarts through Portainer
    ```
 
    A scan runs on startup; the curator can also start one from the menu.
@@ -110,13 +126,13 @@ With curation on:
 To let the curator **hide photos**, which moves each one into a `_hidden` folder inside its album and never deletes anything:
 
 1. Set `PHOTO_WALL_LIBRARY_READ_ONLY=false` in `.env`.
-2. `docker compose up -d` so the library is remounted writable.
+2. `docker compose up -d` so the preview's library is remounted writable. Production already mounts it writable.
 
 Hide appears for the curator whenever the library is writable. Set `PHOTO_WALL_LIBRARY_WRITES=false` to forbid it anyway.
 
-The container runs as root, so `_hidden` folders it creates are owned by root on the host. Hidden photos keep their owner and dates. To put a photo back by hand, move it out of `_hidden` and rescan; `moves.log` lists every move the app made.
+The container runs as uid 1000 (michael), so `_hidden` folders it creates are owned by michael on the host. Hidden photos keep their owner and dates. To put a photo back by hand, move it out of `_hidden` and rescan; `moves.log` lists every move the app made.
 
-Docker mounts `./.photo-wall-data/curation`, the same folder the native dev server uses, so dev and prod on this machine share curation with no setting. Each server notices the other's changes within a second, and a change always starts from the latest saved settings, so curating on both never undoes the other's work. To move the folder, set `PHOTO_WALL_CURATION_ROOT` (native) and `PHOTO_WALL_HOST_CURATION_PATH` (Docker) to the same path outside the library.
+Production and the preview both mount `./.photo-wall-data/curation`, the same folder the native dev server uses, so dev and prod on this machine share curation with no setting. Each server notices the other's changes within a second, and a change always starts from the latest saved settings, so curating on both never undoes the other's work. To move the folder, set `PHOTO_WALL_CURATION_ROOT` (native) and `PHOTO_WALL_HOST_CURATION_PATH` (Docker) to the same path outside the library.
 
 ## Validation
 
@@ -137,16 +153,18 @@ A successful run should give you all of the following:
 
 ## Rollback
 
-If startup fails or the app points at the wrong paths:
+For production, roll back by pushing a fix or revert to `main`, or follow project-admin's `docs/runbooks/on-host-deployment.md` rollback; never recreate the container by hand.
 
-1. Stop the stack:
+If the preview fails to start or points at the wrong paths:
+
+1. Stop the preview:
 
    ```bash
    docker compose down
    ```
 
 2. Fix `.env` or the host mount directories.
-3. Start again with `docker compose up --build`.
+3. Start again with `docker compose up -d --build`.
 4. If the writable app-data directory contains bad test state you want to discard, remove only the configured data path — never the source photo-library path, and never the curation folder (by default `<data root>/curation` for native runs).
 
 ## Common failure modes
@@ -192,7 +210,7 @@ Check the `startup summary` and `library scan completed` logs first:
 Then inspect the bounded media diagnostics:
 
 ```bash
-curl -s http://localhost:${PHOTO_WALL_PORT:-3001}/api/diagnostics/media | jq
+curl -s http://localhost:8092/api/diagnostics/media   # production; 8093 for the preview | jq
 ```
 
 Interpret the evidence in this order:
@@ -219,10 +237,14 @@ Both snapshots are process/page-lifetime aggregates and contain no photo IDs, fi
 - `../../README.md`
 - `../system/photo-library-source-and-runtime.md`
 - `../product/photo-wall-experience.md`
-- `../../docker-compose.yml`
+- `../../compose.yaml`
+- `../../deploy/compose.portainer.yaml`
 - `../../.env.example`
 
 ## Changelog
+
+### 2026-11-05
+- Production is the Portainer stack `photo-wall` on port 8092, deployed by pushing `main`; `compose.yaml` became the isolated local preview on 8093 with its own data folder; containers run as uid 1000.
 
 ### 2026-11-01
 - The curator PIN is chosen on `/curate` with the logged setup code; hiding photos only needs a writable library mount.
