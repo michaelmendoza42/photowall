@@ -22,7 +22,10 @@ COPY vite.config.ts ./
 COPY src ./src
 COPY fixtures ./fixtures
 
-RUN npm run build
+# NODE_ENV=development above keeps dev deps installed, but Vite would then
+# make a development build (import.meta.env.DEV true: debug overlay, React
+# dev mode). Build as production.
+RUN NODE_ENV=production npm run build
 
 # Drop dev dependencies for the runtime image.
 RUN npm prune --omit=dev
