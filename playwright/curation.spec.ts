@@ -195,7 +195,8 @@ test('the curator crops and brightens a photo; the file itself is never changed'
   await expect(page.getByTestId('photo-editor-stage')).not.toContainText('Loading photo');
 
   // A square crop; the frame stays where it is while the photo moves.
-  await page.getByTestId('photo-editor-tab-crop').click();
+  // The editor opens on Crop the first time.
+  await expect(page.getByTestId('photo-editor-tab-crop')).toHaveAttribute('aria-selected', 'true');
   await page.getByTestId('photo-editor-aspect-1:1').click();
   const frame = page.getByTestId('crop-frame');
   const square = (await frame.boundingBox())!;
@@ -287,6 +288,10 @@ test('closing the editor leaves the wall drawing', async ({ page }) => {
   for (let round = 0; round < 2; round += 1) {
     await page.getByTestId('focused-photo-edit').click();
     await expect(page.getByTestId('photo-editor-stage')).not.toContainText('Loading photo');
+    // Crop the first time, then the last tab used.
+    const expectedTab = round === 0 ? 'crop' : 'adjust';
+    await expect(page.getByTestId(`photo-editor-tab-${expectedTab}`)).toHaveAttribute('aria-selected', 'true');
+    if (round === 0) await page.getByTestId('photo-editor-tab-adjust').click();
     await page.getByTestId('photo-editor-brightness').fill('0.2');
     await page.getByTestId('photo-editor-save').click();
     await expect(editor).toHaveCount(0);

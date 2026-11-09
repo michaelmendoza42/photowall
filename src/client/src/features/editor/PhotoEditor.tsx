@@ -18,6 +18,26 @@ import { centeredCrop, type ScreenRect } from './cropMath.js';
 import { EditorScene } from './editorScene.js';
 
 type Tab = 'crop' | 'adjust' | 'looks';
+const TABS = ['crop', 'adjust', 'looks'] as const;
+const EDITOR_TAB_STORAGE_KEY = 'photo-wall.editor-tab';
+
+/** The tab the curator last used, or Crop the first time. */
+function readStoredTab(): Tab {
+  try {
+    const stored = window.localStorage.getItem(EDITOR_TAB_STORAGE_KEY);
+    return TABS.find((name) => name === stored) ?? 'crop';
+  } catch {
+    return 'crop';
+  }
+}
+
+function storeTab(tab: Tab): void {
+  try {
+    window.localStorage.setItem(EDITOR_TAB_STORAGE_KEY, tab);
+  } catch {
+    // Storage blocked; the editor just opens on Crop next time.
+  }
+}
 
 const ASPECTS = ['free', 'original', '1:1', '4:3', '3:4', '16:9'] as const;
 type Aspect = (typeof ASPECTS)[number];
@@ -101,7 +121,7 @@ export function PhotoEditor(props: PhotoEditorProps): JSX.Element {
   const stageRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<EditorScene | null>(null);
   const [edit, setEdit] = useState<PhotoEdit>(() => photo.edit ?? NEUTRAL_EDIT);
-  const [tab, setTab] = useState<Tab>('adjust');
+  const [tab, setTab] = useState<Tab>(readStoredTab);
   const [aspect, setAspect] = useState<Aspect>('free');
   const [frame, setFrame] = useState<ScreenRect | null>(null);
   const [size, setSize] = useState<{ width: number; height: number } | null>(null);
@@ -246,7 +266,7 @@ export function PhotoEditor(props: PhotoEditorProps): JSX.Element {
 
         <aside className="photo-editor__panel">
           <nav className="photo-editor__tabs" role="tablist">
-            {(['crop', 'adjust', 'looks'] as const).map((name) => (
+            {TABS.map((name) => (
               <button
                 key={name}
                 type="button"
@@ -256,6 +276,7 @@ export function PhotoEditor(props: PhotoEditorProps): JSX.Element {
                 onClick={() => {
                   if (name === 'crop') refit();
                   setTab(name);
+                  storeTab(name);
                 }}
                 data-testid={`photo-editor-tab-${name}`}
               >
