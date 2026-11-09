@@ -1,9 +1,44 @@
 import { expect, test, type Page } from '@playwright/test';
 
-// Album picker contract: top-level folders hold their nested folders,
-// a top-level pick selects everything inside it, and deselecting a
-// nested folder leaves the parent partially selected.
+// Album picker contract: top-level folders hold their nested folders.
+// By default one album is picked at a time with no checkboxes; with
+// "Select multiple" on, a top-level pick selects everything inside it
+// and deselecting a nested folder leaves the parent partially selected.
 test.describe('album picker', () => {
+  test('picks one album at a time until Select multiple is on', async ({ page }) => {
+    await openReadyWall(page);
+    await openControls(page);
+
+    const toggle = page.getByTestId('controls-multi-select');
+    await expect(toggle).not.toBeChecked();
+    await expect(page.locator('.album-tree input[type="checkbox"]')).toHaveCount(0);
+
+    await page.getByTestId('controls-folder-expand-2024').click();
+    const wedding = page.getByTestId('controls-folder-2024/wedding-anna');
+    const iceland = page.getByTestId('controls-folder-2024/travel-iceland');
+    await wedding.click();
+    await expect(wedding).toHaveAttribute('data-selected', 'true');
+    // A second pick replaces the first instead of adding to it.
+    await iceland.click();
+    await expect(iceland).toHaveAttribute('data-selected', 'true');
+    await expect(wedding).toHaveAttribute('data-selected', 'false');
+    await closeControls(page);
+    await expect.poll(async () => uniquePhotoDirectories(page)).toEqual(['2024/travel-iceland']);
+
+    await openControls(page);
+    await page.getByTestId('controls-multi-select').check();
+    await expect(page.locator('.album-tree input[type="checkbox"]').first()).toBeVisible();
+    await page.getByTestId('controls-folder-2024/wedding-anna').click();
+    await expect(page.getByTestId('controls-folder-2024/wedding-anna')).toHaveAttribute(
+      'data-selected',
+      'true',
+    );
+    await expect(page.getByTestId('controls-folder-2024/travel-iceland')).toHaveAttribute(
+      'data-selected',
+      'true',
+    );
+  });
+
   test('shows only the album tree, without year chips or the root editor', async ({ page }) => {
     await openReadyWall(page);
     await openControls(page);
@@ -23,6 +58,7 @@ test.describe('album picker', () => {
   }) => {
     await openReadyWall(page);
     await openControls(page);
+    await page.getByTestId('controls-multi-select').check();
     await page.getByTestId('controls-folder-2024').click();
     await page.getByTestId('controls-folder-expand-2024').click();
 
@@ -46,6 +82,7 @@ test.describe('album picker', () => {
     await page.reload();
     await openReadyWall(page);
     await openControls(page);
+    await page.getByTestId('controls-multi-select').check();
     await expect(page.getByTestId('controls-folder-2024')).toHaveAttribute('data-selected', 'partial');
     await expect(page.getByTestId('controls-folder-2024/wedding-anna')).toHaveAttribute(
       'data-selected',

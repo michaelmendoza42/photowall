@@ -27,6 +27,7 @@ test.describe('grouped album areas', () => {
   }, testInfo: TestInfo) => {
     await openReadyWall(page);
     await openControls(page);
+    await page.getByTestId('controls-multi-select').check();
     await page.getByTestId('controls-folder-expand-2024').click();
     await page.getByTestId('controls-folder-2024/travel-iceland').click();
     await page.getByTestId('controls-folder-2024/wedding-anna').click();
@@ -63,6 +64,7 @@ test.describe('grouped album areas', () => {
     await installGroupedCompletenessPaginationMock(page);
     await openReadyWall(page);
     await openControls(page);
+    await page.getByTestId('controls-multi-select').check();
     await page.getByTestId('controls-folder-expand-2024').click();
     await page.getByTestId('controls-folder-2024/travel-iceland').click();
     await page.getByTestId('controls-folder-2024/wedding-anna').click();
@@ -101,6 +103,7 @@ test.describe('grouped album areas', () => {
   }, testInfo: TestInfo) => {
     await openReadyWall(page);
     await openControls(page);
+    await page.getByTestId('controls-multi-select').check();
     await page.getByTestId('controls-folder-expand-2024').click();
     await page.getByTestId('controls-folder-2024/travel-iceland').click();
     await page.getByTestId('controls-folder-2024/wedding-anna').click();

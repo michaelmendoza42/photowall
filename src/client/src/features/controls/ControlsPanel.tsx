@@ -7,6 +7,8 @@ import type {
 import {
   clearFilters,
   hasAnyFilter,
+  isMultiAlbumSelection,
+  pickSingleAlbum,
   setFolderSelection,
   type ActiveFilters,
 } from '../../state/filters.js';
@@ -104,14 +106,23 @@ export function ControlsPanel(props: ControlsPanelProps): JSX.Element {
     ReadonlyMap<string, boolean>
   >(() => new Map());
 
+  // Off by default: one album at a time, no checkboxes. A mix restored
+  // from a reload or share link turns it on, and it stays on until
+  // switched off.
+  const [multiSelect, setMultiSelect] = useState(() => isMultiAlbumSelection(filters));
+  const multiSelectTouched = useRef(false);
+  useEffect(() => {
+    if (!multiSelectTouched.current && isMultiAlbumSelection(filters)) setMultiSelect(true);
+  }, [filters]);
+
   const filtersActive = hasAnyFilter(filters);
   const starredCount = facets?.starredCount ?? 0;
   // Viewers see Starred once it has photos; the curator always does.
   const showStarred = starredCount > 0 || (isCurator && curation.session?.enabled === true);
 
-  function handleToggleFolder(path: string): void {
-    // Keep folders that are open only because they were partial from
-    // snapping shut under the cursor once they become fully (de)selected.
+  // Keep folders that are open only because they were partial from
+  // snapping shut under the cursor once they become fully (de)selected.
+  function pinPartialFoldersOpen(): void {
     setExpandedOverrides((prev) => {
       const next = new Map(prev);
       for (const [folder, state] of checkStates) {
@@ -119,9 +130,18 @@ export function ControlsPanel(props: ControlsPanelProps): JSX.Element {
       }
       return next;
     });
+  }
+
+  function handleToggleFolder(path: string): void {
+    pinPartialFoldersOpen();
     onFiltersChange(
       setFolderSelection(filters, toggleFolderInTree(folderTree, filters, path)),
     );
+  }
+
+  function handlePickFolder(path: string): void {
+    pinPartialFoldersOpen();
+    onFiltersChange(pickSingleAlbum(filters, { folder: path }));
   }
 
   function handleToggleExpanded(path: string, isExpanded: boolean): void {
@@ -206,26 +226,55 @@ export function ControlsPanel(props: ControlsPanelProps): JSX.Element {
           )}
 
           <section className="controls__section">
-            <h3 className="controls__section-title">Albums</h3>
+            <header className="controls__section-header">
+              <h3 className="controls__section-title">Albums</h3>
+              <label className="controls__toggle">
+                <input
+                  type="checkbox"
+                  data-testid="controls-multi-select"
+                  checked={multiSelect}
+                  onChange={(e) => {
+                    multiSelectTouched.current = true;
+                    setMultiSelect(e.target.checked);
+                  }}
+                />
+                <span>Select multiple</span>
+              </label>
+            </header>
             {showStarred && (
               <ul className="album-tree" data-testid="controls-starred">
                 <li className="album-tree__item">
                   <div className="album-tree__row">
                     <span className="album-tree__disclosure" aria-hidden="true" />
-                    <label className="album-tree__label" title="The curator’s favourite photos">
-                      <input
-                        type="checkbox"
-                        className="album-tree__checkbox"
+                    {multiSelect ? (
+                      <label className="album-tree__label" title="The curator’s favourite photos">
+                        <input
+                          type="checkbox"
+                          className="album-tree__checkbox"
+                          data-testid="controls-folder-starred"
+                          data-selected={filters.starred ? 'true' : 'false'}
+                          checked={filters.starred === true}
+                          onChange={() =>
+                            onFiltersChange({ ...filters, starred: !filters.starred })
+                          }
+                        />
+                        <span className="album-tree__name">★ Favorites</span>
+                        <span className="album-tree__count">{starredCount}</span>
+                      </label>
+                    ) : (
+                      <button
+                        type="button"
+                        className="album-tree__label album-tree__pick"
+                        title="The curator’s favourite photos"
                         data-testid="controls-folder-starred"
                         data-selected={filters.starred ? 'true' : 'false'}
-                        checked={filters.starred === true}
-                        onChange={() =>
-                          onFiltersChange({ ...filters, starred: !filters.starred })
-                        }
-                      />
-                      <span className="album-tree__name">★ Favorites</span>
-                      <span className="album-tree__count">{starredCount}</span>
-                    </label>
+                        aria-pressed={filters.starred === true}
+                        onClick={() => onFiltersChange(pickSingleAlbum(filters, 'starred'))}
+                      >
+                        <span className="album-tree__name">★ Favorites</span>
+                        <span className="album-tree__count">{starredCount}</span>
+                      </button>
+                    )}
                     {albums && (
                       <button
                         type="button"
@@ -278,8 +327,9 @@ export function ControlsPanel(props: ControlsPanelProps): JSX.Element {
                       depth={0}
                       checkStates={checkStates}
                       expandedOverrides={expandedOverrides}
-                      onToggle={handleToggleFolder}
+                      onToggle={multiSelect ? handleToggleFolder : handlePickFolder}
                       onToggleExpanded={handleToggleExpanded}
+                      multiSelect={multiSelect}
                       curator={curatorTools}
                     />
                   ))}
@@ -489,12 +539,22 @@ interface AlbumTreeItemProps {
   expandedOverrides: ReadonlyMap<string, boolean>;
   onToggle: (path: string) => void;
   onToggleExpanded: (path: string, isExpanded: boolean) => void;
+  /** Checkboxes when on; otherwise each row picks just that album. */
+  multiSelect: boolean;
   curator: CuratorTreeTools | null;
 }
 
 function AlbumTreeItem(props: AlbumTreeItemProps): JSX.Element {
-  const { node, depth, checkStates, expandedOverrides, onToggle, onToggleExpanded, curator } =
-    props;
+  const {
+    node,
+    depth,
+    checkStates,
+    expandedOverrides,
+    onToggle,
+    onToggleExpanded,
+    multiSelect,
+    curator,
+  } = props;
   const displayState = curator?.displayStates.get(node.path);
   const state = checkStates.get(node.path) ?? 'none';
   const hasChildren = node.children.length > 0;
@@ -504,7 +564,16 @@ function AlbumTreeItem(props: AlbumTreeItemProps): JSX.Element {
 
   useEffect(() => {
     if (checkboxRef.current) checkboxRef.current.indeterminate = state === 'partial';
-  }, [state]);
+  }, [state, multiSelect]);
+  const selectedAttr = state === 'all' ? 'true' : state === 'partial' ? 'partial' : 'false';
+  const name = (
+    <>
+      <span className="album-tree__name" data-hidden-folder={node.hidden ? 'true' : undefined}>
+        {node.hidden ? 'Hidden' : node.name}
+      </span>
+      <span className="album-tree__count">{node.photoCount}</span>
+    </>
+  );
 
   return (
     <li className="album-tree__item">
@@ -523,21 +592,32 @@ function AlbumTreeItem(props: AlbumTreeItemProps): JSX.Element {
         ) : (
           <span className="album-tree__disclosure" aria-hidden="true" />
         )}
-        <label className="album-tree__label" title={node.path}>
-          <input
-            ref={checkboxRef}
-            type="checkbox"
-            className="album-tree__checkbox"
+        {multiSelect ? (
+          <label className="album-tree__label" title={node.path}>
+            <input
+              ref={checkboxRef}
+              type="checkbox"
+              className="album-tree__checkbox"
+              data-testid={`controls-folder-${node.path}`}
+              data-selected={selectedAttr}
+              checked={state === 'all'}
+              onChange={() => onToggle(node.path)}
+            />
+            {name}
+          </label>
+        ) : (
+          <button
+            type="button"
+            className="album-tree__label album-tree__pick"
+            title={node.path}
             data-testid={`controls-folder-${node.path}`}
-            data-selected={state === 'all' ? 'true' : state === 'partial' ? 'partial' : 'false'}
-            checked={state === 'all'}
-            onChange={() => onToggle(node.path)}
-          />
-          <span className="album-tree__name" data-hidden-folder={node.hidden ? 'true' : undefined}>
-            {node.hidden ? 'Hidden' : node.name}
-          </span>
-          <span className="album-tree__count">{node.photoCount}</span>
-        </label>
+            data-selected={selectedAttr}
+            aria-pressed={state === 'all'}
+            onClick={() => onToggle(node.path)}
+          >
+            {name}
+          </button>
+        )}
         {curator && displayState && (
           <>
             <button
@@ -592,6 +672,7 @@ function AlbumTreeItem(props: AlbumTreeItemProps): JSX.Element {
               expandedOverrides={expandedOverrides}
               onToggle={onToggle}
               onToggleExpanded={onToggleExpanded}
+              multiSelect={multiSelect}
               curator={curator}
             />
           ))}

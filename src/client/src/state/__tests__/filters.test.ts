@@ -4,6 +4,8 @@ import {
   EMPTY_FILTERS,
   clearFilters,
   hasAnyFilter,
+  isMultiAlbumSelection,
+  pickSingleAlbum,
   parseActiveFilters,
   summarizeFilters,
   toQueryFilters,
@@ -142,6 +144,43 @@ describe('filters', () => {
         folders: ['a', 'b'],
         excludeFolders: [],
       });
+    });
+  });
+
+  describe('single-album picking', () => {
+    const mixed = {
+      ...EMPTY_FILTERS,
+      folders: ['2023', '2024'],
+      excludeFolders: ['2024/wedding-anna'],
+      starred: true,
+    };
+
+    it('replaces the whole selection with one folder', () => {
+      expect(pickSingleAlbum(mixed, { folder: '2024/travel-iceland' })).toEqual({
+        ...EMPTY_FILTERS,
+        folders: ['2024/travel-iceland'],
+        excludeFolders: [],
+        starred: false,
+      });
+    });
+
+    it('replaces the whole selection with Favorites', () => {
+      expect(pickSingleAlbum(mixed, 'starred')).toEqual({
+        ...EMPTY_FILTERS,
+        folders: [],
+        excludeFolders: [],
+        starred: true,
+      });
+    });
+
+    it('tells a single pick from a mix', () => {
+      expect(isMultiAlbumSelection(EMPTY_FILTERS)).toBe(false);
+      expect(isMultiAlbumSelection(pickSingleAlbum(mixed, { folder: '2024' }))).toBe(false);
+      expect(isMultiAlbumSelection(pickSingleAlbum(mixed, 'starred'))).toBe(false);
+      expect(isMultiAlbumSelection(mixed)).toBe(true);
+      expect(
+        isMultiAlbumSelection({ ...EMPTY_FILTERS, folders: ['2024'], excludeFolders: ['2024/x'] }),
+      ).toBe(true);
     });
   });
 });

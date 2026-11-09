@@ -746,6 +746,33 @@ button.album-tree__disclosure:focus-visible {
 	color: var(--pw-fg);
 }
 
+/* Single-album mode: the row itself is the pick, lit when picked. */
+.album-tree__pick {
+	appearance: none;
+	margin: 0;
+	padding: 0.2rem 0.35rem;
+	border: 0;
+	border-radius: 4px;
+	background: transparent;
+	font: inherit;
+	font-size: 12px;
+	text-align: left;
+}
+
+.album-tree__pick:focus-visible {
+	outline: 1px solid var(--pw-fg);
+	outline-offset: 1px;
+}
+
+.album-tree__pick[data-selected="true"] {
+	color: var(--pw-fg);
+	background: color-mix(in srgb, var(--pw-fg) 14%, transparent);
+}
+
+.album-tree__pick[data-selected="partial"] {
+	color: var(--pw-fg);
+}
+
 /* Square box: filled with a tick when the whole folder is picked, a bar
    when only some of the folders inside it are. */
 .album-tree__checkbox {

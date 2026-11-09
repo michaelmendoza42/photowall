@@ -122,6 +122,24 @@ export function pruneMissingFolders(
   return { ...active, folders, excludeFolders: folders.length > 0 ? excludeFolders : [] };
 }
 
+/**
+ * Single-album mode: pick one folder (with everything inside it), or
+ * Favorites, in place of whatever was picked before.
+ */
+export function pickSingleAlbum(
+  active: ActiveFilters,
+  album: { folder: string } | 'starred',
+): ActiveFilters {
+  return album === 'starred'
+    ? { ...active, folders: [], excludeFolders: [], starred: true }
+    : { ...active, folders: [album.folder], excludeFolders: [], starred: false };
+}
+
+/** More than one album picked, or a folder with some of it deselected. */
+export function isMultiAlbumSelection(active: ActiveFilters): boolean {
+  return active.folders.length + (active.starred ? 1 : 0) > 1 || active.excludeFolders.length > 0;
+}
+
 export function clearFilters(active: ActiveFilters): ActiveFilters {
   if (!hasAnyFilter(active)) return active;
   return EMPTY_FILTERS;
