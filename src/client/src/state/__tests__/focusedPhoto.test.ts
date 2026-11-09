@@ -4,6 +4,7 @@ import {
   closeFocusedPhoto,
   isFocusedPhotoOpen,
   openFocusedPhoto,
+  updateFocusedPhoto,
 } from '../focusedPhoto.js';
 import type { PhotoQueryRecord } from '../../../../shared/api/photos.js';
 
@@ -69,5 +70,15 @@ describe('focused-photo state contract', () => {
     const reopened = openFocusedPhoto(closed, PHOTO_B);
     expect(reopened).not.toBe(opened);
     expect(reopened.photo).toBe(PHOTO_B);
+  });
+
+  it('update swaps in a changed copy of the focused photo only', () => {
+    const opened = openFocusedPhoto(INITIAL_FOCUSED_PHOTO_STATE, PHOTO_A);
+    const starred = { ...PHOTO_A, starred: true };
+    expect(updateFocusedPhoto(opened, starred).photo).toBe(starred);
+    expect(updateFocusedPhoto(opened, PHOTO_B)).toBe(opened);
+    expect(updateFocusedPhoto(INITIAL_FOCUSED_PHOTO_STATE, PHOTO_A)).toBe(
+      INITIAL_FOCUSED_PHOTO_STATE,
+    );
   });
 });

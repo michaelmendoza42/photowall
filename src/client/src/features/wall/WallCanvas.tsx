@@ -109,6 +109,8 @@ export const INITIAL_DRAG_STATE: WallDragState = {
 
 export interface WallCanvasProps {
 	photos: readonly PhotoQueryRecord[];
+	/** Changes when the viewer picks different albums; the wall then reopens on its center. */
+	selectionKey?: string;
 	worldWidth: number;
 	hasNextPage: boolean;
 	isFetchingNextPage: boolean;
@@ -200,6 +202,7 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
 		onPhotoOpen,
 		isModalOpen = false,
 		focusNavigatorRef,
+		selectionKey = "",
 		dragThresholdPx = DRAG_THRESHOLD_PX,
 		mediaSourceResolver,
 	} = props;
@@ -411,6 +414,7 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
 	const worldWidth = packed.worldWidth;
 	useCenterCameraOnLayout({
 		layout: packed,
+		selectionKey,
 		cameraRef,
 		zoomRef,
 		publishCamera,

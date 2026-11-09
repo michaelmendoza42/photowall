@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, type MutableRefObject } from "react";
-import { panTo, type CameraState } from "../../state/camera.js";
+import { panBy, panTo, type CameraState } from "../../state/camera.js";
 import { easeOutCubic } from "./signpostNavigation.js";
 
 /** How long a focus step takes to glide the wall to the new photo. */
@@ -43,13 +43,18 @@ export function useCameraGlide(input: {
 				return;
 			}
 			const startedAt = performance.now();
+			let travelled = 0;
 			const tick = (now: number): void => {
 				const progress = Math.min(1, (now - startedAt) / durationMs);
 				const eased = easeOutCubic(progress);
-				// Rebase on the live camera so bounds updates mid-glide stick.
-				const next = panTo(cameraRef.current, {
-					x: start.x + (target.x - start.x) * eased,
-					y: start.y + (target.y - start.y) * eased,
+				// Move by this frame's share from the live camera, so anything
+				// else that shifts it mid-glide (bounds updates, the wall
+				// re-laying out under the viewer) sticks.
+				const share = eased - travelled;
+				travelled = eased;
+				const next = panBy(cameraRef.current, {
+					dx: (target.x - start.x) * share,
+					dy: (target.y - start.y) * share,
 				});
 				cameraRef.current = next;
 				publishCamera(next);

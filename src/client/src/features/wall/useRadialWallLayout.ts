@@ -1,6 +1,11 @@
-import { useEffect, useMemo, type MutableRefObject } from 'react';
+import { useEffect, useMemo, useRef, type MutableRefObject } from 'react';
 import type { PhotoQueryRecord } from '../../../../shared/api/photos.js';
 import { panTo, withWorldBounds, type CameraState } from '../../state/camera.js';
+import {
+  buildFocusNavigation,
+  cameraCenteredOnTile,
+  tileNearestViewportCenter,
+} from './focusNavigation.js';
 import type { GroupedWallFoundation } from './groupedWall.js';
 import {
   buildRadialWallLayout,
@@ -52,28 +57,78 @@ export function useRadialWallLayout(input: {
   }, [photos, groupedFoundation, roundedWidth]);
 }
 
-/** Open each new layout on the center of the wall, where the first photos are. */
+/**
+ * Open each new selection on the center of the wall, where the first
+ * photos are. When the same selection lays out again (a photo made
+ * private, starred or edited, a window resize), the photo in the middle
+ * of the screen stays there instead.
+ */
 export function useCenterCameraOnLayout(input: {
   layout: RadialWallLayout;
+  /** Changes when the viewer picks a different set of albums. */
+  selectionKey: string;
   cameraRef: MutableRefObject<CameraState>;
   zoomRef: MutableRefObject<number>;
   publishCamera: (next: CameraState) => void;
   flushCamera: () => void;
 }): void {
-  const { layout, cameraRef, zoomRef, publishCamera, flushCamera } = input;
+  const { layout, selectionKey, cameraRef, zoomRef, publishCamera, flushCamera } = input;
+  const shownRef = useRef<{ layout: RadialWallLayout; selectionKey: string } | null>(null);
   useEffect(() => {
     if (layout.packedPhotoCount === 0) return;
-    const zoom = zoomRef.current;
-    const bounded = withWorldBounds(cameraRef.current, {
-      width: layout.worldWidth,
-      height: layout.contentHeight,
-    });
-    const next = panTo(bounded, {
-      x: layout.worldWidth / 2 - bounded.viewport.width / (2 * zoom),
-      y: layout.contentHeight / 2 - bounded.viewport.height / (2 * zoom),
-    });
+    const shown = shownRef.current;
+    shownRef.current = { layout, selectionKey };
+    if (shown?.layout === layout) return;
+    const next =
+      shown && shown.selectionKey === selectionKey
+        ? cameraHeldOnCenterPhoto(cameraRef.current, shown.layout, layout, zoomRef.current)
+        : cameraOnWallCenter(cameraRef.current, layout, zoomRef.current);
     cameraRef.current = next;
     publishCamera(next);
     flushCamera();
-  }, [layout, cameraRef, zoomRef, publishCamera, flushCamera]);
+  }, [layout, selectionKey, cameraRef, zoomRef, publishCamera, flushCamera]);
+}
+
+function worldOf(layout: RadialWallLayout): { width: number; height: number } {
+  return { width: layout.worldWidth, height: layout.contentHeight };
+}
+
+export function cameraOnWallCenter(
+  camera: CameraState,
+  layout: RadialWallLayout,
+  zoom: number,
+): CameraState {
+  const bounded = withWorldBounds(camera, worldOf(layout));
+  return panTo(bounded, {
+    x: layout.worldWidth / 2 - bounded.viewport.width / (2 * zoom),
+    y: layout.contentHeight / 2 - bounded.viewport.height / (2 * zoom),
+  });
+}
+
+/**
+ * Move the camera onto `next` so the photo nearest the middle of the
+ * screen in `previous`, among those still on the wall, keeps its place
+ * on screen.
+ */
+export function cameraHeldOnCenterPhoto(
+  camera: CameraState,
+  previous: RadialWallLayout,
+  next: RadialWallLayout,
+  zoom: number,
+): CameraState {
+  const nextTiles = buildFocusNavigation(next.rows).tilesById;
+  const stillShown = [...buildFocusNavigation(previous.rows).tilesById.values()].filter(
+    (tile) => nextTiles.has(tile.photoId),
+  );
+  const anchor = tileNearestViewportCenter(camera, stillShown, zoom);
+  const bounded = withWorldBounds(camera, worldOf(next));
+  const moved = anchor ? nextTiles.get(anchor.photoId) : undefined;
+  if (!anchor || !moved) return bounded;
+  // How far the camera sat from centering the photo, kept as is.
+  const before = cameraCenteredOnTile(camera, anchor, zoom);
+  const after = cameraCenteredOnTile(bounded, moved, zoom);
+  return panTo(bounded, {
+    x: after.x + (camera.x - before.x),
+    y: after.y + (camera.y - before.y),
+  });
 }

@@ -56,6 +56,7 @@ import {
   INITIAL_FOCUSED_PHOTO_STATE,
   closeFocusedPhoto,
   openFocusedPhoto,
+  updateFocusedPhoto,
 } from '../../state/focusedPhoto.js';
 import {
   ConfigErrorState,
@@ -343,6 +344,16 @@ export function WallShell(): JSX.Element {
     focusedPhotoIdRef.current = next.id;
     setFocusedPhoto((prev) => openFocusedPhoto(prev, next));
   }, []);
+  // Move off a photo that is leaving the wall: step on, or close when
+  // there is nowhere to go.
+  const stepPast = useCallback(
+    (photoId: string, direction: FocusStepDirection) => {
+      if (focusedPhotoIdRef.current !== photoId) return;
+      handleFocusStep(direction);
+      if (focusedPhotoIdRef.current === photoId) handlePhotoClose();
+    },
+    [handleFocusStep, handlePhotoClose],
+  );
   // A visitor without the curator's rights never stays on a photo they can
   // no longer see (made private, or its album put away, since their wall
   // loaded): once the wall refreshes without it, step on the way they were
@@ -352,10 +363,9 @@ export function WallShell(): JSX.Element {
   const focusedLeftWall =
     focusedId !== null && photos.length > 0 && !photosByIdRef.current.has(focusedId);
   useEffect(() => {
-    if (!focusedLeftWall || canSeeEverything) return;
-    handleFocusStep(lastStepDirectionRef.current);
-    if (focusedPhotoIdRef.current === focusedId) handlePhotoClose();
-  }, [focusedLeftWall, canSeeEverything, focusedId, handleFocusStep, handlePhotoClose]);
+    if (!focusedLeftWall || canSeeEverything || !focusedId) return;
+    stepPast(focusedId, lastStepDirectionRef.current);
+  }, [focusedLeftWall, canSeeEverything, focusedId, stepPast]);
   // A focused image that fails to load may be one this visitor can no
   // longer see; refresh the wall so the step above can move past it.
   const handleFocusedImageError = useCallback(() => {
@@ -705,8 +715,7 @@ export function WallShell(): JSX.Element {
         {
           onSuccess: (result) => {
             // Step on to the next photo so curating can continue.
-            if (focusedPhotoIdRef.current === photo.id) handleFocusStep('next');
-            if (focusedPhotoIdRef.current === photo.id) handlePhotoClose();
+            stepPast(photo.id, 'next');
             const verb = action === 'hide' ? 'Hidden' : 'Restored';
             setToast({
               message: `${verb}: ${photo.filename}`,
@@ -727,7 +736,7 @@ export function WallShell(): JSX.Element {
         },
       );
     },
-    [handleFocusStep, handlePhotoClose, movePhoto],
+    [stepPast, movePhoto],
   );
 
   const focusedPhotoRecord = focusedPhoto.photo;
@@ -753,15 +762,12 @@ export function WallShell(): JSX.Element {
           onSuccess: (result) => {
             if (!leavesWall) {
               // Show the new state right away; the wall refetches behind.
-              setFocusedPhoto((prev) =>
-                prev.photo?.id === result.photo.id ? { ...prev, photo: result.photo } : prev,
-              );
+              setFocusedPhoto((prev) => updateFocusedPhoto(prev, result.photo));
               return;
             }
             // Unstarred while showing in Favorites: it leaves the wall, so
             // step on to the next photo, as Hide does.
-            if (focusedPhotoIdRef.current === photo.id) handleFocusStep('next');
-            if (focusedPhotoIdRef.current === photo.id) handlePhotoClose();
+            stepPast(photo.id, 'next');
             setToast({
               message: `Taken out of Favorites: ${photo.filename}`,
               actionLabel: 'Undo',
@@ -776,7 +782,7 @@ export function WallShell(): JSX.Element {
         },
       );
     },
-    [handleFocusStep, handlePhotoClose, starPhoto],
+    [stepPast, starPhoto],
   );
   const curatorStar = useMemo(() => {
     if (!focusedPhotoRecord || !isCurator) return undefined;
@@ -799,8 +805,7 @@ export function WallShell(): JSX.Element {
         setPhotoPrivate.mutate(
           { photoId: focusedPhotoRecord.id, private: !isPrivate },
           {
-            onSuccess: ({ photo }) =>
-              setFocusedPhoto((prev) => (prev.photo?.id === photo.id ? { ...prev, photo } : prev)),
+            onSuccess: ({ photo }) => setFocusedPhoto((prev) => updateFocusedPhoto(prev, photo)),
             onError: (err) =>
               setToast({
                 message: `Could not change ${focusedPhotoRecord.filename}: ${err.message}`,
@@ -829,9 +834,7 @@ export function WallShell(): JSX.Element {
           {
             onSuccess: (result) => {
               setEditingPhoto(null);
-              setFocusedPhoto((prev) =>
-                prev.photo?.id === result.photo.id ? { photo: result.photo } : prev,
-              );
+              setFocusedPhoto((prev) => updateFocusedPhoto(prev, result.photo));
               setToast({
                 message: `${next ? 'Edited' : 'Back to the original'}: ${target.filename}`,
                 ...(undoable
@@ -851,8 +854,15 @@ export function WallShell(): JSX.Element {
     [photoEdit],
   );
 
+  // A refetch of the same albums keeps the viewer's place on the wall.
+  const selectionKey = useMemo(
+    () => JSON.stringify([queryFilters, guestView]),
+    [queryFilters, guestView],
+  );
+
   const sharedWallProps = {
     photos,
+    selectionKey,
     worldWidth,
     hasNextPage: photosQuery.hasNextPage,
     isFetchingNextPage: photosQuery.isFetchingNextPage,

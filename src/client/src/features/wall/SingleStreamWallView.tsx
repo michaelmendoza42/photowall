@@ -72,6 +72,8 @@ const FRONTIER_THRESHOLD_PX = 800;
 
 export interface SingleStreamWallViewProps {
 	photos: readonly PhotoQueryRecord[];
+	/** Changes when the viewer picks different albums; the wall then reopens on its center. */
+	selectionKey?: string;
 	worldWidth: number;
 	hasNextPage: boolean;
 	isFetchingNextPage: boolean;
@@ -134,6 +136,7 @@ export function SingleStreamWallView(
 		onPhotoOpen,
 		isModalOpen = false,
 		focusNavigatorRef,
+		selectionKey = "",
 		dragThresholdPx = DRAG_THRESHOLD_PX,
 		mediaSourceResolver,
 	} = props;
@@ -297,6 +300,7 @@ export function SingleStreamWallView(
 	const worldWidth = packedLayout.worldWidth;
 	useCenterCameraOnLayout({
 		layout: packedLayout,
+		selectionKey,
 		cameraRef,
 		zoomRef,
 		publishCamera,

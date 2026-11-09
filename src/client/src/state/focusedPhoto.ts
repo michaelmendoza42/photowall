@@ -42,3 +42,14 @@ export function closeFocusedPhoto(state: FocusedPhotoState): FocusedPhotoState {
   if (state.photo === null) return state;
   return INITIAL_FOCUSED_PHOTO_STATE;
 }
+
+/**
+ * Show a changed copy of the focused photo (starred, made private,
+ * edited). Leaves the state alone when a different photo is open.
+ */
+export function updateFocusedPhoto(
+  state: FocusedPhotoState,
+  photo: PhotoQueryRecord,
+): FocusedPhotoState {
+  return state.photo?.id === photo.id ? { photo } : state;
+}

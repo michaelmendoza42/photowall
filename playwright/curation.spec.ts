@@ -616,3 +616,47 @@ test('a guest stepping through photos skips one made private after their wall lo
   await expect(modal).toHaveAttribute('data-photo-id', startId);
   await other.close();
 });
+
+test('making a photo private keeps the curator where they were on the wall', async ({ page }) => {
+  await page.request.post('/api/curation/session', { data: { pin: PIN } });
+  await page.goto('/');
+  await expect(page.getByTestId('wall-shell')).toHaveAttribute('data-screen', 'ready', {
+    timeout: 60_000,
+  });
+  const canvas = page.getByTestId('wall-canvas');
+  const cameraAt = async () => ({
+    x: Number(await canvas.getAttribute('data-camera-x')),
+    y: Number(await canvas.getAttribute('data-camera-y')),
+  });
+  const settled = async () => {
+    let last = await cameraAt();
+    await expect
+      .poll(async () => {
+        const now = await cameraAt();
+        const still = now.x === last.x && now.y === last.y;
+        last = now;
+        return still;
+      })
+      .toBe(true);
+    return last;
+  };
+  const opened = await settled();
+  // Pan away from the wall's center.
+  await page.mouse.move(400, 300);
+  for (let step = 0; step < 6; step += 1) await page.mouse.wheel(120, 90);
+  const panned = await settled();
+  expect(Math.abs(panned.x - opened.x) + Math.abs(panned.y - opened.y)).toBeGreaterThan(200);
+
+  await (await pickCenteredTile(page)).click();
+  const before = await settled();
+  const toggle = page.getByTestId('focused-photo-private');
+  for (const next of ['true', 'false']) {
+    const refetched = page.waitForResponse((res) => res.url().includes('/api/photos'));
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('data-private', next);
+    await refetched;
+    expect(await settled()).toEqual(before);
+  }
+  await page.getByTestId('focused-photo-close').click();
+  expect(await settled()).toEqual(before);
+});
