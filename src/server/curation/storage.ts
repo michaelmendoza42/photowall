@@ -3,7 +3,11 @@ import path from 'node:path';
 import { randomBytes, randomUUID, scrypt as scryptCallback, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 import { z } from 'zod';
-import { FOLDER_PATH_PATTERN } from '../../shared/api/curation.js';
+import {
+  FEATURED_FRAME_CHOICES,
+  FOLDER_PATH_PATTERN,
+  type FeaturedFrameChoice,
+} from '../../shared/api/curation.js';
 
 /**
  * Curation state lives in its own folder, apart from the rebuildable
@@ -14,6 +18,10 @@ import { FOLDER_PATH_PATTERN } from '../../shared/api/curation.js';
  *   moves.log        one JSON line per photo move the app made
  *   edits.json       light edits, one recipe per photo path (originals are never changed)
  *   edits.log        one JSON line per edit saved or reverted
+ *   starred.json     starred photos (Favorites)
+ *   private.json     photos guests never see
+ *   featured.json    each album's featured photo (at most one per folder)
+ *   featured-frames.json  the frame each featured photo hangs in
  *   shares/<id>.json share links
  *   session-secret   signs curator sessions
  *   curator-pin      the PIN chosen on /curate, hashed (delete it to choose again)
@@ -52,6 +60,10 @@ export interface CurationPaths {
   starsFile: string;
   /** Paths of the photos guests never see. */
   privateFile: string;
+  /** Paths of each album's featured photo, at most one per folder. */
+  featuredFile: string;
+  /** The frame each featured photo hangs in, by path. */
+  featuredFramesFile: string;
   editsLog: string;
   sharesDir: string;
   secretFile: string;
@@ -88,6 +100,8 @@ export async function ensureCurationPaths(root: string): Promise<CurationPaths> 
     editsFile: path.join(real, 'edits.json'),
     starsFile: path.join(real, 'starred.json'),
     privateFile: path.join(real, 'private.json'),
+    featuredFile: path.join(real, 'featured.json'),
+    featuredFramesFile: path.join(real, 'featured-frames.json'),
     editsLog: path.join(real, 'edits.log'),
     sharesDir: path.join(real, 'shares'),
     secretFile: path.join(real, 'session-secret'),
@@ -254,12 +268,14 @@ const PathSetFileSchema = z.object({
 
 /**
  * A per-photo flag kept as a list of root-relative paths: `starred.json`
- * (Favorites) and `private.json` (never shown to guests).
+ * (Favorites), `private.json` (never shown to guests) and `featured.json`
+ * (the album's centerpiece, one per folder).
  */
-export type PhotoFlag = 'starred' | 'private';
+export type PhotoFlag = 'starred' | 'private' | 'featured';
 
 export function photoFlagFile(paths: CurationPaths, flag: PhotoFlag): string {
-  return flag === 'starred' ? paths.starsFile : paths.privateFile;
+  if (flag === 'starred') return paths.starsFile;
+  return flag === 'private' ? paths.privateFile : paths.featuredFile;
 }
 
 export async function readPhotoFlag(paths: CurationPaths, flag: PhotoFlag): Promise<Set<string>> {
@@ -281,4 +297,34 @@ export async function writePhotoFlag(
 ): Promise<void> {
   const body = { schemaVersion: CURATION_SCHEMA_VERSION, photos: [...photos].sort() };
   await writeFileAtomically(photoFlagFile(paths, flag), `${JSON.stringify(body, null, 2)}\n`);
+}
+
+const FeaturedFramesFileSchema = z.object({
+  schemaVersion: z.literal(CURATION_SCHEMA_VERSION),
+  frames: z.record(z.string(), z.enum(FEATURED_FRAME_CHOICES as [FeaturedFrameChoice, ...FeaturedFrameChoice[]])),
+});
+
+/** Each featured photo's frame, by root-relative path. */
+export async function readFeaturedFrames(
+  paths: CurationPaths,
+): Promise<Map<string, FeaturedFrameChoice>> {
+  const parsed = await readJsonFile(paths.featuredFramesFile);
+  if (parsed === null) return new Map();
+  const result = FeaturedFramesFileSchema.safeParse(parsed);
+  if (!result.success) {
+    throw new CurationRootError(
+      `featured-frames.json is not valid: ${result.error.message}`,
+      paths.featuredFramesFile,
+    );
+  }
+  return new Map(Object.entries(result.data.frames));
+}
+
+export async function writeFeaturedFrames(
+  paths: CurationPaths,
+  frames: ReadonlyMap<string, FeaturedFrameChoice>,
+): Promise<void> {
+  const sorted = Object.fromEntries([...frames].sort(([a], [b]) => a.localeCompare(b)));
+  const body = { schemaVersion: CURATION_SCHEMA_VERSION, frames: sorted };
+  await writeFileAtomically(paths.featuredFramesFile, `${JSON.stringify(body, null, 2)}\n`);
 }

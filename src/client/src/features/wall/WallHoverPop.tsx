@@ -6,6 +6,9 @@ import {
 	type WallMediaSourceResolver,
 } from "./mediaSourceResolver.js";
 import { variantForDrawnSize, wallPixelRatio } from "./pixiScene.js";
+import type { FeaturedFrame } from "../../../../shared/api/curation.js";
+import { featuredPhotoRect } from "./featuredGeometry.js";
+import { featuredFrameDataUrl } from "./featuredFrames.js";
 
 export interface WallHoverPopState extends PreviewRect {
 	photo: PhotoQueryRecord;
@@ -32,8 +35,10 @@ const HANDOFF_WINDOW_MS = 50;
 export function WallHoverPopLayer(props: {
 	preview: WallHoverPopState | null;
 	mediaSourceResolver?: WallMediaSourceResolver;
+	/** Hero tiles' frames, which they keep when popped. */
+	featuredFrames?: ReadonlyMap<string, FeaturedFrame>;
 }): JSX.Element {
-	const { preview, mediaSourceResolver } = props;
+	const { preview, mediaSourceResolver, featuredFrames } = props;
 	const [settling, setSettling] = useState<WallHoverPopState[]>([]);
 	const lastRef = useRef<WallHoverPopState | null>(null);
 	// Moving straight onto a neighbour clears the hover (leave) and sets it
@@ -79,6 +84,7 @@ export function WallHoverPopLayer(props: {
 					key={`settle:${p.photo.id}`}
 					preview={p}
 					settling
+					frame={featuredFrames?.get(p.photo.id)}
 					mediaSourceResolver={mediaSourceResolver}
 				/>
 			))}
@@ -86,6 +92,7 @@ export function WallHoverPopLayer(props: {
 				<WallHoverPop
 					key={preview.photo.id}
 					preview={preview}
+					frame={featuredFrames?.get(preview.photo.id)}
 					mediaSourceResolver={mediaSourceResolver}
 				/>
 			)}
@@ -96,43 +103,73 @@ export function WallHoverPopLayer(props: {
 export function WallHoverPop(props: {
 	preview: WallHoverPopState;
 	settling?: boolean;
+	/** A hero tile's frame: the pop shows the photo uncropped in it. */
+	frame?: FeaturedFrame;
 	mediaSourceResolver?: WallMediaSourceResolver;
 }): JSX.Element {
-	const { preview, settling = false, mediaSourceResolver } = props;
+	const { preview, settling = false, frame, mediaSourceResolver } = props;
 	const { photo } = preview;
+	const inner = frame
+		? featuredPhotoRect({ x: 0, y: 0, width: preview.width, height: preview.height }, photo)
+		: null;
 	const variant = variantForDrawnSize(
-		Math.max(preview.width, preview.height) * wallPixelRatio(),
+		Math.max(inner?.width ?? preview.width, inner?.height ?? preview.height) *
+			wallPixelRatio(),
 		Math.max(photo.width, photo.height) || null,
 	);
 	const thumbSrc = resolveWallMediaSource(photo, "thumb", mediaSourceResolver);
+	const className = [
+		"wall-hover-preview",
+		settling ? "wall-hover-preview--settling" : "",
+		frame ? "wall-hover-preview--framed" : "",
+	]
+		.filter(Boolean)
+		.join(" ");
+	const image = (
+		<img
+			className="wall-hover-preview__img"
+			data-testid="wall-hover-preview-image"
+			data-media-variant={variant}
+			src={resolveWallMediaSource(photo, variant, mediaSourceResolver)}
+			alt=""
+			draggable={false}
+		/>
+	);
 
 	return (
 		<div
-			className={
-				settling
-					? "wall-hover-preview wall-hover-preview--settling"
-					: "wall-hover-preview"
-			}
+			className={className}
 			data-testid={settling ? "wall-hover-preview-settling" : "wall-hover-preview"}
 			data-photo-id={photo.id}
+			data-frame={frame}
 			style={
 				{
 					width: preview.width,
 					height: preview.height,
 					"--hover-preview-left": `${preview.left}px`,
 					"--hover-preview-top": `${preview.top}px`,
-					backgroundImage: `url("${thumbSrc}")`,
+					backgroundImage: frame
+						? `url("${featuredFrameDataUrl(frame, preview.width, preview.height, photo, 1600)}")`
+						: `url("${thumbSrc}")`,
 				} as unknown as React.CSSProperties
 			}
 		>
-			<img
-				className="wall-hover-preview__img"
-				data-testid="wall-hover-preview-image"
-				data-media-variant={variant}
-				src={resolveWallMediaSource(photo, variant, mediaSourceResolver)}
-				alt=""
-				draggable={false}
-			/>
+			{inner ? (
+				<div
+					className="wall-hover-preview__framed-photo"
+					style={{
+						left: inner.x,
+						top: inner.y,
+						width: inner.width,
+						height: inner.height,
+						backgroundImage: `url("${thumbSrc}")`,
+					}}
+				>
+					{image}
+				</div>
+			) : (
+				image
+			)}
 		</div>
 	);
 }

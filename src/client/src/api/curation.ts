@@ -7,12 +7,14 @@ import {
   CURATION_RESCAN_PATH,
   CURATION_SESSION_PATH,
   SHARES_PATH,
+  curationPhotoFeaturedPath,
   curationPhotoHidePath,
   curationPhotoRestorePath,
   curationPhotoPrivatePath,
   curationPhotoStarPath,
   shareResourcePath,
   type AlbumCurationResponse,
+  type FeaturedFrameChoice,
   type CurationSessionResponse,
   type PhotoEditResponse,
   type PhotoMoveResponse,
@@ -80,6 +82,23 @@ export function setPhotoPrivate(
 
 export function starPhoto(photoId: string, starred: boolean): Promise<{ photo: PhotoQueryRecord }> {
   return fetchJson(curationPhotoStarPath(photoId), { method: 'POST', body: { starred } });
+}
+
+/**
+ * Feature or unfeature a photo. Featuring a photo whose album already has
+ * one fails with a 409 ApiError whose body is a
+ * PhotoFeaturedConflictResponse, unless `replace` is set.
+ */
+export function setPhotoFeatured(
+  photoId: string,
+  featured: boolean,
+  replace = false,
+  frame?: FeaturedFrameChoice,
+): Promise<{ photo: PhotoQueryRecord }> {
+  return fetchJson(curationPhotoFeaturedPath(photoId), {
+    method: 'POST',
+    body: { featured, replace, ...(frame ? { frame } : {}) },
+  });
 }
 
 export function hidePhoto(photoId: string): Promise<PhotoMoveResponse> {

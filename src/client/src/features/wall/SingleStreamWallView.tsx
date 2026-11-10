@@ -20,6 +20,7 @@ import { useHoverCursorPan } from "./useHoverCursorPan.js";
 import { useWallFocusNavigator } from "./useWallFocusNavigator.js";
 import {
 	useCenterCameraOnLayout,
+	useFeaturedFrames,
 	useRadialWallLayout,
 } from "./useRadialWallLayout.js";
 import { useCameraGlide } from "./useCameraGlide.js";
@@ -90,6 +91,8 @@ export interface SingleStreamWallViewProps {
 	focusNavigatorRef?: React.MutableRefObject<WallFocusNavigator | null>;
 	dragThresholdPx?: number;
 	mediaSourceResolver?: WallMediaSourceResolver;
+	/** Featured photos to draw as their album's hero tile. */
+	featuredPhotoIds?: ReadonlySet<string>;
 }
 
 interface ActiveDrag {
@@ -139,6 +142,7 @@ export function SingleStreamWallView(
 		selectionKey = "",
 		dragThresholdPx = DRAG_THRESHOLD_PX,
 		mediaSourceResolver,
+		featuredPhotoIds,
 	} = props;
 
 	const containerRef = useRef<HTMLDivElement | null>(null);
@@ -295,7 +299,10 @@ export function SingleStreamWallView(
 	const packedLayout = useRadialWallLayout({
 		photos,
 		referenceWidth,
+		featuredPhotoIds,
+		viewport: viewportSize,
 	});
+	const featuredFrames = useFeaturedFrames(packedLayout, photosById);
 	// The world is sized to the photos; the viewport only sets tile size.
 	const worldWidth = packedLayout.worldWidth;
 	useCenterCameraOnLayout({
@@ -742,6 +749,8 @@ export function SingleStreamWallView(
 					...tile,
 					sourceMtimeMs: photosById.get(tile.photoId)?.mtimeMs,
 					sourceEditVersion: photosById.get(tile.photoId)?.editVersion,
+					featured: packedLayout.featuredPhotoIds.has(tile.photoId),
+					frame: featuredFrames.get(tile.photoId),
 				}))}
 				viewportWidth={viewportSize.width}
 				viewportHeight={viewportSize.height}
@@ -791,6 +800,7 @@ export function SingleStreamWallView(
 			<WallHoverPopLayer
 				preview={hoverPreview}
 				mediaSourceResolver={mediaSourceResolver}
+				featuredFrames={featuredFrames}
 			/>
 		</div>
 	);

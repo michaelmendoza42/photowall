@@ -11,6 +11,13 @@ import { WheelGestures, type WheelEventData } from 'wheel-gestures';
 import Lightbox, { type SlideImage } from 'yet-another-react-lightbox';
 import type { PhotoQueryRecord } from '../../../../shared/api/photos.js';
 import { computeFocusedPhotoRenderSize } from '../wall/hoverPreview.js';
+import { photoAlbumName } from '../wall/albumAreas.js';
+import {
+  FEATURED_FRAME_CHOICES,
+  type FeaturedFrameChoice,
+} from '../../../../shared/api/curation.js';
+import { featuredFrameDataUrl, FEATURED_FRAME_LABELS } from '../wall/featuredFrames.js';
+import { featuredPhotoRect, featuredTileAspect } from '../wall/featuredGeometry.js';
 import {
   MAX_WHEEL_ZOOM_STEP,
   WHEEL_ZOOM_SENSITIVITY,
@@ -43,6 +50,23 @@ export interface FocusedPhotoLightboxProps {
     private: boolean;
     onToggle: () => void;
     pending?: boolean;
+  };
+  /** Curator-only: make the photo its album's featured photo, or stop featuring it. */
+  curatorFeatured?: {
+    featured: boolean;
+    /** The frame it hangs in while featured. */
+    frame?: FeaturedFrameChoice;
+    /** Feature it in `frame`, or change its frame. */
+    onFeature: (frame: FeaturedFrameChoice) => void;
+    onUnfeature: () => void;
+    pending?: boolean;
+    /**
+     * The album's current featured photo while the curator confirms
+     * replacing it; the dialog previews it.
+     */
+    replacing?: PhotoQueryRecord;
+    onConfirmReplace?: () => void;
+    onCancelReplace?: () => void;
   };
   /** Curator-only: star or unstar the photo (Favorites). */
   curatorStar?: {
@@ -450,10 +474,15 @@ export function FocusedPhotoLightbox(
     curatorAction,
     curatorStar,
     curatorPrivate,
+    curatorFeatured,
     sourceAlbum,
     onEdit,
     onImageError,
   } = props;
+
+  const [framePickerOpen, setFramePickerOpen] = useState(false);
+  // A different photo starts with the picker closed.
+  useEffect(() => setFramePickerOpen(false), [photo.id]);
 
   // The lightbox only ever holds the focused photo as its one slide, so
   // its own arrow-key navigation has nothing to move to (and it stops
@@ -462,6 +491,19 @@ export function FocusedPhotoLightbox(
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent): void {
       if (event.altKey || event.ctrlKey || event.metaKey) return;
+      if (curatorFeatured?.replacing || framePickerOpen) {
+        // A featured-photo dialog is open: Escape closes it, not the
+        // lightbox, and the photo shortcuts wait.
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          event.stopPropagation();
+          if (curatorFeatured?.replacing) curatorFeatured.onCancelReplace?.();
+          else setFramePickerOpen(false);
+        } else if (event.key !== 'Enter' && event.key !== 'Tab' && event.key !== ' ') {
+          event.stopPropagation();
+        }
+        return;
+      }
       if ((event.key === 'r' || event.key === 'R') && curatorAction && !curatorAction.pending) {
         event.preventDefault();
         curatorAction.onRun();
@@ -488,7 +530,16 @@ export function FocusedPhotoLightbox(
     }
     window.addEventListener('keydown', onKeyDown, true);
     return () => window.removeEventListener('keydown', onKeyDown, true);
-  }, [curatorAction, curatorPrivate, curatorStar, onEdit, onNext, onPrevious]);
+  }, [
+    curatorAction,
+    curatorFeatured,
+    curatorPrivate,
+    curatorStar,
+    framePickerOpen,
+    onEdit,
+    onNext,
+    onPrevious,
+  ]);
 
   const slide = useMemo(
     () => buildFocusedPhotoLightboxSlide(photo, mediaSourceResolver),
@@ -673,7 +724,7 @@ export function FocusedPhotoLightbox(
           ) : null,
         controls: () => (
           <>
-            {(curatorAction || curatorStar || curatorPrivate || onEdit) && (
+            {(curatorAction || curatorStar || curatorFeatured || curatorPrivate || onEdit) && (
               <div className="focused-photo__curator">
                 {curatorStar && (
                   <button
@@ -691,6 +742,24 @@ export function FocusedPhotoLightbox(
                     }
                   >
                     {curatorStar.starred ? '★ Unfavorite' : '☆ Favorite'}
+                  </button>
+                )}
+                {curatorFeatured && (
+                  <button
+                    type="button"
+                    className="focused-photo__curate"
+                    onClick={() => setFramePickerOpen(true)}
+                    disabled={curatorFeatured.pending}
+                    aria-pressed={curatorFeatured.featured}
+                    data-testid="focused-photo-featured"
+                    data-featured={curatorFeatured.featured ? 'true' : 'false'}
+                    title={
+                      curatorFeatured.featured
+                        ? 'This is the album’s centerpiece. Change its frame or unfeature it'
+                        : 'Make this the album’s centerpiece: shown large and framed at the album’s center'
+                    }
+                  >
+                    {curatorFeatured.featured ? '◆ Featured' : 'Make featured'}
                   </button>
                 )}
                 {curatorPrivate && (
@@ -755,9 +824,219 @@ export function FocusedPhotoLightbox(
                 From {sourceAlbum}
               </p>
             )}
+            {curatorFeatured && framePickerOpen && !curatorFeatured.replacing && (
+              <FeaturedFramePicker
+                photo={photo}
+                featured={curatorFeatured.featured}
+                current={curatorFeatured.frame}
+                pending={curatorFeatured.pending}
+                onChoose={(frame) => {
+                  setFramePickerOpen(false);
+                  curatorFeatured.onFeature(frame);
+                }}
+                onUnfeature={() => {
+                  setFramePickerOpen(false);
+                  curatorFeatured.onUnfeature();
+                }}
+                onCancel={() => setFramePickerOpen(false)}
+                mediaSourceResolver={mediaSourceResolver}
+              />
+            )}
+            {curatorFeatured?.replacing && (
+              <ReplaceFeaturedDialog
+                current={curatorFeatured.replacing}
+                pending={curatorFeatured.pending}
+                onConfirm={curatorFeatured.onConfirmReplace}
+                onCancel={curatorFeatured.onCancelReplace}
+                mediaSourceResolver={mediaSourceResolver}
+              />
+            )}
           </>
         ),
       }}
     />
+  );
+}
+
+/**
+ * Asks before replacing an album's featured photo, previewing the photo
+ * that would stop being featured.
+ */
+function ReplaceFeaturedDialog(props: {
+  current: PhotoQueryRecord;
+  pending?: boolean;
+  onConfirm?: () => void;
+  onCancel?: () => void;
+  mediaSourceResolver?: WallMediaSourceResolver;
+}): JSX.Element {
+  const { current, pending, onConfirm, onCancel, mediaSourceResolver } = props;
+  return (
+    <div
+      className="replace-featured"
+      data-testid="replace-featured"
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onCancel?.();
+      }}
+    >
+      <div
+        className="replace-featured__card"
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="replace-featured-title"
+      >
+        <h2 id="replace-featured-title" className="replace-featured__title">
+          Replace the featured photo?
+        </h2>
+        <p className="replace-featured__body">
+          {photoAlbumName(current)} already features this photo. Only one photo per album can be
+          featured.
+        </p>
+        <img
+          className="replace-featured__preview"
+          data-testid="replace-featured-preview"
+          data-photo-id={current.id}
+          src={resolveWallMediaSource(current, 'thumb', mediaSourceResolver)}
+          alt={`Current featured photo: ${current.filename}`}
+          draggable={false}
+        />
+        <div className="replace-featured__actions">
+          <button
+            type="button"
+            className="focused-photo__curate"
+            onClick={onCancel}
+            data-testid="replace-featured-cancel"
+          >
+            Cancel
+          </button>
+          <button
+            autoFocus
+            type="button"
+            className="focused-photo__curate replace-featured__confirm"
+            onClick={onConfirm}
+            disabled={pending}
+            data-testid="replace-featured-confirm"
+          >
+            Replace
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Chooses the frame a featured photo hangs in, previewing this photo in
+ * each one, or Random: a different frame on every page load.
+ */
+function FeaturedFramePicker(props: {
+  photo: PhotoQueryRecord;
+  featured: boolean;
+  current?: FeaturedFrameChoice;
+  pending?: boolean;
+  onChoose: (frame: FeaturedFrameChoice) => void;
+  onUnfeature: () => void;
+  onCancel: () => void;
+  mediaSourceResolver?: WallMediaSourceResolver;
+}): JSX.Element {
+  const { photo, featured, current, pending, onChoose, onUnfeature, onCancel, mediaSourceResolver } =
+    props;
+  const [choice, setChoice] = useState<FeaturedFrameChoice>(current ?? 'random');
+  const thumb = resolveWallMediaSource(photo, 'thumb', mediaSourceResolver);
+  const width = 132;
+  const height = width / featuredTileAspect(photo.width / Math.max(1, photo.height));
+  const inner = featuredPhotoRect({ x: 0, y: 0, width, height }, photo);
+  const preview = (frame: FeaturedFrameChoice) => (
+    <span
+      className="frame-picker__preview"
+      style={{
+        width,
+        height,
+        backgroundImage:
+          frame === 'random'
+            ? undefined
+            : `url("${featuredFrameDataUrl(frame, width, height, photo, 400)}")`,
+      }}
+    >
+      <img
+        src={thumb}
+        alt=""
+        draggable={false}
+        style={{ left: inner.x, top: inner.y, width: inner.width, height: inner.height }}
+      />
+      {frame === 'random' && <span className="frame-picker__dice">?</span>}
+    </span>
+  );
+  return (
+    <div
+      className="replace-featured"
+      data-testid="featured-frame-picker"
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onCancel();
+      }}
+    >
+      <div
+        className="replace-featured__card frame-picker"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="frame-picker-title"
+      >
+        <h2 id="frame-picker-title" className="replace-featured__title">
+          {featured ? 'Featured photo frame' : 'Feature this photo'}
+        </h2>
+        <p className="replace-featured__body">
+          It hangs large at the center of its album, in this frame. Random picks a different
+          frame each time the wall loads.
+        </p>
+        <div className="frame-picker__grid" role="radiogroup" aria-label="Frame">
+          {FEATURED_FRAME_CHOICES.map((frame) => (
+            <button
+              key={frame}
+              type="button"
+              role="radio"
+              aria-checked={choice === frame}
+              className="frame-picker__option"
+              data-testid={`featured-frame-option-${frame}`}
+              data-selected={choice === frame ? 'true' : 'false'}
+              onClick={() => setChoice(frame)}
+              onDoubleClick={() => onChoose(frame)}
+            >
+              {preview(frame)}
+              <span className="frame-picker__label">{FEATURED_FRAME_LABELS[frame]}</span>
+            </button>
+          ))}
+        </div>
+        <div className="replace-featured__actions">
+          {featured && (
+            <button
+              type="button"
+              className="focused-photo__curate"
+              onClick={onUnfeature}
+              disabled={pending}
+              data-testid="featured-frame-unfeature"
+            >
+              Unfeature
+            </button>
+          )}
+          <button
+            type="button"
+            className="focused-photo__curate"
+            onClick={onCancel}
+            data-testid="featured-frame-cancel"
+          >
+            Cancel
+          </button>
+          <button
+            autoFocus
+            type="button"
+            className="focused-photo__curate replace-featured__confirm"
+            onClick={() => onChoose(choice)}
+            disabled={pending || (featured && choice === current)}
+            data-testid="featured-frame-confirm"
+          >
+            {featured ? 'Save frame' : 'Make featured'}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

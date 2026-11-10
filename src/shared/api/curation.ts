@@ -33,6 +33,10 @@ export function curationPhotoStarPath(photoId: string): string {
   return `/api/curation/photos/${encodeURIComponent(photoId)}/star`;
 }
 
+export function curationPhotoFeaturedPath(photoId: string): string {
+  return `/api/curation/photos/${encodeURIComponent(photoId)}/featured`;
+}
+
 export function curationPhotoPrivatePath(photoId: string): string {
   return `/api/curation/photos/${encodeURIComponent(photoId)}/private`;
 }
@@ -107,6 +111,48 @@ export interface PhotoPrivateRequest {
   private: boolean;
 }
 
+/**
+ * Frames a featured photo can hang in on the wall: modern ones first, then
+ * museum classics. The client draws them.
+ */
+export const FEATURED_FRAMES = [
+  'gallery-black',
+  'white-gallery',
+  'natural-oak',
+  'walnut',
+  'shadow-box',
+  'brushed-silver',
+  'gilded',
+  'baroque',
+] as const;
+export type FeaturedFrame = (typeof FEATURED_FRAMES)[number];
+/** A frame, or `random`: a different frame on every page load. */
+export type FeaturedFrameChoice = FeaturedFrame | 'random';
+export const FEATURED_FRAME_CHOICES: readonly FeaturedFrameChoice[] = [
+  'random',
+  ...FEATURED_FRAMES,
+];
+
+export interface PhotoFeaturedRequest {
+  featured: boolean;
+  /** Replace the album's current featured photo, if it has one. */
+  replace?: boolean;
+  /**
+   * Its frame; featuring without one keeps the current frame, or uses
+   * `random` for a newly featured photo.
+   */
+  frame?: FeaturedFrameChoice;
+}
+
+/**
+ * 409 reply to featuring a photo whose album already has a featured photo
+ * (without `replace`): that photo, so the curator can confirm replacing it.
+ */
+export interface PhotoFeaturedConflictResponse {
+  error: 'featured_exists';
+  current: PhotoQueryRecord;
+}
+
 export interface PhotoMoveResponse {
   /** The photo at its new location (its id changes with its path). */
   photo: PhotoQueryRecord;
@@ -135,7 +181,8 @@ export type CurationErrorCode =
   | 'folder_invalid'
   | 'edit_invalid'
   | 'share_invalid'
-  | 'share_not_found';
+  | 'share_not_found'
+  | 'featured_exists';
 
 export interface CurationErrorResponse {
   error: CurationErrorCode;

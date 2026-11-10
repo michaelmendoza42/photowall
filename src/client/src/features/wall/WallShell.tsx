@@ -22,6 +22,7 @@ import {
   useRescanLibrary,
   useSetAlbumDisplay,
   useSetDefaultView,
+  useSetPhotoFeatured,
   useSetPhotoPrivate,
   useStarPhoto,
 } from '../../hooks/useCuration.js';
@@ -30,7 +31,10 @@ import { queryKeys } from '../../hooks/queryKeys.js';
 import {
   SHARE_URL_PARAM,
   isInHiddenFolder,
+  type FeaturedFrameChoice,
+  type PhotoFeaturedConflictResponse,
 } from '../../../../shared/api/curation.js';
+import { ApiError } from '../../api/http.js';
 import { CurationToast, type CurationToastState } from './CurationToast.js';
 import {
   EMPTY_FILTERS,
@@ -794,6 +798,65 @@ export function WallShell(): JSX.Element {
     };
   }, [focusedPhotoRecord, isCurator, starPhoto.isPending, runStar, focusedFromBestOf]);
 
+  const setPhotoFeatured = useSetPhotoFeatured();
+  // The album's current featured photo, while the curator confirms
+  // replacing it with the focused one.
+  const [featuredConflict, setFeaturedConflict] = useState<{
+    photoId: string;
+    current: PhotoQueryRecord;
+    frame: FeaturedFrameChoice;
+  } | null>(null);
+  const runFeatured = useCallback(
+    (
+      photo: PhotoQueryRecord,
+      featured: boolean,
+      replace: boolean,
+      frame?: FeaturedFrameChoice,
+    ) => {
+      setPhotoFeatured.mutate(
+        { photoId: photo.id, featured, replace, ...(frame ? { frame } : {}) },
+        {
+          onSuccess: (result) => {
+            setFeaturedConflict(null);
+            setFocusedPhoto((prev) => updateFocusedPhoto(prev, result.photo));
+          },
+          onError: (err) => {
+            const current = featuredConflictPhoto(err);
+            if (current) {
+              setFeaturedConflict({ photoId: photo.id, current, frame: frame ?? 'random' });
+              return;
+            }
+            setFeaturedConflict(null);
+            setToast({
+              message: `Could not change the featured photo: ${err.message}`,
+              tone: 'error',
+            });
+          },
+        },
+      );
+    },
+    [setPhotoFeatured],
+  );
+  const curatorFeatured = useMemo(() => {
+    if (!focusedPhotoRecord || !isCurator) return undefined;
+    if (isInHiddenFolder(focusedPhotoRecord.directoryPath)) return undefined;
+    const featured = focusedPhotoRecord.featured === true;
+    const replacing =
+      featuredConflict?.photoId === focusedPhotoRecord.id ? featuredConflict.current : undefined;
+    return {
+      featured,
+      frame: focusedPhotoRecord.featuredFrame,
+      pending: setPhotoFeatured.isPending,
+      onFeature: (frame: FeaturedFrameChoice) =>
+        runFeatured(focusedPhotoRecord, true, false, frame),
+      onUnfeature: () => runFeatured(focusedPhotoRecord, false, false),
+      replacing,
+      onConfirmReplace: () =>
+        runFeatured(focusedPhotoRecord, true, true, featuredConflict?.frame),
+      onCancelReplace: () => setFeaturedConflict(null),
+    };
+  }, [focusedPhotoRecord, isCurator, setPhotoFeatured.isPending, runFeatured, featuredConflict]);
+
   const setPhotoPrivate = useSetPhotoPrivate();
   const curatorPrivate = useMemo(() => {
     if (!focusedPhotoRecord || !isCurator) return undefined;
@@ -860,8 +923,21 @@ export function WallShell(): JSX.Element {
     [queryFilters, guestView],
   );
 
+  // Featured photos the wall draws as hero tiles: not those showing in
+  // Favorites, which has no featured photo of its own.
+  const featuredPhotoIds = useMemo(
+    () =>
+      new Set(
+        photos
+          .filter((photo) => photo.featured && !isShownFromBestOf(photo, albumAreas))
+          .map((photo) => photo.id),
+      ),
+    [photos, albumAreas],
+  );
+
   const sharedWallProps = {
     photos,
+    featuredPhotoIds,
     selectionKey,
     worldWidth,
     hasNextPage: photosQuery.hasNextPage,
@@ -956,6 +1032,7 @@ export function WallShell(): JSX.Element {
           onPrevious={handleFocusPrevious}
           curatorAction={curatorAction}
           curatorStar={curatorStar}
+          curatorFeatured={curatorFeatured}
           curatorPrivate={curatorPrivate}
           sourceAlbum={focusedFromBestOf ? photoAlbumName(focusedPhoto.photo) : undefined}
           onEdit={handleEditOpen}
@@ -1005,6 +1082,13 @@ export function WallShell(): JSX.Element {
 }
 
 const GUEST_PREVIEW_STORAGE_KEY = 'photo-wall.preview-as-guest';
+
+/** The album's current featured photo, when featuring failed because of it. */
+function featuredConflictPhoto(err: unknown): PhotoQueryRecord | null {
+  if (!(err instanceof ApiError) || err.status !== 409) return null;
+  const body = err.body as Partial<PhotoFeaturedConflictResponse> | null;
+  return body?.error === 'featured_exists' && body.current ? body.current : null;
+}
 
 function readGuestPreview(): boolean {
   try {

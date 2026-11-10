@@ -15,6 +15,9 @@
 //    it falls in, so photos fit their tiles; columns close exactly at H
 //    with best-fitting photos. H is the smallest height whose interior
 //    (every tile not touching the outer edge) holds all the photos.
+//    A group's featured photo is a hero tile: the photo uncropped in its
+//    frame, sized to the viewport, across columns made to fit it exactly
+//    at the group's seed (its region's center).
 // 3. Center-out. Within each group, photos of the same shape trade tiles
 //    so starred photos, then earlier ones, sit nearer the wall center. The
 //    outer ring of tiles gets repeats of the group's photos.
@@ -45,6 +48,7 @@ import {
   type PackedTile,
   type PackerResult,
 } from './packer.js';
+import { featuredTileSize } from './featuredGeometry.js';
 import { stableUnitInterval } from './seeded.js';
 import { stableShufflePhotos } from './shuffle.js';
 import { WALL_TILE_SCALE } from './worldWidth.js';
@@ -53,12 +57,19 @@ export interface RadialWallGroup {
   key: string;
   /** In priority order: earlier photos land nearer the wall center. */
   photos: readonly PhotoQueryRecord[];
+  /**
+   * The group's featured photo, one of `photos`: drawn as a hero tile two
+   * columns wide at the group's center.
+   */
+  featured?: PhotoQueryRecord;
 }
 
 export interface RadialWallLayout extends PackerResult {
   worldWidth: number;
   /** Centroid of each group's tiles, in world px. */
   groupCenters: Map<string, { x: number; y: number }>;
+  /** Photos laid out as hero tiles. */
+  featuredPhotoIds: ReadonlySet<string>;
 }
 
 export interface RadialWallOptions {
@@ -72,6 +83,11 @@ export interface RadialWallOptions {
   maxRowHeight: number;
   columnWidthFactors: readonly number[];
   tileScale?: number;
+  /**
+   * The box (world px) a featured photo's hero tile fits inside; without
+   * one, featured photos are laid out like any other.
+   */
+  featuredBox?: { width: number; height: number };
 }
 
 /** Candidate columns considered for each placement. */
@@ -99,6 +115,20 @@ const REGION_SAMPLES_PER_SIDE = 64;
 const REGION_ITERATIONS = 60;
 const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
 const SHAPE_SHUFFLE_SEED = 'radial-wall-shapes';
+/**
+ * A hero lands on two columns of equal height. A difference smaller than
+ * a tile is closed by stretching or trimming one column's last tile (a
+ * slightly different crop) by at most this share of its height.
+ */
+const HERO_ADJUST_MAX_RATIO = 0.35;
+/**
+ * The tallest tile (as a share of its width) that closes a column exactly
+ * to a hero's top; columns farther below keep packing as usual.
+ */
+const HERO_CLOSE_MAX_WIDTH_RATIO = 1.5;
+/** How far the columns beside a hero may be scaled to center it exactly. */
+const HERO_SIDE_SCALE_MIN = 0.8;
+const HERO_SIDE_SCALE_MAX = 1.25;
 
 const EMPTY_LAYOUT: RadialWallLayout = {
   rows: [],
@@ -106,6 +136,7 @@ const EMPTY_LAYOUT: RadialWallLayout = {
   packedPhotoCount: 0,
   worldWidth: 0,
   groupCenters: new Map(),
+  featuredPhotoIds: new Set(),
 };
 
 interface Slot {
@@ -118,12 +149,29 @@ interface Slot {
   bucket: number;
   /** Shaped by a repeat (outer ring, or interior after photos ran out). */
   repeat: boolean;
+  /** A hero tile, and the featured photo it shows. */
+  hero?: PhotoQueryRecord;
 }
 
 interface Pack {
   slots: Slot[];
   /** Photos not placed because the interior filled first. */
   photosLeft: number;
+  /** Heroes that couldn't be placed: this height doesn't work. */
+  heroesMissing: number;
+}
+
+/** A group's featured photo, the columns its hero tile spans and its size. */
+interface Hero {
+  group: number;
+  photo: PhotoQueryRecord;
+  /** First of the columns it spans. */
+  lane: number;
+  span: number;
+  width: number;
+  height: number;
+  /** Target center y in region coordinates. */
+  y: number;
 }
 
 export function buildRadialWallLayout(options: RadialWallOptions): RadialWallLayout {
@@ -131,26 +179,126 @@ export function buildRadialWallLayout(options: RadialWallOptions): RadialWallLay
   const photos = groups.flatMap((group) => group.photos);
   if (photos.length === 0 || options.referenceWidth <= 0) return EMPTY_LAYOUT;
 
-  const columns = buildRadialColumns(photos, options);
+  const heroSizes = groups.map((group) =>
+    options.featuredBox &&
+    group.featured &&
+    group.photos.length > 1 &&
+    group.photos.includes(group.featured)
+      ? featuredTileSize(group.featured, options.featuredBox)
+      : null,
+  );
+  const heroArea = heroSizes.reduce((sum, size) => sum + (size ? size.width * size.height : 0), 0);
+  const columns = buildRadialColumns(photos, options, heroArea);
   if (columns.length === 0) return EMPTY_LAYOUT;
+  const baseMeanWidth = columns.reduce((sum, column) => sum + column.width, 0) / columns.length;
+
+  // Each hero gets columns made exactly its width, as near the middle of
+  // its group's part of the wall as they fit. Seeds come from a first
+  // pass of the regions; resizing columns barely moves them.
+  const firstAreas = groups.map((group) => estimateArea(group.photos, baseMeanWidth));
+  const firstWidth = columns.reduce((sum, column) => sum + column.width, 0);
+  const firstRegions = buildRegions(
+    firstAreas,
+    firstWidth,
+    (firstAreas.reduce((sum, area) => sum + area, 0) + heroArea) / firstWidth,
+    baseMeanWidth,
+  );
+  const spans: Array<{ lane: number; span: number } | null> = groups.map(() => null);
+  const taken = new Set<number>();
+  heroSizes.forEach((size, group) => {
+    if (!size) return;
+    const span = Math.max(1, Math.round(size.width / baseMeanWidth));
+    if (span + 2 > columns.length) return;
+    const targetX = firstRegions.seeds[group]!.x;
+    let best = -1;
+    let bestDistance = Number.POSITIVE_INFINITY;
+    for (let lane = 1; lane + span < columns.length; lane += 1) {
+      // Keep a column between heroes so their locked edges never meet.
+      let free = true;
+      for (let index = lane - 1; index <= lane + span; index += 1) if (taken.has(index)) free = false;
+      if (!free) continue;
+      const spanWidth = columns.slice(lane, lane + span).reduce((sum, c) => sum + c.width, 0);
+      const distance = Math.abs(columns[lane]!.x + spanWidth / 2 - targetX);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = lane;
+      }
+    }
+    if (best < 0) return;
+    const before = columns.reduce((sum, column) => sum + column.width, 0);
+    for (let index = best; index < best + span; index += 1) {
+      columns[index] = { x: 0, width: size.width / span };
+      taken.add(index);
+    }
+    // Columns snap the hero to within half a column of its target; the
+    // first hero (the wall's central album) is then centered exactly by
+    // widening the columns on one side and narrowing the other side's.
+    if (taken.size === span) {
+      const total = columns.reduce((sum, column) => sum + column.width, 0);
+      const target = (targetX / before) * total;
+      const leftWidth = columns.slice(0, best).reduce((sum, column) => sum + column.width, 0);
+      const rightWidth = total - leftWidth - size.width;
+      const wantedLeft = target - size.width / 2;
+      const leftScale = wantedLeft / leftWidth;
+      const rightScale = (rightWidth - (wantedLeft - leftWidth)) / rightWidth;
+      if (
+        leftScale >= HERO_SIDE_SCALE_MIN &&
+        leftScale <= HERO_SIDE_SCALE_MAX &&
+        rightScale >= HERO_SIDE_SCALE_MIN &&
+        rightScale <= HERO_SIDE_SCALE_MAX
+      ) {
+        columns.forEach((column, index) => {
+          if (index < best) column.width *= leftScale;
+          else if (index >= best + span) column.width *= rightScale;
+        });
+      }
+    }
+    let x = 0;
+    for (const column of columns) {
+      column.x = x;
+      x += column.width;
+    }
+    spans[group] = { lane: best, span };
+  });
+
   const worldWidth = columns.reduce((sum, column) => sum + column.width, 0);
   const meanColumnWidth = worldWidth / columns.length;
-  const groupAreas = groups.map((group) => estimateArea(group.photos, meanColumnWidth));
+  const heroPhotos = groups.map((group, index) => (spans[index] ? group.featured! : null));
+  const groupAreas = groups.map((group, index) => {
+    const hero = heroPhotos[index];
+    const area = estimateArea(group.photos, meanColumnWidth);
+    const size = heroSizes[index];
+    if (!hero || !size) return area;
+    return area - estimateArea([hero], meanColumnWidth) + size.width * size.height;
+  });
   // Originals fill the interior, inside a one-tile outer ring of repeats.
   const ringDepth = meanColumnWidth;
   const interiorWidth = Math.max(meanColumnWidth, worldWidth - 2 * ringDepth);
-  const estimatedHeight =
-    groupAreas.reduce((sum, area) => sum + area, 0) / interiorWidth + 2 * ringDepth;
+  const estimatedHeight = Math.max(
+    groupAreas.reduce((sum, area) => sum + area, 0) / interiorWidth + 2 * ringDepth,
+    // Room for the tallest hero with a tile above and below it.
+    ...heroSizes.map((size, index) => (size && spans[index] ? size.height + 3 * ringDepth : 0)),
+  );
   const shapeQueues = groups.map((group, index) =>
-    stableShufflePhotos(group.photos, `${SHAPE_SHUFFLE_SEED}:${index}`),
+    stableShufflePhotos(
+      group.photos.filter((photo) => photo !== heroPhotos[index]),
+      `${SHAPE_SHUFFLE_SEED}:${index}`,
+    ),
   );
 
   // Regions barely change across the heights tried, so build them once
   // and stretch them vertically to each height.
   const regions = buildRegions(groupAreas, worldWidth, estimatedHeight, ringDepth);
+  const heroes: Hero[] = [];
+  heroPhotos.forEach((photo, group) => {
+    const span = spans[group];
+    const size = heroSizes[group];
+    if (!photo || !span || !size) return;
+    heroes.push({ group, photo, ...span, ...size, y: regions.seeds[group]!.y });
+  });
   const packAt = (height: number): Pack =>
-    packShapes(shapeQueues, columns, height, regions, estimatedHeight / height);
-  const fits = (pack: Pack): boolean => pack.photosLeft === 0;
+    packShapes(shapeQueues, columns, height, regions, estimatedHeight / height, heroes);
+  const fits = (pack: Pack): boolean => pack.photosLeft === 0 && pack.heroesMissing === 0;
 
   // Smallest height whose interior holds every photo.
   let low = estimatedHeight * 0.94;
@@ -161,7 +309,12 @@ export function buildRadialWallLayout(options: RadialWallOptions): RadialWallLay
     high *= 1.15;
     fitting = packAt(high);
   }
-  if (!fits(fitting)) return EMPTY_LAYOUT;
+  if (!fits(fitting)) {
+    // A hero that can't be placed at any height: lay the wall out without.
+    return heroes.length > 0
+      ? buildRadialWallLayout({ ...options, featuredBox: undefined })
+      : EMPTY_LAYOUT;
+  }
   // The estimate can also run tall: step down until a height fails.
   for (let attempt = 0; attempt < 8; attempt += 1) {
     const pack = packAt(low);
@@ -188,8 +341,10 @@ export function buildRadialWallLayout(options: RadialWallOptions): RadialWallLay
     ? raggedEdges(slots, worldWidth, contentHeight)
     : slots.map(() => ({ left: 0, right: 0, top: 0, bottom: 0, layer: 0 }));
 
+  const featuredPhotoIds = new Set<string>();
   const tiles: PackedTile[] = slots.map((slot, index) => {
     const photo = assigned.photos[index]!;
+    if (slot.hero) featuredPhotoIds.add(photo.id);
     const edge = reach[index]!;
     return {
       photoId: photo.id,
@@ -212,6 +367,7 @@ export function buildRadialWallLayout(options: RadialWallOptions): RadialWallLay
     packedPhotoCount: photos.length,
     worldWidth,
     groupCenters: assigned.groupCenters,
+    featuredPhotoIds,
   };
 }
 
@@ -232,6 +388,8 @@ export function groupPhotosByDirectory(
 function buildRadialColumns(
   photos: readonly PhotoQueryRecord[],
   options: RadialWallOptions,
+  /** Extra area hero tiles need beyond their photo's usual tile. */
+  heroArea = 0,
 ): ColumnGeometry[] {
   const factors = options.columnWidthFactors.filter((f) => Number.isFinite(f) && f > 0);
   const pattern = factors.length > 0 ? factors : [1];
@@ -241,8 +399,14 @@ function buildRadialColumns(
   if (!(baseWidth > 0)) return [];
 
   const meanWidth = baseWidth * (factorSum / pattern.length);
-  const side = Math.sqrt(estimateArea(photos, meanWidth));
-  const count = Math.max(1, Math.min(photos.length, Math.round(side / meanWidth)));
+  const side = Math.sqrt(estimateArea(photos, meanWidth) + heroArea);
+  // A hero needs its own columns plus one either side.
+  const heroColumns = heroArea > 0 ? Math.ceil(Math.sqrt(heroArea) / meanWidth) + 3 : 0;
+  const count = Math.max(
+    1,
+    heroColumns,
+    Math.min(photos.length, Math.round(side / meanWidth)),
+  );
 
   const columns: ColumnGeometry[] = [];
   let x = 0;
@@ -261,6 +425,8 @@ function estimateArea(photos: readonly PhotoQueryRecord[], columnWidth: number):
 }
 
 interface Regions {
+  /** Each group's seed: the center its region grows around. */
+  seeds: ReadonlyArray<{ x: number; y: number }>;
   /** The region owner at a point among groups that qualify, or -1. */
   ownerAt(x: number, y: number, allowed: (group: number) => boolean): number;
 }
@@ -332,6 +498,7 @@ function buildRegions(
   }
 
   return {
+    seeds,
     ownerAt(x, y, allowed) {
       let owner = -1;
       let ownerCost = Number.POSITIVE_INFINITY;
@@ -364,6 +531,7 @@ function packShapes(
   regions: Regions,
   /** Maps this pack's y onto the regions' y. */
   regionScaleY: number,
+  heroes: readonly Hero[] = [],
 ): Pack {
   const queues = shapeQueues.map((queue) => queue.slice());
   const heads = queues.map(() => 0);
@@ -377,11 +545,25 @@ function packShapes(
   const tops = new Array<number>(columns.length).fill(0);
   const seamStarts = new Array<number>(Math.max(0, columns.length - 1)).fill(0);
   const slots: Slot[] = [];
+  /** Index in `slots` of each column's bottom tile. */
+  const lastSlot = new Array<number>(columns.length).fill(-1);
+  const pendingHeroes = heroes.slice();
+  let heroesMissing = 0;
+  /**
+   * Boundaries a waiting hero's columns end at: they stay put, so the
+   * columns keep exactly the hero's width until it is placed.
+   */
+  const locked = new Set<number>();
+  for (const hero of heroes) {
+    locked.add(hero.lane - 1);
+    locked.add(hero.lane + hero.span - 1);
+  }
   let open = columns.length;
   const lastLane = columns.length - 1;
   const isOpen = (index: number): boolean => tops[index]! < height - ALIGN_EPSILON_PX;
   const hasOriginals = (group: number): boolean => heads[group]! < queues[group]!.length;
-  const anyGroup = () => true;
+  // A group whose only photo is its hero has nothing to repeat.
+  const anyGroup = (group: number) => queues[group]!.length > 0;
   // Walls too narrow for an interior have no ring: every tile is an original.
   const hasRing = columns.length >= MIN_RING_COLUMNS;
   const inRing = (lane: number): boolean =>
@@ -458,20 +640,170 @@ function packShapes(
       bucket: aspectBucket(photo),
       repeat: source.repeat,
     });
+    lastSlot[lane] = slots.length - 1;
     tops[lane] = bottom;
     if (!isOpen(lane)) open -= 1;
-    for (const boundary of [lane - 1, lane]) {
-      if (boundary < 0 || boundary >= columns.length - 1) continue;
-      const level = tops[boundary]!;
-      if (Math.abs(level - tops[boundary + 1]!) > ALIGN_EPSILON_PX) continue;
+    resplitAround(lane, lane);
+  };
+
+  /** The bottom tile of a column, if it still spans the column's current width. */
+  const bottomSlot = (index: number): Slot | null => {
+    const slot = slots[lastSlot[index]!];
+    const column = columns[index]!;
+    return slot !== undefined &&
+      Math.abs(slot.x - column.x) <= ALIGN_EPSILON_PX &&
+      Math.abs(slot.width - column.width) <= ALIGN_EPSILON_PX
+      ? slot
+      : null;
+  };
+
+  /** Shift lined-up boundaries next to lanes `first`..`last`, breaking the seam. */
+  const resplitAround = (first: number, last: number): void => {
+    for (let boundary = first - 1; boundary <= last; boundary += 1) {
+      if (boundary < 0 || boundary >= columns.length - 1 || locked.has(boundary)) continue;
+      const left = tops[boundary]!;
+      const right = tops[boundary + 1]!;
+      if (Math.abs(left - right) > ALIGN_EPSILON_PX) continue;
+      const level = Math.max(left, right);
       if (level >= height - ALIGN_EPSILON_PX) continue;
+      // Tiles below a moved boundary start at one level, so the two
+      // columns must end exactly level: stretch the shorter one's bottom
+      // tile by the sub-pixel difference, or leave the boundary be.
+      if (left !== right) {
+        const lower = left < right ? boundary : boundary + 1;
+        const slot = bottomSlot(lower);
+        if (!slot) continue;
+        slot.height += level - tops[lower]!;
+        tops[lower] = level;
+      }
       if (resplitBoundary(columns, boundary, minWidth, maxWidth)) seamStarts[boundary] = level;
     }
   };
 
+  /**
+   * Try to place a hero across its columns once the tallest of them
+   * reaches about its target top. Returns 'placed', 'progress' (a tile
+   * went in to even the columns up), 'wait' (try again after more packing)
+   * or 'skip' (it can't be placed in a wall this tall).
+   */
+  const heroLanes = (hero: Hero): number[] =>
+    Array.from({ length: hero.span }, (_, index) => hero.lane + index);
+  /**
+   * Where a hero's top goes: its target, or lower when one of its columns
+   * already reached past that.
+   */
+  const heroGoal = (hero: Hero): number =>
+    Math.max(
+      hero.y / regionScaleY - hero.height / 2,
+      ...heroLanes(hero).map((lane) => tops[lane]!),
+    );
+  /** The tallest tile that can close a gap in a column exactly. */
+  const closableGap = (lane: number): number =>
+    columns[lane]!.width * HERO_CLOSE_MAX_WIDTH_RATIO;
+
+  /**
+   * Try to place a hero across its columns. Each column within a tile of
+   * the hero's top is closed exactly to it with a tile cut to fit, while
+   * farther ones keep packing as usual. Returns 'placed', 'progress' (a
+   * tile went in), 'wait' (try again after more packing) or 'skip' (it
+   * can't be placed in a wall this tall).
+   */
+  const tryHero = (hero: Hero): 'placed' | 'progress' | 'wait' | 'skip' => {
+    const lanes = heroLanes(hero);
+    const goal = heroGoal(hero);
+    const targetTop = hero.y / regionScaleY - hero.height / 2;
+    const minTile =
+      Math.max(...lanes.map((lane) => columns[lane]!.width)) * DISPLAY_HEIGHT_MIN_WIDTH_RATIO;
+    // Below the hero there must be room for at least one more tile, so it
+    // never touches the outer ring.
+    if (goal + hero.height > height - minTile || goal > targetTop + hero.height) return 'skip';
+    const stretches: Array<{ slot: Slot; lane: number }> = [];
+    let waiting = false;
+    for (const lane of lanes) {
+      const gap = goal - tops[lane]!;
+      if (gap <= ALIGN_EPSILON_PX) continue;
+      const column = columns[lane]!;
+      const smallest = column.width * DISPLAY_HEIGHT_MIN_WIDTH_RATIO;
+      if (gap > closableGap(lane)) {
+        waiting = true;
+        continue;
+      }
+      if (gap < smallest) {
+        const slot = bottomSlot(lane);
+        if (slot && gap / slot.height <= HERO_ADJUST_MAX_RATIO) {
+          stretches.push({ slot, lane });
+          continue;
+        }
+      }
+      const source = sourceAt(lane, column.x + column.width / 2, tops[lane]! + gap / 2, false);
+      if (source.group < 0) return 'wait';
+      if (gap >= smallest) {
+        // A tile cut to close the gap exactly.
+        place(lane, source, take(source.group, source.repeat, column.width, gap), goal);
+      } else {
+        // Too small to close: the smallest tile there is, which moves the
+        // hero's top down that little; the other columns close to it.
+        place(lane, source, take(source.group, source.repeat, column.width, smallest), tops[lane]! + smallest);
+      }
+      return 'progress';
+    }
+    if (waiting) return 'wait';
+    for (const { slot, lane } of stretches) {
+      slot.height += goal - tops[lane]!;
+      tops[lane] = goal;
+    }
+    const first = columns[hero.lane]!;
+    slots.push({
+      x: first.x,
+      y: goal,
+      width: lanes.reduce((sum, lane) => sum + columns[lane]!.width, 0),
+      height: hero.height,
+      lane: hero.lane,
+      group: hero.group,
+      bucket: -1,
+      repeat: false,
+      hero: hero.photo,
+    });
+    for (const lane of lanes) {
+      lastSlot[lane] = -1;
+      tops[lane] = goal + hero.height;
+    }
+    locked.delete(hero.lane - 1);
+    locked.delete(hero.lane + hero.span - 1);
+    resplitAround(hero.lane, hero.lane + hero.span - 1);
+    return 'placed';
+  };
+
   while (open > 0) {
+    let heroPlaced = false;
+    for (let index = 0; index < pendingHeroes.length; index += 1) {
+      const hero = pendingHeroes[index]!;
+      const outcome = tryHero(hero);
+      if (outcome === 'wait') continue;
+      if (outcome === 'placed' || outcome === 'skip') pendingHeroes.splice(index, 1);
+      if (outcome === 'skip') {
+        locked.delete(hero.lane - 1);
+        locked.delete(hero.lane + hero.span - 1);
+        heroesMissing += 1;
+      }
+      heroPlaced = true;
+      break;
+    }
+    if (heroPlaced) continue;
     const sources = new Map<number, { group: number; repeat: boolean }>();
-    const choice = chooseColumn(columns, tops, seamStarts, height, isOpen, (lane) => {
+    // A waiting hero's columns stop once they reach its ready height, so
+    // ordinary tiles don't stack past where it belongs.
+    const parked = new Set<number>();
+    for (const hero of pendingHeroes) {
+      const goal = heroGoal(hero);
+      for (const lane of heroLanes(hero)) {
+        if (tops[lane]! >= goal - closableGap(lane)) parked.add(lane);
+      }
+    }
+    const packable = (index: number): boolean => isOpen(index) && !parked.has(index);
+    let anyPackable = false;
+    for (let index = 0; index < columns.length && !anyPackable; index += 1) anyPackable = packable(index);
+    const choice = chooseColumn(columns, tops, seamStarts, height, anyPackable ? packable : isOpen, (lane) => {
       const column = columns[lane]!;
       const source = sourceAt(lane, column.x + column.width / 2, tops[lane]! + column.width / 2, false);
       sources.set(lane, source);
@@ -490,7 +822,7 @@ function packShapes(
     place(choice.lane, source, take(source.group, source.repeat, column.width, null), choice.bottom);
   }
 
-  return { slots, photosLeft };
+  return { slots, photosLeft, heroesMissing: heroesMissing + pendingHeroes.length };
 }
 
 function chooseColumn(
@@ -602,6 +934,7 @@ function placeCenterOut(
     Array.from({ length: bucketCount }, () => []),
   );
   slots.forEach((slot, index) => {
+    if (slot.hero) return;
     (slot.repeat ? repeatSlots : originalSlots)[slot.group]![slot.bucket]!.push(index);
   });
   const distance = (index: number): number => {
@@ -615,12 +948,28 @@ function placeCenterOut(
   const photos = new Array<PhotoQueryRecord>(slots.length);
   const duplicate = new Array<boolean>(slots.length).fill(false);
   const groupCenters = new Map<string, { x: number; y: number }>();
+  const heroSlots = new Map<number, number>();
+  slots.forEach((slot, index) => {
+    if (!slot.hero) return;
+    photos[index] = slot.hero;
+    heroSlots.set(slot.group, index);
+  });
   groups.forEach((group, groupIndex) => {
+    const heroIndex = heroSlots.get(groupIndex);
+    const hero = heroIndex === undefined ? undefined : slots[heroIndex]!.hero;
+    // The hero shows its photo; the other tiles share out the rest.
+    const rest = hero ? group.photos.filter((photo) => photo !== hero) : group.photos;
     const byBucket: PhotoQueryRecord[][] = Array.from({ length: bucketCount }, () => []);
-    for (const photo of starredFirst(group.photos)) byBucket[aspectBucket(photo)]!.push(photo);
+    for (const photo of starredFirst(rest)) byBucket[aspectBucket(photo)]!.push(photo);
     let sumX = 0;
     let sumY = 0;
     let count = 0;
+    if (heroIndex !== undefined) {
+      const slot = slots[heroIndex]!;
+      sumX += slot.x + slot.width / 2;
+      sumY += slot.y + slot.height / 2;
+      count += 1;
+    }
     for (let bucket = 0; bucket < bucketCount; bucket += 1) {
       const own = byBucket[bucket]!;
       const originals = originalSlots[groupIndex]![bucket]!.sort(byDistance);
@@ -631,7 +980,7 @@ function placeCenterOut(
         sumY += slot.y + slot.height / 2;
         count += 1;
       });
-      const pool = own.length > 0 ? own : group.photos;
+      const pool = own.length > 0 ? own : rest.length > 0 ? rest : group.photos;
       repeatSlots[groupIndex]![bucket]!.forEach((slotIndex, position) => {
         photos[slotIndex] = pool[position % pool.length]!;
         duplicate[slotIndex] = true;

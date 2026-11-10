@@ -244,6 +244,11 @@ test('a reload comes back to the same spot on the wall and the open photo', asyn
   await expect.poll(() => distanceFromViewportCenter(page, openId)).toBeLessThan(3);
   await page.waitForTimeout(300);
   await expect(shell).toHaveAttribute('data-modal-open', 'false');
+  // The drawn photos come back at the restored zoom too, not just the
+  // hover and click targets (they once stayed at the default zoom).
+  await expect
+    .poll(async () => Number(await page.getByTestId('wall-pixi-surface').getAttribute('data-viewport-scale')))
+    .toBeCloseTo(zoom, 2);
 });
 
 /**

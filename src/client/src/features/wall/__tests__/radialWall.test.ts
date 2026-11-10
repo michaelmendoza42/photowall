@@ -9,6 +9,7 @@ import {
 } from '../radialWall.js';
 import type { PackedTile } from '../packer.js';
 import { DEFAULT_MOSAIC_COLUMN_FACTORS } from '../worldWidth.js';
+import { featuredPhotoRect, featuredTileAspect } from '../featuredGeometry.js';
 
 function photo(group: number, index: number): PhotoQueryRecord {
   // Mostly 3:2 landscape, about a third portrait, a few squares and panoramas.
@@ -306,6 +307,171 @@ describe('buildRadialWallLayout', () => {
     expect(originalsOf(result)).toHaveLength(1);
     expect(result.worldWidth).toBeGreaterThan(0);
     expect(result.contentHeight).toBeGreaterThan(0);
+  });
+});
+
+/** Each album features one photo from late in its order. */
+function featuring(input: RadialWallGroup[], index = 40): RadialWallGroup[] {
+  return input.map((group) => {
+    const pick = group.photos[Math.min(index, group.photos.length - 1)]!;
+    const featured = { ...pick, featured: true };
+    return {
+      ...group,
+      photos: group.photos.map((p) => (p === pick ? featured : p)),
+      featured,
+    };
+  });
+}
+
+function assertGapless(result: RadialWallLayout): void {
+  const tiles = tilesOf(result).map((tile) => ({ ...tile, ...clipped(tile, result) }));
+  const area = tiles.reduce((sum, tile) => sum + tile.width * tile.height, 0);
+  expect(area / (result.worldWidth * result.contentHeight)).toBeCloseTo(1, 6);
+  for (let i = 0; i < tiles.length; i += 1) {
+    for (let j = i + 1; j < tiles.length; j += 1) {
+      const a = tiles[i]!;
+      const b = tiles[j]!;
+      const overlapX = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x);
+      const overlapY = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y);
+      expect(overlapX > 0.01 && overlapY > 0.01, `${a.photoId} overlaps ${b.photoId}`).toBe(false);
+    }
+  }
+}
+
+/** 90% of a 1600×1000 viewport, the size the reference width suits. */
+const FEATURED_BOX = { width: 1440, height: 900 };
+
+function featuredLayout(input: RadialWallGroup[], box = FEATURED_BOX): RadialWallLayout {
+  return buildRadialWallLayout({
+    groups: input,
+    referenceWidth: 3600,
+    maxRowHeight: 460,
+    columnWidthFactors: DEFAULT_MOSAIC_COLUMN_FACTORS,
+    featuredBox: box,
+  });
+}
+
+function heroOf(result: RadialWallLayout, id: string): PackedTile {
+  return originalsOf(result).find((tile) => tile.photoId === id)!;
+}
+
+describe('featured photos', () => {
+  it('draws each album\'s featured photo once, uncropped, filling the viewport box', () => {
+    const input = featuring(THREE_ALBUMS);
+    const result = featuredLayout(input);
+    expect([...result.featuredPhotoIds].sort()).toEqual(
+      input.map((group) => group.featured!.id).sort(),
+    );
+    const ids = originalsOf(result).map((tile) => tile.photoId);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids.length).toBe(381);
+    for (const group of input) {
+      const tiles = tilesOf(result).filter((tile) => tile.photoId === group.featured!.id);
+      // Only the hero shows it: no repeats on the edge.
+      expect(tiles).toHaveLength(1);
+      const hero = tiles[0]!;
+      // The tile is the frame: as large as fits the box, one way exactly.
+      expect(hero.width).toBeLessThanOrEqual(FEATURED_BOX.width + 0.01);
+      expect(hero.height).toBeLessThanOrEqual(FEATURED_BOX.height + 0.01);
+      expect(
+        Math.max(hero.width / FEATURED_BOX.width, hero.height / FEATURED_BOX.height),
+      ).toBeCloseTo(1, 3);
+      // Inside the frame the photo keeps its own shape: never cropped.
+      const inner = featuredPhotoRect(hero, group.featured!);
+      expect(inner.width / inner.height).toBeCloseTo(group.featured!.aspectRatio, 6);
+      expect(inner.x).toBeGreaterThan(hero.x);
+      expect(inner.y).toBeGreaterThan(hero.y);
+      // Shaped so the frame holds it with no mat left over.
+      expect(hero.width / hero.height).toBeCloseTo(
+        featuredTileAspect(group.featured!.aspectRatio),
+        3,
+      );
+    }
+  });
+
+  it('keeps the wall gapless and the hero off the outer edge', () => {
+    for (const input of [featuring(ONE_ALBUM), featuring(THREE_ALBUMS), featuring(groups([60]), 5)]) {
+      const result = featuredLayout(input);
+      expect(result.featuredPhotoIds.size).toBe(input.length);
+      assertGapless(result);
+      for (const id of result.featuredPhotoIds) {
+        const tile = heroOf(result, id);
+        expect(tile.x).toBeGreaterThan(0);
+        expect(tile.y).toBeGreaterThan(0);
+        expect(tile.x + tile.width).toBeLessThan(result.worldWidth);
+        expect(tile.y + tile.height).toBeLessThan(result.contentHeight);
+      }
+    }
+  });
+
+  it('puts a single album\'s featured photo at the center of the wall, where it opens', () => {
+    for (const size of [20, 40, 70, 150, 261, 600]) {
+      for (const index of [0, 3, 11]) {
+        const label = `${size} photos, featuring #${index}`;
+        const result = featuredLayout(featuring(groups([size]), index));
+        const id = [...result.featuredPhotoIds][0];
+        expect(id, label).toBeDefined();
+        const tile = heroOf(result, id!);
+        const hero = center(tile);
+        // Close enough that it fills most of the screen the wall opens on
+        // (small albums leave little wall around it to center it in).
+        expect(Math.abs(hero.x - result.worldWidth / 2) / tile.width, label).toBeLessThan(
+          size >= 70 ? 0.02 : 0.2,
+        );
+        expect(Math.abs(hero.y - result.contentHeight / 2) / tile.height, label).toBeLessThan(0.3);
+      }
+    }
+  });
+
+  it('works for portrait and panorama photos and smaller screens', () => {
+    for (const [width, height] of [[4000, 6000], [6000, 2000], [3000, 3000]] as const) {
+      const [group] = groups([150]);
+      const featured = { ...group!.photos[7]!, width, height, aspectRatio: width / height };
+      const photos = group!.photos.map((p, i) => (i === 7 ? featured : p));
+      for (const box of [FEATURED_BOX, { width: 700, height: 1200 }]) {
+        const result = featuredLayout([{ ...group!, photos, featured }], box);
+        expect(result.featuredPhotoIds.has(featured.id), `${width}x${height}`).toBe(true);
+        assertGapless(result);
+        const hero = heroOf(result, featured.id);
+        const inner = featuredPhotoRect(hero, featured);
+        expect(inner.width / inner.height).toBeCloseTo(width / height, 6);
+      }
+    }
+  });
+
+  it('keeps each hero inside its own album\'s part of the wall', () => {
+    const input = featuring(THREE_ALBUMS);
+    const result = featuredLayout(input);
+    for (const group of input) {
+      const hero = center(heroOf(result, group.featured!.id));
+      const own = result.groupCenters.get(group.key)!;
+      const nearest = [...result.groupCenters].sort(
+        ([, a], [, b]) =>
+          Math.hypot(a.x - hero.x, a.y - hero.y) - Math.hypot(b.x - hero.x, b.y - hero.y),
+      )[0]!;
+      expect(nearest[1]).toEqual(own);
+    }
+  });
+
+  it('lays featured photos out like any other without a viewport box', () => {
+    const result = layout(featuring(THREE_ALBUMS));
+    expect(result.featuredPhotoIds.size).toBe(0);
+    expect(originalsOf(result)).toHaveLength(381);
+  });
+
+  it('ignores a featured photo that is not in the group', () => {
+    const [group] = groups([80]);
+    const result = featuredLayout([{ ...group!, featured: photo(9, 0) }]);
+    expect(result.featuredPhotoIds.size).toBe(0);
+    expect(originalsOf(result)).toHaveLength(80);
+  });
+
+  it('lays out tiny albums rather than failing', () => {
+    for (const size of [1, 2, 3, 8]) {
+      const result = featuredLayout(featuring(groups([size]), 1));
+      expect(originalsOf(result), `${size} photos`).toHaveLength(size);
+      assertGapless(result);
+    }
   });
 });
 

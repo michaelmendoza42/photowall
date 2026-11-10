@@ -6,6 +6,8 @@ import {
   resolveWallMediaSource,
   type WallMediaSourceResolver,
 } from './mediaSourceResolver.js';
+import type { FeaturedFrame } from '../../../../shared/api/curation.js';
+import { featuredPhotoRect } from './featuredGeometry.js';
 
 export interface PixiSceneTileInput {
   key: string;
@@ -22,6 +24,10 @@ export interface PixiSceneTileInput {
   sourceEditVersion?: string;
   /** Draw order (higher on top); defaults to list order. */
   zOrder?: number;
+  /** An album's hero tile: screen-sharp at every zoom, overview included. */
+  featured?: boolean;
+  /** A hero tile's frame: the tile is the frame, the photo sits inside it uncropped. */
+  frame?: FeaturedFrame;
 }
 
 export interface PixiSceneSprite {
@@ -40,6 +46,11 @@ export interface PixiSceneSprite {
   /** Load order: on-screen tiles nearest the viewport center come first. */
   priority: number;
   zOrder?: number;
+  /**
+   * A hero tile's frame: the full tile rectangle, drawn under the photo,
+   * which sits inside it uncropped.
+   */
+  frame?: { x: number; y: number; width: number; height: number; style: FeaturedFrame };
 }
 
 /** Screen size and device pixel ratio the wall is drawn at. */
@@ -74,8 +85,10 @@ export function selectTileVariant(input: {
   /** Longest drawn edge in device pixels. */
   displayLongEdge: number;
   sourceLongEdge: number | null;
+  /** Hero tiles stay sharp even on the zoomed-out overview. */
+  featured?: boolean;
 }): MediaVariant {
-  if (input.zoom <= FAR_ZOOM_MAX || !input.onScreen) return 'thumb';
+  if (!input.onScreen || (input.zoom <= FAR_ZOOM_MAX && !input.featured)) return 'thumb';
   return variantForDrawnSize(input.displayLongEdge, input.sourceLongEdge);
 }
 
@@ -132,15 +145,23 @@ export function buildPixiSceneSprites(
       onScreen,
       displayLongEdge: Math.max(tile.width, tile.height) * zoom * view.pixelRatio,
       sourceLongEdge,
+      featured: tile.featured === true,
     });
 
+    const tileRect = { x: tile.x, y, width: tile.width, height: tile.height };
+    // A framed photo sits inside its frame, uncropped.
+    const photoRect =
+      tile.frame && tile.sourceWidth && tile.sourceHeight
+        ? featuredPhotoRect(tileRect, { width: tile.sourceWidth, height: tile.sourceHeight })
+        : tileRect;
     return {
       key: tile.key,
       ...(tile.zOrder !== undefined ? { zOrder: tile.zOrder } : {}),
-      x: tile.x,
-      y,
-      width: tile.width,
-      height: tile.height,
+      ...(tile.frame && photoRect !== tileRect ? { frame: { ...tileRect, style: tile.frame } } : {}),
+      x: photoRect.x,
+      y: photoRect.y,
+      width: photoRect.width,
+      height: photoRect.height,
       photoId: tile.photoId,
       src: resolveWallMediaSource(
         {

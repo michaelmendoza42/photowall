@@ -1,7 +1,12 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import type { FastifyRequest } from 'fastify';
-import { VIEW_AS_GUEST, VIEW_AS_HEADER } from '../../shared/api/curation.js';
+import {
+  isInHiddenFolder,
+  VIEW_AS_GUEST,
+  VIEW_AS_HEADER,
+  type FeaturedFrameChoice,
+} from '../../shared/api/curation.js';
 import type { LibraryService } from '../snapshots/library-service.js';
 import type { PhotoRecord } from '../scanner/types.js';
 import type { PersistedSnapshot } from '../snapshots/schema.js';
@@ -32,6 +37,8 @@ import {
   readAlbumSettings,
   readOrCreateSessionSecret,
   readPhotoFlag,
+  readFeaturedFrames,
+  writeFeaturedFrames,
   photoFlagFile,
   writePhotoFlag,
   type PhotoFlag,
@@ -43,7 +50,7 @@ import {
 export const CURATOR_COOKIE = 'photo_wall_curator';
 /** Marks an authorized guest's browser; valid until the VIP PIN changes. */
 export const VIP_COOKIE = 'photo_wall_vip';
-const PHOTO_FLAGS: readonly PhotoFlag[] = ['starred', 'private'];
+const PHOTO_FLAGS: readonly PhotoFlag[] = ['starred', 'private', 'featured'];
 /** How often, at most, a request checks albums.json for changes from another server. */
 const SETTINGS_CHECK_MS = 1000;
 const SESSION_MAX_AGE_S = 60 * 60 * 24 * 365;
@@ -94,9 +101,23 @@ export class CurationService {
   private lastSettingsCheck = 0;
   private edits = new Map<string, PhotoEdit>();
   private editsMtimeMs: number | null = null;
-  /** Photo paths per flag: starred (Favorites) and private (never for guests). */
-  private flags: Record<PhotoFlag, Set<string>> = { starred: new Set(), private: new Set() };
-  private flagMtimes: Record<PhotoFlag, number | null> = { starred: null, private: null };
+  /**
+   * Photo paths per flag: starred (Favorites), private (never for guests)
+   * and featured (an album's centerpiece, at most one per folder).
+   */
+  private flags: Record<PhotoFlag, Set<string>> = {
+    starred: new Set(),
+    private: new Set(),
+    featured: new Set(),
+  };
+  private flagMtimes: Record<PhotoFlag, number | null> = {
+    starred: null,
+    private: null,
+    featured: null,
+  };
+  /** The frame each featured photo hangs in, by path. */
+  private featuredFrames = new Map<string, FeaturedFrameChoice>();
+  private featuredFramesMtimeMs: number | null = null;
 
   constructor(private readonly options: CurationServiceOptions) {}
 
@@ -104,8 +125,8 @@ export class CurationService {
     this.paths = await ensureCurationPaths(this.options.curationRoot);
     await this.reloadSettings();
     await this.reloadEdits();
-    await this.reloadFlag('starred');
-    await this.reloadFlag('private');
+    for (const flag of PHOTO_FLAGS) await this.reloadFlag(flag);
+    await this.reloadFeaturedFrames();
     this.secret = await readOrCreateSessionSecret(this.paths);
     this.pinHash = await readPinHash(this.paths);
     await this.reloadVipPin();
@@ -132,6 +153,9 @@ export class CurationService {
       if ((await statMtime(photoFlagFile(this.getPaths(), flag))) !== this.flagMtimes[flag]) {
         await this.reloadFlag(flag);
       }
+    }
+    if ((await statMtime(this.getPaths().featuredFramesFile)) !== this.featuredFramesMtimeMs) {
+      await this.reloadFeaturedFrames();
     }
     if ((await statMtime(this.getPaths().vipPinFile)) !== this.vipPinMtimeMs) {
       await this.reloadVipPin();
@@ -296,6 +320,8 @@ export class CurationService {
       role,
       starredPaths: this.flags.starred,
       privatePaths: this.flags.private,
+      featuredPaths: this.flags.featured,
+      featuredFrames: this.featuredFrames,
     });
     // One snapshot at a time; settings changes clear the cache.
     if (this.catalogCache.size > 4) this.catalogCache.clear();
@@ -345,6 +371,75 @@ export class CurationService {
       }
       return photo;
     });
+  }
+
+  /**
+   * Feature a photo, making it its album's centerpiece, or stop featuring
+   * it. An album (one folder) has at most one featured photo: featuring
+   * another replaces the current one only with `replace`; otherwise
+   * nothing changes and the current one comes back as `current`. `frame`
+   * sets the frame it hangs in (kept when left out, `random` at first).
+   */
+  setFeatured(
+    photoId: string,
+    featured: boolean,
+    replace: boolean,
+    frame?: FeaturedFrameChoice,
+  ): Promise<{ photo: PhotoRecord } | { current: PhotoRecord }> {
+    return this.serialize(async () => {
+      await this.reloadFlag('featured');
+      await this.reloadFeaturedFrames();
+      const photo = this.requirePhoto(photoId);
+      const set = this.flags.featured;
+      if (featured && isInHiddenFolder(photo.directoryPath)) {
+        throw new CurationActionError('photo_already_hidden', 'a hidden photo cannot be featured');
+      }
+      if (!featured) {
+        if (set.delete(photo.relativePath)) await this.saveFlag('featured');
+        if (this.featuredFrames.delete(photo.relativePath)) await this.saveFeaturedFrames();
+        return { photo };
+      }
+      if (set.has(photo.relativePath)) {
+        if (frame && this.featuredFrames.get(photo.relativePath) !== frame) {
+          this.featuredFrames.set(photo.relativePath, frame);
+          await this.saveFeaturedFrames();
+        }
+        return { photo };
+      }
+      // Paths of photos no longer in the library still hold their folder's
+      // place, so they count (and are replaced) like any other.
+      const others = [...set].filter(
+        (relativePath) => folderOf(relativePath) === photo.directoryPath,
+      );
+      if (others.length > 0 && !replace) {
+        const current = this.requireSnapshot().photos.find(
+          (candidate) => candidate.relativePath === others[0],
+        );
+        if (current) return { current };
+      }
+      for (const relativePath of others) {
+        set.delete(relativePath);
+        this.featuredFrames.delete(relativePath);
+      }
+      set.add(photo.relativePath);
+      this.featuredFrames.set(photo.relativePath, frame ?? 'random');
+      await this.saveFlag('featured');
+      await this.saveFeaturedFrames();
+      return { photo };
+    });
+  }
+
+  private async saveFeaturedFrames(): Promise<void> {
+    await writeFeaturedFrames(this.getPaths(), this.featuredFrames);
+    this.featuredFramesMtimeMs = await statMtime(this.getPaths().featuredFramesFile);
+    this.catalogCache.clear();
+  }
+
+  private async reloadFeaturedFrames(): Promise<void> {
+    const paths = this.getPaths();
+    this.featuredFramesMtimeMs = await statMtime(paths.featuredFramesFile);
+    this.featuredFrames = await readFeaturedFrames(paths);
+    this.catalogCache.clear();
   }
 
   private async saveFlag(flag: PhotoFlag): Promise<void> {
@@ -470,14 +565,17 @@ export class CurationService {
       await this.saveEdits();
     }
     // So do its star and privacy (a rejected photo stays out of Favorites
-    // until restored).
+    // until restored). Hiding unfeatures it, and restoring doesn't feature
+    // it again: its album may have a new featured photo by then.
     for (const flag of PHOTO_FLAGS) {
       await this.reloadFlag(flag);
       if (this.flags[flag].delete(photo.relativePath)) {
-        this.flags[flag].add(movedPhoto.relativePath);
+        if (flag !== 'featured') this.flags[flag].add(movedPhoto.relativePath);
         await this.saveFlag(flag);
       }
     }
+    await this.reloadFeaturedFrames();
+    if (this.featuredFrames.delete(photo.relativePath)) await this.saveFeaturedFrames();
     this.catalogCache.clear();
     return { snapshot, photo: withEdit(movedPhoto, this.edits.get(movedPhoto.relativePath)) };
   }
@@ -552,6 +650,12 @@ export class CurationService {
 }
 
 export { PhotoMoveError };
+
+/** The folder of a root-relative photo path ('' at the library root). */
+function folderOf(relativePath: string): string {
+  const slash = relativePath.lastIndexOf('/');
+  return slash < 0 ? '' : relativePath.slice(0, slash);
+}
 
 async function statMtime(file: string): Promise<number | null> {
   try {

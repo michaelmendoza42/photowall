@@ -13,6 +13,9 @@ import {
   type AlbumCurationResponse,
   type CurationErrorResponse,
   type CurationSessionResponse,
+  FEATURED_FRAME_CHOICES,
+  type FeaturedFrameChoice,
+  type PhotoFeaturedConflictResponse,
   type PhotoMoveResponse,
 } from '../../shared/api/curation.js';
 import type { LibraryService } from '../snapshots/library-service.js';
@@ -41,6 +44,11 @@ const DefaultViewSchema = z.object({
 });
 const StarSchema = z.object({ starred: z.boolean() });
 const PrivateSchema = z.object({ private: z.boolean() });
+const FeaturedSchema = z.object({
+  featured: z.boolean(),
+  replace: z.boolean().optional(),
+  frame: z.enum(FEATURED_FRAME_CHOICES as [FeaturedFrameChoice, ...FeaturedFrameChoice[]]).optional(),
+});
 const PhotoParamsSchema = z.object({ photoId: z.string().regex(/^[0-9a-f]{1,64}$/) });
 const EditBodySchema = z.object({ edit: PhotoEditSchema });
 const ShareParamsSchema = z.object({ id: z.string().min(1).max(64) });
@@ -188,6 +196,41 @@ export async function registerCurationRoutes(
       return { photo: toQueryRecord(photo) };
     });
   }
+
+  // Featured: an album's centerpiece, at most one per folder. Featuring a
+  // second photo answers 409 with the current one unless `replace` is set.
+  app.post('/api/curation/photos/:photoId/featured', async (request, reply) => {
+    if (!requireCurator(request, reply)) return reply;
+    const params = PhotoParamsSchema.safeParse(request.params);
+    const body = FeaturedSchema.safeParse(request.body);
+    if (!params.success) return sendError(reply, 404, { error: 'photo_not_found' });
+    if (!body.success) return sendError(reply, 400, { error: 'photo_not_found' });
+    let result: Awaited<ReturnType<typeof curation.setFeatured>>;
+    try {
+      result = await curation.setFeatured(
+        params.data.photoId,
+        body.data.featured,
+        body.data.replace ?? false,
+        body.data.frame,
+      );
+    } catch (err) {
+      return sendMoveError(reply, err);
+    }
+    const catalog = curation.catalogFor('curator');
+    if ('current' in result) {
+      const current = catalog?.byId.get(result.current.id);
+      if (current) {
+        const conflict: PhotoFeaturedConflictResponse = {
+          error: 'featured_exists',
+          current: toQueryRecord(current),
+        };
+        return reply.code(409).header('Cache-Control', 'no-store').send(conflict);
+      }
+    }
+    const photo = catalog?.byId.get(params.data.photoId);
+    if (!photo) return sendError(reply, 404, { error: 'photo_not_found' });
+    return { photo: toQueryRecord(photo) };
+  });
 
   for (const action of ['hide', 'restore'] as const) {
     app.post(`/api/curation/photos/:photoId/${action}`, async (request, reply) => {

@@ -297,3 +297,13 @@ The contextual directional label that appears only on navigational intent in gro
 - **Change risk:** medium to high — changing it affects navigation discoverability, chrome density, and grouped-view feel
 - **Surfaced to users:** yes — directly visible during grouped navigation
 - **Notes:** signpost labels stay hidden by default, remain suppressed while the focused-photo modal is open, use the motion itself as the destination cue after click/tap glide, and omit the album that already dominates most of the current viewport so the user is not told to navigate toward what they are clearly already viewing
+
+### Featured photo (hero tile)
+The one photo per album (folder) the curator makes its centerpiece; the wall draws it as a hero tile, uncropped in a picture frame and filling 90% of the screen at the default zoom, at the center of the album's part of the wall.
+
+- **Lives in:** `docs/product/photo-wall-experience.md`
+- **Why it exists:** lets the curator lead each album with its best photo instead of a uniform mosaic
+- **Used by:** curation storage (`featured.json`, `featured-frames.json`), the radial wall layout, frame drawing (`featuredFrames.ts`), and texture tier selection
+- **Change risk:** medium — changes wall layout around album centers and curator controls
+- **Surfaced to users:** yes — the large photo on the wall, and "Make featured" for the curator
+- **Notes:** at most one per folder (featuring another asks before replacing it); never cropped; framed in a chosen frame or Random (new each page load); always screen-sharp, even on the zoomed-out overview; none for Favorites; a private one is not shown to guests

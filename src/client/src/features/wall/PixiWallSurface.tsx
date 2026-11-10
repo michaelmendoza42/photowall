@@ -13,6 +13,7 @@ import {
 } from './pixiScene.js';
 import type { WallMediaSourceResolver } from './mediaSourceResolver.js';
 import { destroyPixiApp } from './destroyPixiApp.js';
+import { featuredFrameCanvas } from './featuredFrames.js';
 import {
   browserMediaDiagnostics,
   mediaVariantFromSource,
@@ -52,6 +53,8 @@ interface SpriteEntry {
   /** Tile size the sprite is laid out at. */
   width: number;
   height: number;
+  /** A hero tile's frame, drawn under the photo.  */
+  frame: Sprite | null;
 }
 
 export const PixiWallSurface = memo(function PixiWallSurface(
@@ -164,10 +167,12 @@ export const PixiWallSurface = memo(function PixiWallSurface(
     };
   }, []);
 
+  // Also runs once the scene is ready: a zoom restored on reload is set
+  // before the async init finishes, and must still reach the viewport.
   useEffect(() => {
     const app = appRef.current;
     const viewport = viewportRef.current;
-    if (!app || !viewport) return;
+    if (!sceneReady || !app || !viewport) return;
 
     app.renderer.resize(
       Math.max(1, Math.round(viewportWidth || 1)),
@@ -182,7 +187,10 @@ export const PixiWallSurface = memo(function PixiWallSurface(
     );
     viewport.scale.set(zoom, zoom);
     viewport.position.set(0, 0);
-  }, [viewportWidth, viewportHeight, worldWidth, worldHeight, zoom, pixelRatio]);
+    // What the drawn wall is really scaled to, so tests can check it
+    // matches the wall's zoom.
+    if (hostRef.current) hostRef.current.dataset['viewportScale'] = String(zoom);
+  }, [sceneReady, viewportWidth, viewportHeight, worldWidth, worldHeight, zoom, pixelRatio]);
 
   useEffect(() => {
     const scene = sceneRef.current;
@@ -197,10 +205,13 @@ export const PixiWallSurface = memo(function PixiWallSurface(
       if (nextKeys.has(key)) continue;
       const removedSprite = entry.sprite;
       const removedView = entry.view;
+      const removedFrame = entry.frame;
       scene.removeChild(removedSprite);
+      if (removedFrame) scene.removeChild(removedFrame);
       spriteEntries.delete(key);
       requestAnimationFrame(() => {
         removedSprite.destroy();
+        removedFrame?.destroy();
         removedView?.destroy(false);
       });
     }
@@ -267,6 +278,7 @@ function syncSprite(args: {
     current.width = spriteData.width;
     current.height = spriteData.height;
     applySpriteLayout(current.sprite, spriteData, zIndex);
+    syncFrame(scene, current, spriteData, zIndex);
     if (resized && current.base) showTexture(current, current.base);
     if (current.src === spriteData.src) {
       return;
@@ -332,8 +344,10 @@ function syncSprite(args: {
     view: null,
     width: spriteData.width,
     height: spriteData.height,
+    frame: null,
   };
   spriteEntries.set(spriteData.key, entry);
+  syncFrame(scene, entry, spriteData, zIndex);
 
   const cachedTexture = textureCache.get(spriteData.src);
   if (cachedTexture) {
@@ -390,6 +404,50 @@ function showTexture(entry: SpriteEntry, base: Texture): void {
   sprite.width = width;
   sprite.height = height;
   if (previousView) destroyTextureAfterRender(previousView);
+}
+
+/** Frame textures, one per drawn frame canvas (canvases are cached by shape). */
+const frameTextures = new WeakMap<HTMLCanvasElement, Texture>();
+
+/** Add, move or remove a hero tile's frame to match `spriteData`. */
+function syncFrame(
+  scene: Container,
+  entry: SpriteEntry,
+  spriteData: PixiSceneSprite,
+  zIndex: number,
+): void {
+  const rect = spriteData.frame;
+  if (!rect) {
+    if (entry.frame) {
+      const frame = entry.frame;
+      scene.removeChild(frame);
+      entry.frame = null;
+      requestAnimationFrame(() => frame.destroy());
+    }
+    return;
+  }
+  const canvas = featuredFrameCanvas(rect.style, rect.width, rect.height, {
+    width: spriteData.sourceWidth ?? 1,
+    height: spriteData.sourceHeight ?? 1,
+  });
+  let texture = frameTextures.get(canvas);
+  if (!texture) {
+    texture = Texture.from(canvas);
+    frameTextures.set(canvas, texture);
+  }
+  if (!entry.frame) {
+    entry.frame = new Sprite(texture);
+    scene.addChild(entry.frame);
+  } else if (entry.frame.texture !== texture) {
+    entry.frame.texture = texture;
+  }
+  const frame = entry.frame;
+  frame.x = rect.x;
+  frame.y = rect.y;
+  frame.width = rect.width;
+  frame.height = rect.height;
+  // Just under its own photo, above every tile drawn before it.
+  frame.zIndex = zIndex - 0.5;
 }
 
 function applySpriteLayout(

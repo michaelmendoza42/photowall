@@ -8,6 +8,7 @@ import {
 import type {
   AlbumCurationResponse,
   CurationSessionResponse,
+  FeaturedFrameChoice,
 } from '../../../shared/api/curation.js';
 import {
   chooseCuratorPin,
@@ -26,6 +27,7 @@ import {
   setVipPin,
   setPhotoPrivate,
   starPhoto,
+  setPhotoFeatured,
 } from '../api/curation.js';
 import type { PhotoEdit } from '../../../shared/api/edits.js';
 import { queryKeys } from './queryKeys.js';
@@ -153,6 +155,19 @@ export function useStarPhoto() {
   return useMutation({
     mutationFn: (input: { photoId: string; starred: boolean }) =>
       starPhoto(input.photoId, input.starred),
+    onSuccess: () => refreshWall(qc),
+  });
+}
+
+export function useSetPhotoFeatured() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      photoId: string;
+      featured: boolean;
+      replace?: boolean;
+      frame?: FeaturedFrameChoice;
+    }) => setPhotoFeatured(input.photoId, input.featured, input.replace, input.frame),
     onSuccess: () => refreshWall(qc),
   });
 }

@@ -13,6 +13,7 @@ import {
   SHARES_PATH,
   VIEW_AS_GUEST,
   VIEW_AS_HEADER,
+  curationPhotoFeaturedPath,
   curationPhotoHidePath,
   curationPhotoRestorePath,
   curationPhotoPrivatePath,
@@ -582,6 +583,106 @@ describe('curation routes', () => {
     expect(restore.statusCode).toBe(200);
     expect((restore.json() as PhotoMoveResponse).photo.id).toBe(target.id);
     expect((await photos(undefined, `folder=${WEDDING}`)).totalMatching).toBe(3);
+  });
+
+  it('features one photo per album, asking before replacing the current one', async () => {
+    await start({ pin: PIN, libraryWrites: true });
+    const cookie = await login();
+    await curatorPut(cookie, CURATION_ALBUM_DISPLAY_PATH, { folder: '', onDisplay: true });
+    const [first, second] = (await photos(cookie, `folder=${WEDDING}`)).photos;
+    const other = (await photos(cookie, 'folder=2023')).photos[0]!;
+    const feature = (id: string, featured: boolean, replace?: boolean, withCookie = cookie) =>
+      app.inject({
+        method: 'POST',
+        url: curationPhotoFeaturedPath(id),
+        payload: { featured, ...(replace === undefined ? {} : { replace }) },
+        headers: withCookie ? { cookie: withCookie } : {},
+      });
+    const featuredIds = async (query: string, withCookie?: string) =>
+      (await photos(withCookie, query)).photos.filter((p) => p.featured).map((p) => p.id);
+
+    expect((await feature(first!.id, true, undefined, '')).statusCode).toBe(403);
+    const made = await feature(first!.id, true);
+    expect(made.statusCode).toBe(200);
+    expect(made.json()).toMatchObject({ photo: { id: first!.id, featured: true } });
+    // Another album keeps its own featured photo.
+    expect((await feature(other.id, true)).statusCode).toBe(200);
+    // Guests see which photo is featured, so their wall shows it large.
+    expect(await featuredIds(`folder=${WEDDING}`)).toEqual([first!.id]);
+
+    // A second photo in the same album: nothing changes until confirmed.
+    const conflict = await feature(second!.id, true);
+    expect(conflict.statusCode).toBe(409);
+    expect(conflict.json()).toMatchObject({
+      error: 'featured_exists',
+      current: { id: first!.id, featured: true },
+    });
+    expect(await featuredIds(`folder=${WEDDING}`, cookie)).toEqual([first!.id]);
+
+    const replaced = await feature(second!.id, true, true);
+    expect(replaced.statusCode).toBe(200);
+    expect(await featuredIds(`folder=${WEDDING}`, cookie)).toEqual([second!.id]);
+    expect(await featuredIds('folder=2023', cookie)).toEqual([other.id]);
+
+    // Unfeaturing leaves the album without one.
+    expect((await feature(second!.id, false)).json()).toMatchObject({ photo: { id: second!.id } });
+    expect(await featuredIds(`folder=${WEDDING}`, cookie)).toEqual([]);
+    const stored = JSON.parse(
+      await fs.readFile(path.join(dataRoot, 'curation', 'featured.json'), 'utf8'),
+    ) as { photos: string[] };
+    expect(stored.photos).toEqual([other.relativePath]);
+  });
+
+  it('keeps the frame each featured photo hangs in', async () => {
+    await start({ pin: PIN, libraryWrites: true });
+    const cookie = await login();
+    await curatorPut(cookie, CURATION_ALBUM_DISPLAY_PATH, { folder: '', onDisplay: true });
+    const [first, second] = (await photos(cookie, `folder=${WEDDING}`)).photos;
+    const feature = (id: string, payload: object) =>
+      app.inject({ method: 'POST', url: curationPhotoFeaturedPath(id), payload, headers: { cookie } });
+
+    // Random unless chosen; guests get the frame too.
+    expect((await feature(first!.id, { featured: true })).json()).toMatchObject({
+      photo: { featured: true, featuredFrame: 'random' },
+    });
+    expect((await feature(first!.id, { featured: true, frame: 'gilded' })).json()).toMatchObject({
+      photo: { featuredFrame: 'gilded' },
+    });
+    expect((await photos(undefined, `folder=${WEDDING}`)).photos.find((p) => p.id === first!.id))
+      .toMatchObject({ featuredFrame: 'gilded' });
+    expect((await feature(first!.id, { featured: true, frame: 'neon' })).statusCode).toBe(400);
+
+    // Replacing carries the new photo's frame; the old one's is forgotten.
+    expect((await feature(second!.id, { featured: true, frame: 'walnut' })).statusCode).toBe(409);
+    expect(
+      (await feature(second!.id, { featured: true, replace: true, frame: 'walnut' })).json(),
+    ).toMatchObject({ photo: { featuredFrame: 'walnut' } });
+    const framesFile = path.join(dataRoot, 'curation', 'featured-frames.json');
+    expect(JSON.parse(await fs.readFile(framesFile, 'utf8')).frames).toEqual({
+      [second!.relativePath]: 'walnut',
+    });
+    await feature(second!.id, { featured: false });
+    expect(JSON.parse(await fs.readFile(framesFile, 'utf8')).frames).toEqual({});
+  });
+
+  it('unfeatures a photo when it is hidden, and restoring does not feature it again', async () => {
+    await start({ pin: PIN, libraryWrites: true });
+    const cookie = await login();
+    await curatorPut(cookie, CURATION_ALBUM_DISPLAY_PATH, { folder: '', onDisplay: true });
+    const target = (await photos(cookie, `folder=${WEDDING}`)).photos[0]!;
+    const post = (url: string, payload: object) =>
+      app.inject({ method: 'POST', url, payload, headers: { cookie } });
+    expect((await post(curationPhotoFeaturedPath(target.id), { featured: true })).statusCode).toBe(200);
+
+    const hidden = ((await post(curationPhotoHidePath(target.id), {})).json() as PhotoMoveResponse)
+      .photo;
+    expect(hidden.featured).toBeUndefined();
+    // A hidden photo can't be featured.
+    expect((await post(curationPhotoFeaturedPath(hidden.id), { featured: true })).statusCode).toBe(409);
+    const restored = ((await post(curationPhotoRestorePath(hidden.id), {})).json() as PhotoMoveResponse)
+      .photo;
+    expect(restored.featured).toBeUndefined();
+    expect((await photos(cookie, `folder=${WEDDING}`)).photos.some((p) => p.featured)).toBe(false);
   });
 
   async function imageSize(url: string, cookie?: string): Promise<{ width: number; height: number }> {

@@ -18,6 +18,18 @@ describe('selectTileVariant', () => {
     expect(selectTileVariant({ ...tile, zoom: 0.6, displayLongEdge: 3000 })).toBe('thumb');
   });
 
+  it('keeps a featured hero tile screen-sharp even on the zoomed-out overview', () => {
+    expect(
+      selectTileVariant({ ...tile, zoom: FAR_ZOOM_MAX, displayLongEdge: 1500, featured: true }),
+    ).toBe('modal');
+    expect(selectTileVariant({ ...tile, zoom: 0.6, displayLongEdge: 700, featured: true })).toBe(
+      'wall',
+    );
+    expect(
+      selectTileVariant({ ...tile, zoom: 0.6, onScreen: false, displayLongEdge: 700, featured: true }),
+    ).toBe('thumb');
+  });
+
   it('picks the smallest tier covering the drawn size once zoomed in', () => {
     expect(selectTileVariant({ ...tile, zoom: 1.5, displayLongEdge: 500 })).toBe('thumb');
     expect(selectTileVariant({ ...tile, zoom: 1.5, displayLongEdge: 700 })).toBe('wall');
@@ -48,6 +60,33 @@ describe('selectTileVariant', () => {
 });
 
 describe('buildPixiSceneSprites', () => {
+  it('hangs a featured hero tile in its frame, with the photo inside uncropped', () => {
+    const tile = {
+      key: 'hero',
+      rowOffsetTop: 100,
+      x: 40,
+      y: 20,
+      width: 1200,
+      height: 700,
+      photoId: 'hero',
+      sourceWidth: 6000,
+      sourceHeight: 3000,
+      featured: true,
+      frame: 'walnut' as const,
+    };
+    const [sprite] = buildPixiSceneSprites([tile], 1, VIEW);
+    expect(sprite!.frame).toEqual({ x: 40, y: 120, width: 1200, height: 700, style: 'walnut' });
+    // The photo keeps its 2:1 shape inside the frame.
+    expect(sprite!.width / sprite!.height).toBeCloseTo(2, 6);
+    expect(sprite!.x).toBeGreaterThan(40);
+    expect(sprite!.y).toBeGreaterThan(120);
+    expect(sprite!.x + sprite!.width).toBeLessThan(40 + 1200);
+    expect(sprite!.y + sprite!.height).toBeLessThan(120 + 700);
+    const [plain] = buildPixiSceneSprites([{ ...tile, frame: undefined }], 1, VIEW);
+    expect(plain!.frame).toBeUndefined();
+    expect(plain!.width).toBe(1200);
+  });
+
   it('converts row-local wall tiles into absolute sprite descriptors', () => {
     const sprites = buildPixiSceneSprites(
       [

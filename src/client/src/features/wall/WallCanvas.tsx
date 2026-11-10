@@ -20,6 +20,7 @@ import type { GroupedWallFoundation } from "./groupedWall.js";
 import { useWallFocusNavigator } from "./useWallFocusNavigator.js";
 import {
 	useCenterCameraOnLayout,
+	useFeaturedFrames,
 	useRadialWallLayout,
 } from "./useRadialWallLayout.js";
 import { useCameraGlide } from "./useCameraGlide.js";
@@ -141,6 +142,8 @@ export interface WallCanvasProps {
 	/** Override for unit tests; defaults to {@link DRAG_THRESHOLD_PX}. */
 	dragThresholdPx?: number;
 	mediaSourceResolver?: WallMediaSourceResolver;
+	/** Featured photos to draw as their album's hero tile. */
+	featuredPhotoIds?: ReadonlySet<string>;
 }
 
 interface ActiveDrag {
@@ -205,6 +208,7 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
 		selectionKey = "",
 		dragThresholdPx = DRAG_THRESHOLD_PX,
 		mediaSourceResolver,
+		featuredPhotoIds,
 	} = props;
 
 	const containerRef = useRef<HTMLDivElement | null>(null);
@@ -409,7 +413,10 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
 		photos,
 		groupedFoundation,
 		referenceWidth,
+		featuredPhotoIds,
+		viewport: viewportSize,
 	});
+	const featuredFrames = useFeaturedFrames(packed, photosById);
 	// The world is sized to the photos; the viewport only sets tile size.
 	const worldWidth = packed.worldWidth;
 	useCenterCameraOnLayout({
@@ -1082,9 +1089,11 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
 					sourceHeight: tile.sourceHeight,
 					sourceMtimeMs: photosById.get(tile.photoId)?.mtimeMs,
 					sourceEditVersion: photosById.get(tile.photoId)?.editVersion,
+					featured: packed.featuredPhotoIds.has(tile.photoId),
+					frame: featuredFrames.get(tile.photoId),
 				})),
 			),
-		[photosById, renderPlan.renderedRows],
+		[photosById, renderPlan.renderedRows, packed.featuredPhotoIds, featuredFrames],
 	);
 
 	return (
@@ -1187,6 +1196,7 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
 			<WallHoverPopLayer
 				preview={hoverPreview}
 				mediaSourceResolver={mediaSourceResolver}
+				featuredFrames={featuredFrames}
 			/>
 		</div>
 	);

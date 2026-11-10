@@ -370,6 +370,8 @@ interface PhotoRow {
   relativePath: string;
   directoryPath: string;
   starred?: boolean;
+  featured?: boolean;
+  featuredFrame?: string;
 }
 
 async function allPhotos(api: APIRequestContext): Promise<PhotoRow[]> {
@@ -540,6 +542,119 @@ test('a private photo stays where it is but guests never see it', async ({ page,
   expect(ids.length).toBeGreaterThan(0);
   expect(ids).not.toContain(photoId);
   await other.close();
+});
+
+test('the curator features one photo per album in a frame, confirming before replacing it', async ({
+  page,
+}) => {
+  await page.request.post('/api/curation/session', { data: { pin: PIN } });
+  await page.goto('/');
+  await expect(page.getByTestId('wall-shell')).toHaveAttribute('data-screen', 'ready', {
+    timeout: 60_000,
+  });
+  const tile = await pickCenteredTile(page);
+  const firstId = (await tile.getAttribute('data-photo-id'))!;
+  const first = await photoById(page.request, firstId);
+  await tile.click();
+  const modal = page.getByTestId('focused-photo-modal');
+  const button = page.getByTestId('focused-photo-featured');
+  const picker = page.getByTestId('featured-frame-picker');
+  await expect(button).toHaveAttribute('data-featured', 'false');
+  await expect(button).toHaveText('Make featured');
+
+  // Featuring asks for a frame first; Random is the default.
+  await button.click();
+  await expect(picker).toBeVisible();
+  await expect(page.getByTestId('featured-frame-option-random')).toHaveAttribute('data-selected', 'true');
+  await page.getByTestId('featured-frame-option-gilded').click();
+  await page.getByTestId('featured-frame-confirm').click();
+  await expect(picker).toBeHidden();
+  await expect(button).toHaveAttribute('data-featured', 'true');
+  await expect(button).toContainText('Featured');
+  expect((await photoById(page.request, firstId)).featuredFrame).toBe('gilded');
+
+  // Step to another photo of the same album.
+  const byId = new Map((await allPhotos(page.request)).map((p) => [p.id, p]));
+  for (let step = 0; step < 40; step += 1) {
+    await page.getByTestId('focused-photo-next').click();
+    const id = await modal.getAttribute('data-photo-id');
+    if (id !== firstId && byId.get(id!)?.directoryPath === first.directoryPath) break;
+  }
+  const secondId = (await modal.getAttribute('data-photo-id'))!;
+  expect(secondId).not.toBe(firstId);
+  expect(byId.get(secondId)?.directoryPath).toBe(first.directoryPath);
+
+  // Featuring it asks first, previewing the album's current featured photo.
+  const dialog = page.getByTestId('replace-featured');
+  const featureInWalnut = async () => {
+    await button.click();
+    await page.getByTestId('featured-frame-option-walnut').click();
+    await page.getByTestId('featured-frame-confirm').click();
+  };
+  await expect(button).toHaveAttribute('data-featured', 'false');
+  await featureInWalnut();
+  await expect(dialog).toBeVisible();
+  await expect(page.getByTestId('replace-featured-preview')).toHaveAttribute(
+    'data-photo-id',
+    firstId,
+  );
+  await page.getByTestId('replace-featured-cancel').click();
+  await expect(dialog).toBeHidden();
+  await expect(button).toHaveAttribute('data-featured', 'false');
+  // Escape cancels the confirmation without closing the photo.
+  await featureInWalnut();
+  await expect(dialog).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
+  await expect(modal).toHaveAttribute('data-photo-id', secondId);
+  expect((await photoById(page.request, firstId)).featured).toBe(true);
+
+  await featureInWalnut();
+  await page.getByTestId('replace-featured-confirm').click();
+  await expect(dialog).toBeHidden();
+  await expect(button).toHaveAttribute('data-featured', 'true');
+  const featured = (await allPhotos(page.request)).filter(
+    (p) => p.featured && p.directoryPath === first.directoryPath,
+  );
+  expect(featured.map((p) => [p.id, p.featuredFrame])).toEqual([[secondId, 'walnut']]);
+
+  // On the wall it is a hero tile filling about 90% of the screen at the
+  // wall's zoom (the frame included), and it pops in its frame on hover.
+  await page.getByTestId('focused-photo-close').click();
+  await expect
+    .poll(async () =>
+      page.evaluate((id) => {
+        const node = document.querySelector(
+          `[data-testid="wall-photo-tile"][data-photo-id="${id}"]`,
+        ) as HTMLElement | null;
+        const zoom = Number(
+          document.querySelector('[data-testid="wall-canvas"]')?.getAttribute('data-zoom'),
+        );
+        if (!node || !zoom) return 0;
+        const rect = node.getBoundingClientRect();
+        return Math.max(
+          rect.width / (0.9 * innerWidth * zoom),
+          rect.height / (0.9 * innerHeight * zoom),
+        );
+      }, secondId),
+    )
+    .toBeGreaterThan(0.95);
+  const hero = page.locator(`[data-testid="wall-photo-tile"][data-photo-id="${secondId}"]`).first();
+  const box = (await hero.boundingBox())!;
+  const viewport = page.viewportSize()!;
+  await page.mouse.move(
+    Math.min(Math.max(box.x + box.width / 2, 40), viewport.width - 40),
+    Math.min(Math.max(box.y + box.height / 2, 40), viewport.height - 40),
+  );
+  await expect(page.getByTestId('wall-hover-preview')).toHaveAttribute('data-frame', 'walnut');
+
+  // Unfeaturing is in the same picker.
+  await hero.click({ force: true });
+  await expect(modal).toHaveAttribute('data-photo-id', secondId);
+  await button.click();
+  await page.getByTestId('featured-frame-unfeature').click();
+  await expect(button).toHaveAttribute('data-featured', 'false');
+  await page.getByTestId('focused-photo-close').click();
 });
 
 test('the curator previews the wall as a guest and keeps curating', async ({ page }) => {
