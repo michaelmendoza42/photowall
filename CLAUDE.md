@@ -15,6 +15,7 @@ npx vitest run -t "name substring"                                            # 
 npm run test:browser       # Playwright; webServer runs fixtures:generate + build + start on :5176
 npx playwright test playwright/wheel-momentum.spec.ts --project=chromium-desktop   # one spec
 npm run build && npm start # production build (dist/client + dist/server) and run
+npm run curation:reconcile # after moving library folders on disk: re-key stars/private/edits/albums/shares (dry run; add -- --apply)
 ```
 
 - Playwright boots the real production server against `fixtures/library-smoke/` with a temp data dir. Set `PLAYWRIGHT_REUSE_EXISTING_SERVER=true` to reuse a running one. Mobile specs only run under the `chromium-mobile` project when they're listed in its `testMatch` in `playwright.config.ts`, so add new mobile specs there.

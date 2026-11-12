@@ -22,7 +22,8 @@
     "test:browser": "playwright test",
     "playwright:serve": "npm run fixtures:generate && npm run build && npm start",
     "fixtures:generate": "tsx scripts/generate-fixtures.ts",
-    "layout:viz": "tsx scripts/visualize-layout.ts"
+    "layout:viz": "tsx scripts/visualize-layout.ts",
+    "curation:reconcile": "tsx --env-file-if-exists=.env scripts/reconcile-curation.ts"
   },
   "dependencies": {
     "@fastify/static": "^7.0.4",
