@@ -23,7 +23,7 @@ import {
   type ResolvedPhotoFilters,
 } from '../../shared/api/photos.js';
 import type { PhotoEdit } from '../../shared/api/edits.js';
-import type { FeaturedFrameChoice } from '../../shared/api/curation.js';
+import type { PhotoFrame } from '../../shared/api/curation.js';
 
 export interface PageSliceInput {
   /** Snapshot-ordered photo list (must already be sorted). */
@@ -130,7 +130,7 @@ export function toQueryRecord(
     starred?: boolean;
     private?: boolean;
     featured?: boolean;
-    featuredFrame?: FeaturedFrameChoice;
+    frame?: PhotoFrame;
   },
 ): PhotoQueryRecord {
   return {
@@ -148,8 +148,7 @@ export function toQueryRecord(
     ...(photo.edit ? { edit: photo.edit, editVersion: photo.editVersion } : {}),
     ...(photo.starred ? { starred: true } : {}),
     ...(photo.private ? { private: true } : {}),
-    ...(photo.featured
-      ? { featured: true, featuredFrame: photo.featuredFrame ?? 'random' }
-      : {}),
+    ...(photo.featured ? { featured: true } : {}),
+    ...(photo.frame ? { frame: photo.frame } : {}),
   };
 }

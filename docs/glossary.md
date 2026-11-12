@@ -303,7 +303,27 @@ The one photo per album (folder) the curator makes its centerpiece; the wall dra
 
 - **Lives in:** `docs/product/photo-wall-experience.md`
 - **Why it exists:** lets the curator lead each album with its best photo instead of a uniform mosaic
-- **Used by:** curation storage (`featured.json`, `featured-frames.json`), the radial wall layout, frame drawing (`featuredFrames.ts`), and texture tier selection
+- **Used by:** curation storage (`featured.json`, `frames.json`), the radial wall layout, frame drawing (`featuredFrames.ts`), and texture tier selection
 - **Change risk:** medium — changes wall layout around album centers and curator controls
 - **Surfaced to users:** yes — the large photo on the wall, and "Make featured" for the curator
 - **Notes:** at most one per folder (featuring another asks before replacing it); never cropped; framed in a chosen frame or Random (new each page load); always screen-sharp, even on the zoomed-out overview; none for Favorites; a private one is not shown to guests
+
+### Wall spacing
+How the wall is hung: no spacing (photos edge to edge), spacing (an even gap of plaster wall between photos) or spacing with frames (every photo framed, a gallery wall).
+
+- **Lives in:** `docs/product/photo-wall-experience.md`
+- **Why it exists:** lets the wall read as a real photo wall at home, not only as a mosaic
+- **Used by:** the wall layout (`wallSpacing.ts`, `useRadialWallLayout.ts`), Pixi rendering (frames, shadows), the menu's Wall section and the curator's defaults (`albums.json` `display`)
+- **Change risk:** medium — changes layout, rendering and controls together
+- **Surfaced to users:** yes — Wall section of the menu
+- **Notes:** the app works out the gap from the tile size; with frames, photos are never cropped and the mat absorbs the mosaic's stretching; changing it fades to black and back; the curator sets the default, each viewer can choose their own
+
+### Frame and mat
+The picture frame style and the mat inside it that a photo hangs in, on a framed wall, in the photo view and when featured.
+
+- **Lives in:** `docs/product/photo-wall-experience.md`
+- **Why it exists:** gives each photo a realistic frame and lets the curator choose it
+- **Used by:** curation storage (`frames.json`), frame drawing (`featuredFrames.ts`), the curator's Frame picker
+- **Change risk:** low to medium — rendering only; every frame and mat takes the same space, so the layout never depends on them
+- **Surfaced to users:** yes — on framed walls, in the photo view when frames are on, and in the curator's Frame picker
+- **Notes:** unpicked photos get a random frame each page load (in each browser) with that frame's own mat

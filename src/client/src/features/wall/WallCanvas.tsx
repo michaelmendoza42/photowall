@@ -1,3 +1,4 @@
+import type { WallSpacing } from "../../../../shared/api/curation.js";
 import {
 	useCallback,
 	useEffect,
@@ -20,7 +21,7 @@ import type { GroupedWallFoundation } from "./groupedWall.js";
 import { useWallFocusNavigator } from "./useWallFocusNavigator.js";
 import {
 	useCenterCameraOnLayout,
-	useFeaturedFrames,
+	useTileFrames,
 	useRadialWallLayout,
 } from "./useRadialWallLayout.js";
 import { useCameraGlide } from "./useCameraGlide.js";
@@ -144,6 +145,8 @@ export interface WallCanvasProps {
 	mediaSourceResolver?: WallMediaSourceResolver;
 	/** Featured photos to draw as their album's hero tile. */
 	featuredPhotoIds?: ReadonlySet<string>;
+	/** Edge to edge, spaced apart, or spaced apart in frames. */
+	spacing?: WallSpacing;
 }
 
 interface ActiveDrag {
@@ -185,6 +188,8 @@ interface HoverPreviewState {
 	top: number;
 	width: number;
 	height: number;
+	/** The photo as drawn on the wall, which the pop grows from. */
+	tile: { left: number; top: number; width: number; height: number };
 }
 
 export function WallCanvas(props: WallCanvasProps): JSX.Element {
@@ -209,6 +214,7 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
 		dragThresholdPx = DRAG_THRESHOLD_PX,
 		mediaSourceResolver,
 		featuredPhotoIds,
+		spacing = "none",
 	} = props;
 
 	const containerRef = useRef<HTMLDivElement | null>(null);
@@ -270,11 +276,20 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
 		zoomRef,
 		publishCamera,
 		flushCamera,
-		getHoverRect: () => hoverPreviewRef.current,
+		// Whether to slide depends on the photo on the wall being fully in
+		// view, not its (larger) pop.
+		getHoverRect: () => hoverPreviewRef.current?.tile ?? null,
 		getCursor: () => lastPointerRef.current,
 		shiftHoverRect: (dx, dy) =>
 			setHoverPreview((prev) =>
-				prev ? { ...prev, left: prev.left + dx, top: prev.top + dy } : prev,
+				prev
+					? {
+							...prev,
+							left: prev.left + dx,
+							top: prev.top + dy,
+							tile: { ...prev.tile, left: prev.tile.left + dx, top: prev.tile.top + dy },
+						}
+					: prev,
 			),
 	});
 	// Losing hover (leave, drag, wheel, pinch, modal) stops any hover slide.
@@ -415,8 +430,11 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
 		referenceWidth,
 		featuredPhotoIds,
 		viewport: viewportSize,
+		spacing,
 	});
-	const featuredFrames = useFeaturedFrames(packed, photosById);
+	const tileFrames = useTileFrames(packed, photos, photosById);
+	/** Hung tiles cast a shadow about half a gap wide. */
+	const shadowBlur = packed.gap > 0 ? packed.gap * 0.45 : undefined;
 	// The world is sized to the photos; the viewport only sets tile size.
 	const worldWidth = packed.worldWidth;
 	useCenterCameraOnLayout({
@@ -972,6 +990,7 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
 					width: tileRect.width,
 					height: tileRect.height,
 				},
+				viewport: { width: window.innerWidth, height: window.innerHeight },
 			});
 
 			if (previewRect.width <= 0 || previewRect.height <= 0) return;
@@ -982,6 +1001,12 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
 				top: previewRect.top,
 				width: previewRect.width,
 				height: previewRect.height,
+				tile: {
+					left: tileRect.left,
+					top: tileRect.top,
+					width: tileRect.width,
+					height: tileRect.height,
+				},
 			});
 			scheduleHoverPan(photo.id);
 		},
@@ -1090,15 +1115,17 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
 					sourceMtimeMs: photosById.get(tile.photoId)?.mtimeMs,
 					sourceEditVersion: photosById.get(tile.photoId)?.editVersion,
 					featured: packed.featuredPhotoIds.has(tile.photoId),
-					frame: featuredFrames.get(tile.photoId),
+					frame: tileFrames.get(tile.photoId),
+					...(shadowBlur ? { shadow: shadowBlur } : {}),
 				})),
 			),
-		[photosById, renderPlan.renderedRows, packed.featuredPhotoIds, featuredFrames],
+		[photosById, renderPlan.renderedRows, packed.featuredPhotoIds, tileFrames, shadowBlur],
 	);
 
 	return (
 		<div
-			className="wall-canvas"
+			className={spacing === "none" ? "wall-canvas" : "wall-canvas wall-canvas--hung"}
+			data-spacing={spacing}
 			data-testid="wall-canvas"
 			data-mounted-rows={renderPlan.mountedRowCount}
 			data-total-rows={packed.rows.length}
@@ -1121,6 +1148,13 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
 			onPointerUp={endDrag}
 			onPointerCancel={endDrag}
 		>
+			{spacing !== "none" && (
+				<div className="wall-sunlight" aria-hidden="true" data-testid="wall-sunlight">
+					<div className="wall-sunlight__window">
+						<div className="wall-sunlight__panes" />
+					</div>
+				</div>
+			)}
 			<PixiWallSurface
 				tiles={pixiTiles}
 				viewportWidth={viewportWidth}
@@ -1196,7 +1230,7 @@ export function WallCanvas(props: WallCanvasProps): JSX.Element {
 			<WallHoverPopLayer
 				preview={hoverPreview}
 				mediaSourceResolver={mediaSourceResolver}
-				featuredFrames={featuredFrames}
+				tileFrames={tileFrames}
 			/>
 		</div>
 	);

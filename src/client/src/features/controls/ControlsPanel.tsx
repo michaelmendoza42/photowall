@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { LibraryFacetsResponse } from '../../../../shared/api/library.js';
-import type {
-  AlbumCurationResponse,
-  CurationSessionResponse,
+import {
+  WALL_SPACINGS,
+  type AlbumCurationResponse,
+  type CurationSessionResponse,
+  type WallDisplaySettings,
+  type WallSpacing,
 } from '../../../../shared/api/curation.js';
 import {
   clearFilters,
@@ -44,6 +47,51 @@ export interface CurationControls {
   pinEntry: 'curator' | 'vip' | null;
   loginPending?: boolean;
   rescanPending?: boolean;
+  /** Save the defaults every visitor's wall and photo view start from. */
+  onSetDisplayDefaults: (display: Partial<WallDisplaySettings>) => void;
+}
+
+/** This viewer's wall spacing and photo-view frames. */
+export interface WallControls {
+  spacing: WallSpacing;
+  onSpacingChange: (spacing: WallSpacing) => void;
+  lightboxFrames: boolean;
+  onLightboxFramesChange: (on: boolean) => void;
+  /** This viewer chose differently from the curator's defaults. */
+  customized: boolean;
+  /** Go back to the curator's defaults. */
+  onReset: () => void;
+}
+
+const SPACING_LABELS: Record<WallSpacing, string> = {
+  none: 'No spacing',
+  spaced: 'Spacing',
+  framed: 'Frames',
+};
+
+function SpacingChoice(props: {
+  value: WallSpacing;
+  onChange: (spacing: WallSpacing) => void;
+  testIdPrefix: string;
+  label: string;
+}): JSX.Element {
+  return (
+    <div className="controls__segmented" role="radiogroup" aria-label={props.label}>
+      {WALL_SPACINGS.map((spacing) => (
+        <button
+          key={spacing}
+          type="button"
+          role="radio"
+          aria-checked={props.value === spacing}
+          className="controls__segment"
+          data-testid={`${props.testIdPrefix}-${spacing}`}
+          onClick={() => props.onChange(spacing)}
+        >
+          {SPACING_LABELS[spacing]}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 export interface ShareControls {
@@ -60,6 +108,7 @@ export interface ControlsPanelProps {
   facets: LibraryFacetsResponse | null;
   curation: CurationControls;
   share: ShareControls;
+  wall: WallControls;
   errorMessage?: string | null;
 }
 
@@ -72,6 +121,7 @@ export function ControlsPanel(props: ControlsPanelProps): JSX.Element {
     facets,
     curation,
     share,
+    wall,
     errorMessage,
   } = props;
 
@@ -83,6 +133,10 @@ export function ControlsPanel(props: ControlsPanelProps): JSX.Element {
   const isCurator = curation.session?.curator === true;
   const isVip = curation.session?.vip === true;
   const albums = isCurator ? curation.albums : null;
+  // The default's checkbox answers at once; the saved value catches up.
+  const savedDefaultFrames = curation.session?.display.lightboxFrames ?? false;
+  const [defaultFrames, setDefaultFrames] = useState(savedDefaultFrames);
+  useEffect(() => setDefaultFrames(savedDefaultFrames), [savedDefaultFrames]);
 
   const folderTree = useMemo(
     () => (facets ? buildFolderTree(facets.folders) : []),
@@ -363,6 +417,37 @@ export function ControlsPanel(props: ControlsPanelProps): JSX.Element {
             )}
           </section>
 
+          <section className="controls__section" data-testid="controls-wall">
+            <header className="controls__section-header">
+              <h3 className="controls__section-title">Wall</h3>
+              {wall.customized && (
+                <button
+                  type="button"
+                  className="controls__link"
+                  data-testid="controls-wall-reset"
+                  onClick={wall.onReset}
+                >
+                  Use defaults
+                </button>
+              )}
+            </header>
+            <SpacingChoice
+              value={wall.spacing}
+              onChange={wall.onSpacingChange}
+              testIdPrefix="controls-spacing"
+              label="Wall spacing"
+            />
+            <label className="controls__toggle">
+              <input
+                type="checkbox"
+                data-testid="controls-lightbox-frames"
+                checked={wall.lightboxFrames}
+                onChange={(e) => wall.onLightboxFramesChange(e.target.checked)}
+              />
+              <span>Frames in photo view</span>
+            </label>
+          </section>
+
           {isVip && !isCurator && (
             <section className="controls__section" data-testid="controls-vip">
               <header className="controls__section-header">
@@ -405,6 +490,25 @@ export function ControlsPanel(props: ControlsPanelProps): JSX.Element {
                       ? 'Hidden photos move into a _hidden folder inside their album; nothing is deleted.'
                       : 'Hiding photos is off here: the library folder isn’t writable.'}
                   </p>
+                  <p className="controls__hint">Everyone’s wall starts like this:</p>
+                  <SpacingChoice
+                    value={curation.session.display.spacing}
+                    onChange={(spacing) => curation.onSetDisplayDefaults({ spacing })}
+                    testIdPrefix="controls-default-spacing"
+                    label="Default wall spacing"
+                  />
+                  <label className="controls__toggle">
+                    <input
+                      type="checkbox"
+                      data-testid="controls-default-lightbox-frames"
+                      checked={defaultFrames}
+                      onChange={(e) => {
+                        setDefaultFrames(e.target.checked);
+                        curation.onSetDisplayDefaults({ lightboxFrames: e.target.checked });
+                      }}
+                    />
+                    <span>Frames in photo view by default</span>
+                  </label>
                   <label className="controls__toggle">
                     <input
                       type="checkbox"

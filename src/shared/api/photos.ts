@@ -7,7 +7,7 @@
 // the active snapshot is rejected with an explicit reset signal rather
 // than silently returning unrelated rows.
 
-import { hiddenFolderDepth, type FeaturedFrameChoice } from './curation.js';
+import { hiddenFolderDepth, type PhotoFrame } from './curation.js';
 import type { PhotoEdit } from './edits.js';
 import type { YearSource } from './library.js';
 
@@ -53,8 +53,8 @@ export interface PhotoQueryRecord {
    * as a large hero tile at the album's center.
    */
   featured?: boolean;
-  /** A featured photo's frame on the wall. */
-  featuredFrame?: FeaturedFrameChoice;
+  /** The frame and mat the curator picked for it; without one it gets a random frame. */
+  frame?: PhotoFrame;
 }
 
 /** Reason a snapshot-bound cursor is no longer usable. */

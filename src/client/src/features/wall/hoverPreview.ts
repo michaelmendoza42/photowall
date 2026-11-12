@@ -69,15 +69,25 @@ export function computeFocusedPhotoRenderSize(input: {
 }
 
 /**
- * The hovered photo grows slightly around its own center (2026-10-16: "just
- * pop out the image a little"). It stays centered on the photo even when that
- * puts part of it off-screen.
+ * The hovered photo grows around its own center to half the size the
+ * focused-photo view would show it at, so the view stays worth opening
+ * (2026-11-11: "hover - should enlarge the picture half as big as lightbox
+ * would"), and never less than a slight pop. It stays centered on the
+ * photo even when that puts part of it off-screen. `tile` is what is
+ * drawn, frame included on a framed wall.
  */
 export function computeHoverPopRect(input: {
   tile: PreviewRect;
+  /** The screen the focused-photo view would fill. */
+  viewport?: PreviewSize;
   scale?: number;
 }): PreviewRect {
-  const { tile, scale = HOVER_POP_SCALE } = input;
+  const { tile, viewport } = input;
+  let scale = input.scale ?? HOVER_POP_SCALE;
+  if (input.scale === undefined && viewport && tile.width > 0 && tile.height > 0) {
+    const focused = computeFocusedPhotoRenderSize({ viewport, photo: tile });
+    scale = Math.max(scale, (HOVER_POP_SHARE_OF_FOCUSED * focused.width) / tile.width);
+  }
   const width = tile.width * scale;
   const height = tile.height * scale;
   return {
@@ -87,6 +97,9 @@ export function computeHoverPopRect(input: {
     height,
   };
 }
+
+/** A hover pop's size as a share of the focused-photo view's. */
+export const HOVER_POP_SHARE_OF_FOCUSED = 0.5;
 
 /**
  * Wheel/trackpad scrolling counts as panning until this long after its last
@@ -106,18 +119,19 @@ export const HOVER_PAN_MIN_OFFSET_PX = 2;
  * always slide. Null when the cursor is already at the center.
  */
 export function computeHoverCursorPan(
-  pop: PreviewRect,
+  /** The photo as drawn on the wall (its pop shares its center). */
+  photo: PreviewRect,
   cursor: { x: number; y: number },
   viewport: PreviewSize,
 ): { dx: number; dy: number } | null {
   const fullyVisible =
-    pop.left >= 0 &&
-    pop.top >= 0 &&
-    pop.left + pop.width <= viewport.width &&
-    pop.top + pop.height <= viewport.height;
+    photo.left >= 0 &&
+    photo.top >= 0 &&
+    photo.left + photo.width <= viewport.width &&
+    photo.top + photo.height <= viewport.height;
   if (fullyVisible) return null;
-  const dx = pop.left + pop.width / 2 - cursor.x;
-  const dy = pop.top + pop.height / 2 - cursor.y;
+  const dx = photo.left + photo.width / 2 - cursor.x;
+  const dy = photo.top + photo.height / 2 - cursor.y;
   if (Math.hypot(dx, dy) < HOVER_PAN_MIN_OFFSET_PX) return null;
   return { dx, dy };
 }

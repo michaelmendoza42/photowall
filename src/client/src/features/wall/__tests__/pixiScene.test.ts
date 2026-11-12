@@ -72,10 +72,19 @@ describe('buildPixiSceneSprites', () => {
       sourceWidth: 6000,
       sourceHeight: 3000,
       featured: true,
-      frame: 'walnut' as const,
+      frame: { style: 'walnut' as const, mat: 'frame' as const, kind: 'hero' as const },
     };
     const [sprite] = buildPixiSceneSprites([tile], 1, VIEW);
-    expect(sprite!.frame).toEqual({ x: 40, y: 120, width: 1200, height: 700, style: 'walnut' });
+    expect(sprite!.frame).toMatchObject({
+      x: 40,
+      y: 120,
+      width: 1200,
+      height: 700,
+      style: 'walnut',
+      mat: 'frame',
+      kind: 'hero',
+    });
+    expect(sprite!.frame!.moulding).toBeGreaterThan(0);
     // The photo keeps its 2:1 shape inside the frame.
     expect(sprite!.width / sprite!.height).toBeCloseTo(2, 6);
     expect(sprite!.x).toBeGreaterThan(40);
@@ -85,6 +94,52 @@ describe('buildPixiSceneSprites', () => {
     const [plain] = buildPixiSceneSprites([{ ...tile, frame: undefined }], 1, VIEW);
     expect(plain!.frame).toBeUndefined();
     expect(plain!.width).toBe(1200);
+  });
+
+  it('hangs a framed wall\'s photo uncropped in its frame, with a shadow, and grows it with no mat', () => {
+    const tile = {
+      key: 'framed',
+      rowOffsetTop: 0,
+      x: 0,
+      y: 0,
+      width: 300,
+      height: 260,
+      photoId: 'framed',
+      sourceWidth: 3000,
+      sourceHeight: 2000,
+      frame: { style: 'natural-oak' as const, mat: 'white' as const, kind: 'gallery' as const },
+      shadow: 12,
+    };
+    const [matted] = buildPixiSceneSprites([tile], 1, VIEW);
+    expect(matted!.width / matted!.height).toBeCloseTo(1.5, 6);
+    expect(matted!.x).toBeGreaterThan(0);
+    expect(matted!.x + matted!.width).toBeLessThan(300);
+    // Sunlight from the upper left: a soft cast shadow down and to the
+    // right, then a tight contact shadow.
+    const [cast, contact] = matted!.shadows!;
+    expect(cast!.x).toBeGreaterThan(contact!.x);
+    expect(cast!.y).toBeGreaterThan(contact!.y);
+    expect(cast!.blur).toBeGreaterThan(contact!.blur);
+    // Deep frames stand further off the wall than thin ones.
+    const [deep] = buildPixiSceneSprites(
+      [{ ...tile, frame: { ...tile.frame, style: 'baroque' as const } }],
+      1,
+      VIEW,
+    );
+    const [thin] = buildPixiSceneSprites(
+      [{ ...tile, frame: { ...tile.frame, style: 'brushed-silver' as const } }],
+      1,
+      VIEW,
+    );
+    expect(deep!.shadows![0]!.y).toBeGreaterThan(thin!.shadows![0]!.y);
+    const [bare] = buildPixiSceneSprites(
+      [{ ...tile, frame: { ...tile.frame, mat: 'none' as const } }],
+      1,
+      VIEW,
+    );
+    expect(bare!.width).toBeGreaterThan(matted!.width);
+    // The moulding follows the photo's size, so it grows with it.
+    expect(bare!.frame!.moulding).toBeGreaterThan(matted!.frame!.moulding);
   });
 
   it('converts row-local wall tiles into absolute sprite descriptors', () => {

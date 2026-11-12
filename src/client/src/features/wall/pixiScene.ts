@@ -6,8 +6,8 @@ import {
   resolveWallMediaSource,
   type WallMediaSourceResolver,
 } from './mediaSourceResolver.js';
-import type { FeaturedFrame } from '../../../../shared/api/curation.js';
-import { featuredPhotoRect } from './featuredGeometry.js';
+import type { FrameMat, FrameStyle } from '../../../../shared/api/curation.js';
+import { frameDepth, tileFrameGeometry } from './featuredFrames.js';
 
 export interface PixiSceneTileInput {
   key: string;
@@ -26,8 +26,10 @@ export interface PixiSceneTileInput {
   zOrder?: number;
   /** An album's hero tile: screen-sharp at every zoom, overview included. */
   featured?: boolean;
-  /** A hero tile's frame: the tile is the frame, the photo sits inside it uncropped. */
-  frame?: FeaturedFrame;
+  /** A framed tile: the tile is the frame, the photo sits inside it uncropped. */
+  frame?: { style: FrameStyle; mat: FrameMat; kind: 'hero' | 'gallery' };
+  /** Hung on a wall with gaps: casts a soft shadow this many world px wide. */
+  shadow?: number;
 }
 
 export interface PixiSceneSprite {
@@ -47,10 +49,25 @@ export interface PixiSceneSprite {
   priority: number;
   zOrder?: number;
   /**
-   * A hero tile's frame: the full tile rectangle, drawn under the photo,
-   * which sits inside it uncropped.
+   * A framed tile's frame: the full tile rectangle, drawn under the photo,
+   * which sits inside it uncropped. `moulding` is its width in world px and
+   * `photo` the photo's place, both in world px.
    */
-  frame?: { x: number; y: number; width: number; height: number; style: FeaturedFrame };
+  frame?: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    style: FrameStyle;
+    mat: FrameMat;
+    kind: 'hero' | 'gallery';
+    moulding: number;
+  };
+  /**
+   * Shadow layers under the tile, back to front: each a rectangle, blur
+   * and strength in world px (a soft cast shadow, then a tight contact one).
+   */
+  shadows?: ShadowLayer[];
 }
 
 /** Screen size and device pixel ratio the wall is drawn at. */
@@ -109,6 +126,48 @@ export function variantForDrawnSize(
   return WALL_VARIANT_TIERS[WALL_VARIANT_TIERS.length - 1]!;
 }
 
+export interface ShadowLayer {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  blur: number;
+  alpha: number;
+}
+
+/** An unframed print sits nearly flat on the wall. */
+const PRINT_DEPTH = 0.45;
+
+/**
+ * Shadows of something hung on a wall in sunlight from the upper left: a
+ * soft shadow cast down and to the right, a little longer at the bottom
+ * where the frame tilts off the wall, and a tight dark contact shadow
+ * along its edges. `reach` sets how far they fall, in world px.
+ */
+export function hangingShadows(
+  rect: { x: number; y: number; width: number; height: number },
+  reach: number,
+): ShadowLayer[] {
+  return [
+    {
+      x: rect.x + reach * 0.5,
+      y: rect.y + reach * 0.9,
+      width: rect.width,
+      height: rect.height + reach * 0.15,
+      blur: Math.max(1, reach * 0.7),
+      alpha: 0.38,
+    },
+    {
+      x: rect.x + reach * 0.06,
+      y: rect.y + reach * 0.14,
+      width: rect.width,
+      height: rect.height,
+      blur: Math.max(0.5, reach * 0.16),
+      alpha: 0.5,
+    },
+  ];
+}
+
 /** Higher ratios cost GPU memory without a visible gain. */
 const MAX_PIXEL_RATIO = 3;
 
@@ -150,14 +209,22 @@ export function buildPixiSceneSprites(
 
     const tileRect = { x: tile.x, y, width: tile.width, height: tile.height };
     // A framed photo sits inside its frame, uncropped.
-    const photoRect =
+    const geometry =
       tile.frame && tile.sourceWidth && tile.sourceHeight
-        ? featuredPhotoRect(tileRect, { width: tile.sourceWidth, height: tile.sourceHeight })
-        : tileRect;
+        ? tileFrameGeometry(tileRect, { width: tile.sourceWidth, height: tile.sourceHeight }, tile.frame)
+        : null;
+    const photoRect = geometry?.photo ?? tileRect;
+    // Sunlight from the upper left: shadows fall down and to the right,
+    // longer for frames that stand further off the wall.
+    const base = tile.shadow ?? 0;
+    const depth = tile.frame ? frameDepth(tile.frame.style) : PRINT_DEPTH;
     return {
       key: tile.key,
       ...(tile.zOrder !== undefined ? { zOrder: tile.zOrder } : {}),
-      ...(tile.frame && photoRect !== tileRect ? { frame: { ...tileRect, style: tile.frame } } : {}),
+      ...(tile.frame && geometry
+        ? { frame: { ...tileRect, ...tile.frame, moulding: geometry.moulding } }
+        : {}),
+      ...(base > 0 ? { shadows: hangingShadows(tileRect, base * depth) } : {}),
       x: photoRect.x,
       y: photoRect.y,
       width: photoRect.width,

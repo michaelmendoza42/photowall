@@ -1,5 +1,5 @@
 import type { FolderFacet, YearFacet } from '../../shared/api/library.js';
-import { isInHiddenFolder, type FeaturedFrameChoice } from '../../shared/api/curation.js';
+import { isInHiddenFolder, type PhotoFrame } from '../../shared/api/curation.js';
 import { buildFolderFacets, buildYearFacets } from '../scanner/walk.js';
 import type { PersistedSnapshot } from '../snapshots/schema.js';
 import type { AlbumSettings } from './storage.js';
@@ -19,7 +19,7 @@ export type CatalogPhoto = EditedPhotoRecord & {
   starred?: boolean;
   private?: boolean;
   featured?: boolean;
-  featuredFrame?: FeaturedFrameChoice;
+  frame?: PhotoFrame;
 };
 
 export interface Catalog {
@@ -50,32 +50,33 @@ export function buildCatalog(input: {
   privatePaths?: ReadonlySet<string>;
   /** Paths of featured photos, one per album; ignored when curation is off. */
   featuredPaths?: ReadonlySet<string>;
-  /** Frames of featured photos, by path. */
-  featuredFrames?: ReadonlyMap<string, FeaturedFrameChoice>;
+  /** Frames and mats the curator picked, by path; ignored when curation is off. */
+  photoFrames?: ReadonlyMap<string, PhotoFrame>;
 }): Catalog {
   const { settings, role } = input;
   const none = new Set<string>();
   const starredPaths = settings ? (input.starredPaths ?? none) : none;
   const privatePaths = settings ? (input.privatePaths ?? none) : none;
   const featuredPaths = settings ? (input.featuredPaths ?? none) : none;
+  const photoFrames = settings ? (input.photoFrames ?? new Map<string, PhotoFrame>()) : new Map<string, PhotoFrame>();
   const all: readonly CatalogPhoto[] =
-    starredPaths.size === 0 && privatePaths.size === 0 && featuredPaths.size === 0
+    starredPaths.size === 0 &&
+    privatePaths.size === 0 &&
+    featuredPaths.size === 0 &&
+    photoFrames.size === 0
       ? input.snapshot.photos
       : input.snapshot.photos.map((photo) => {
           const starred = starredPaths.has(photo.relativePath);
           const isPrivate = privatePaths.has(photo.relativePath);
           const featured = featuredPaths.has(photo.relativePath);
-          if (!starred && !isPrivate && !featured) return photo;
+          const frame = photoFrames.get(photo.relativePath);
+          if (!starred && !isPrivate && !featured && !frame) return photo;
           return {
             ...photo,
             ...(starred ? { starred: true } : {}),
             ...(isPrivate ? { private: true } : {}),
-            ...(featured
-              ? {
-                  featured: true,
-                  featuredFrame: input.featuredFrames?.get(photo.relativePath) ?? 'random',
-                }
-              : {}),
+            ...(featured ? { featured: true } : {}),
+            ...(frame ? { frame } : {}),
           };
         });
   const curator = settings !== null && role === 'curator';

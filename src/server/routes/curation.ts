@@ -13,8 +13,12 @@ import {
   type AlbumCurationResponse,
   type CurationErrorResponse,
   type CurationSessionResponse,
-  FEATURED_FRAME_CHOICES,
-  type FeaturedFrameChoice,
+  CURATION_DISPLAY_PATH,
+  DEFAULT_WALL_DISPLAY,
+  FRAME_CHOICES,
+  FRAME_MATS,
+  WALL_SPACINGS,
+  type FrameChoice,
   type PhotoFeaturedConflictResponse,
   type PhotoMoveResponse,
 } from '../../shared/api/curation.js';
@@ -44,10 +48,16 @@ const DefaultViewSchema = z.object({
 });
 const StarSchema = z.object({ starred: z.boolean() });
 const PrivateSchema = z.object({ private: z.boolean() });
+const FrameChoiceSchema = z.enum(FRAME_CHOICES as [FrameChoice, ...FrameChoice[]]);
+const FrameSchema = z.object({ frame: FrameChoiceSchema, mat: z.enum(FRAME_MATS) });
+const DisplayDefaultsSchema = z
+  .object({ spacing: z.enum(WALL_SPACINGS), lightboxFrames: z.boolean() })
+  .partial();
 const FeaturedSchema = z.object({
   featured: z.boolean(),
   replace: z.boolean().optional(),
-  frame: z.enum(FEATURED_FRAME_CHOICES as [FeaturedFrameChoice, ...FeaturedFrameChoice[]]).optional(),
+  frame: FrameChoiceSchema.optional(),
+  mat: z.enum(FRAME_MATS).optional(),
 });
 const PhotoParamsSchema = z.object({ photoId: z.string().regex(/^[0-9a-f]{1,64}$/) });
 const EditBodySchema = z.object({ edit: PhotoEditSchema });
@@ -70,6 +80,7 @@ export async function registerCurationRoutes(
       vip: role === 'vip',
       vipPinSet: role === 'curator' && curation.vipPinSet,
       libraryWrites: curation.libraryWrites,
+      display: curation.getSettings()?.display ?? DEFAULT_WALL_DISPLAY,
     };
   };
 
@@ -103,6 +114,7 @@ export async function registerCurationRoutes(
       vip: session.role === 'vip',
       vipPinSet: session.role === 'curator' && curation.vipPinSet,
       libraryWrites: curation.libraryWrites,
+      display: curation.getSettings()?.display ?? DEFAULT_WALL_DISPLAY,
     } satisfies CurationSessionResponse;
   });
 
@@ -124,6 +136,7 @@ export async function registerCurationRoutes(
       vip: false,
       vipPinSet: false,
       libraryWrites: curation.libraryWrites,
+      display: curation.getSettings()?.display ?? DEFAULT_WALL_DISPLAY,
     } satisfies CurationSessionResponse;
   });
 
@@ -197,6 +210,31 @@ export async function registerCurationRoutes(
     });
   }
 
+  // The curator's defaults for wall spacing and photo-view frames.
+  app.put(CURATION_DISPLAY_PATH, async (request, reply) => {
+    if (!requireCurator(request, reply)) return reply;
+    const body = DisplayDefaultsSchema.safeParse(request.body);
+    if (!body.success) return sendError(reply, 400, { error: 'display_invalid' });
+    return toAlbumResponse(await curation.setDisplayDefaults(body.data));
+  });
+
+  // A photo's frame and mat; random with the frame's own mat clears the pick.
+  app.post('/api/curation/photos/:photoId/frame', async (request, reply) => {
+    if (!requireCurator(request, reply)) return reply;
+    const params = PhotoParamsSchema.safeParse(request.params);
+    const body = FrameSchema.safeParse(request.body);
+    if (!params.success) return sendError(reply, 404, { error: 'photo_not_found' });
+    if (!body.success) return sendError(reply, 400, { error: 'frame_invalid' });
+    try {
+      await curation.setPhotoFrame(params.data.photoId, body.data.frame, body.data.mat);
+    } catch (err) {
+      return sendMoveError(reply, err);
+    }
+    const photo = curation.catalogFor('curator')?.byId.get(params.data.photoId);
+    if (!photo) return sendError(reply, 404, { error: 'photo_not_found' });
+    return { photo: toQueryRecord(photo) };
+  });
+
   // Featured: an album's centerpiece, at most one per folder. Featuring a
   // second photo answers 409 with the current one unless `replace` is set.
   app.post('/api/curation/photos/:photoId/featured', async (request, reply) => {
@@ -212,6 +250,7 @@ export async function registerCurationRoutes(
         body.data.featured,
         body.data.replace ?? false,
         body.data.frame,
+        body.data.mat,
       );
     } catch (err) {
       return sendMoveError(reply, err);
@@ -314,6 +353,7 @@ function toAlbumResponse(settings: AlbumSettings): AlbumCurationResponse {
     onDisplay: settings.onDisplay,
     defaultView: settings.defaultView,
     defaultStarred: settings.defaultStarred,
+    display: settings.display,
   };
 }
 

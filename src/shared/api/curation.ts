@@ -72,6 +72,8 @@ export interface CurationSessionResponse {
   vipPinSet: boolean;
   /** The server may move photos inside the library (hide/restore). */
   libraryWrites: boolean;
+  /** The curator's defaults for the wall and photo view; viewers may override them. */
+  display: WallDisplaySettings;
 }
 
 export interface CurationLoginRequest {
@@ -89,6 +91,8 @@ export interface AlbumCurationResponse {
   defaultView: string[];
   /** The Starred album is part of the default view. */
   defaultStarred: boolean;
+  /** Default wall spacing and photo-view frames. */
+  display: WallDisplaySettings;
 }
 
 export interface AlbumDisplayUpdateRequest {
@@ -112,10 +116,10 @@ export interface PhotoPrivateRequest {
 }
 
 /**
- * Frames a featured photo can hang in on the wall: modern ones first, then
- * museum classics. The client draws them.
+ * Frames a photo can hang in, on a framed wall, in the photo view and when
+ * featured: modern ones first, then museum classics. The client draws them.
  */
-export const FEATURED_FRAMES = [
+export const FRAME_STYLES = [
   'gallery-black',
   'white-gallery',
   'natural-oak',
@@ -125,13 +129,50 @@ export const FEATURED_FRAMES = [
   'gilded',
   'baroque',
 ] as const;
-export type FeaturedFrame = (typeof FEATURED_FRAMES)[number];
+export type FrameStyle = (typeof FRAME_STYLES)[number];
 /** A frame, or `random`: a different frame on every page load. */
-export type FeaturedFrameChoice = FeaturedFrame | 'random';
-export const FEATURED_FRAME_CHOICES: readonly FeaturedFrameChoice[] = [
+export type FrameChoice = FrameStyle | 'random';
+export const FRAME_CHOICES: readonly FrameChoice[] = [
   'random',
-  ...FEATURED_FRAMES,
+  ...FRAME_STYLES,
 ];
+
+/** Mats inside a frame; `frame` keeps the frame style's own mat. */
+export const FRAME_MATS = ['frame', 'none', 'white', 'cream', 'grey', 'black', 'linen', 'velvet'] as const;
+export type FrameMat = (typeof FRAME_MATS)[number];
+
+/** How a photo is framed on a framed wall, in the photo view, and when featured. */
+export interface PhotoFrame {
+  frame: FrameChoice;
+  mat: FrameMat;
+}
+
+/**
+ * How the wall is hung: photos edge to edge, spaced apart, or spaced
+ * apart in frames.
+ */
+export const WALL_SPACINGS = ['none', 'spaced', 'framed'] as const;
+export type WallSpacing = (typeof WALL_SPACINGS)[number];
+
+/** The curator's defaults for how the wall and photo view look. */
+export interface WallDisplaySettings {
+  spacing: WallSpacing;
+  /** The photo view shows each photo in its frame. */
+  lightboxFrames: boolean;
+}
+
+export const DEFAULT_WALL_DISPLAY: WallDisplaySettings = { spacing: 'none', lightboxFrames: false };
+
+export const CURATION_DISPLAY_PATH = '/api/curation/display';
+
+export function curationPhotoFramePath(photoId: string): string {
+  return `/api/curation/photos/${encodeURIComponent(photoId)}/frame`;
+}
+
+export interface PhotoFrameRequest {
+  frame: FrameChoice;
+  mat: FrameMat;
+}
 
 export interface PhotoFeaturedRequest {
   featured: boolean;
@@ -141,7 +182,9 @@ export interface PhotoFeaturedRequest {
    * Its frame; featuring without one keeps the current frame, or uses
    * `random` for a newly featured photo.
    */
-  frame?: FeaturedFrameChoice;
+  frame?: FrameChoice;
+  /** Its mat; kept when left out. */
+  mat?: FrameMat;
 }
 
 /**
@@ -182,7 +225,9 @@ export type CurationErrorCode =
   | 'edit_invalid'
   | 'share_invalid'
   | 'share_not_found'
-  | 'featured_exists';
+  | 'featured_exists'
+  | 'frame_invalid'
+  | 'display_invalid';
 
 export interface CurationErrorResponse {
   error: CurationErrorCode;

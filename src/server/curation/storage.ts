@@ -4,9 +4,12 @@ import { randomBytes, randomUUID, scrypt as scryptCallback, timingSafeEqual } fr
 import { promisify } from 'node:util';
 import { z } from 'zod';
 import {
-  FEATURED_FRAME_CHOICES,
+  FRAME_CHOICES,
+  FRAME_MATS,
   FOLDER_PATH_PATTERN,
-  type FeaturedFrameChoice,
+  WALL_SPACINGS,
+  type FrameChoice,
+  type PhotoFrame,
 } from '../../shared/api/curation.js';
 
 /**
@@ -21,7 +24,7 @@ import {
  *   starred.json     starred photos (Favorites)
  *   private.json     photos guests never see
  *   featured.json    each album's featured photo (at most one per folder)
- *   featured-frames.json  the frame each featured photo hangs in
+ *   frames.json      the frame and mat the curator picked for a photo
  *   shares/<id>.json share links
  *   session-secret   signs curator sessions
  *   curator-pin      the PIN chosen on /curate, hashed (delete it to choose again)
@@ -40,6 +43,12 @@ export const AlbumSettingsSchema = z.object({
   onDisplay: z.array(FolderPathSchema),
   defaultView: z.array(FolderPathSchema),
   defaultStarred: z.boolean().default(false),
+  display: z
+    .object({
+      spacing: z.enum(WALL_SPACINGS).default('none'),
+      lightboxFrames: z.boolean().default(false),
+    })
+    .default({ spacing: 'none', lightboxFrames: false }),
 });
 
 export type AlbumSettings = z.infer<typeof AlbumSettingsSchema>;
@@ -49,6 +58,7 @@ export const EMPTY_ALBUM_SETTINGS: AlbumSettings = {
   onDisplay: [],
   defaultView: [],
   defaultStarred: false,
+  display: { spacing: 'none', lightboxFrames: false },
 };
 
 export interface CurationPaths {
@@ -62,8 +72,10 @@ export interface CurationPaths {
   privateFile: string;
   /** Paths of each album's featured photo, at most one per folder. */
   featuredFile: string;
-  /** The frame each featured photo hangs in, by path. */
-  featuredFramesFile: string;
+  /** The frame and mat picked for a photo, by path. */
+  framesFile: string;
+  /** Featured photos' frames before frames.json; read once to carry them over. */
+  legacyFeaturedFramesFile: string;
   editsLog: string;
   sharesDir: string;
   secretFile: string;
@@ -101,7 +113,8 @@ export async function ensureCurationPaths(root: string): Promise<CurationPaths> 
     starsFile: path.join(real, 'starred.json'),
     privateFile: path.join(real, 'private.json'),
     featuredFile: path.join(real, 'featured.json'),
-    featuredFramesFile: path.join(real, 'featured-frames.json'),
+    framesFile: path.join(real, 'frames.json'),
+    legacyFeaturedFramesFile: path.join(real, 'featured-frames.json'),
     editsLog: path.join(real, 'edits.log'),
     sharesDir: path.join(real, 'shares'),
     secretFile: path.join(real, 'session-secret'),
@@ -299,32 +312,43 @@ export async function writePhotoFlag(
   await writeFileAtomically(photoFlagFile(paths, flag), `${JSON.stringify(body, null, 2)}\n`);
 }
 
-const FeaturedFramesFileSchema = z.object({
+const FrameChoiceSchema = z.enum(FRAME_CHOICES as [FrameChoice, ...FrameChoice[]]);
+const FramesFileSchema = z.object({
   schemaVersion: z.literal(CURATION_SCHEMA_VERSION),
-  frames: z.record(z.string(), z.enum(FEATURED_FRAME_CHOICES as [FeaturedFrameChoice, ...FeaturedFrameChoice[]])),
+  frames: z.record(z.string(), z.object({ frame: FrameChoiceSchema, mat: z.enum(FRAME_MATS) })),
+});
+const LegacyFeaturedFramesSchema = z.object({
+  schemaVersion: z.literal(CURATION_SCHEMA_VERSION),
+  frames: z.record(z.string(), FrameChoiceSchema),
 });
 
-/** Each featured photo's frame, by root-relative path. */
-export async function readFeaturedFrames(
-  paths: CurationPaths,
-): Promise<Map<string, FeaturedFrameChoice>> {
-  const parsed = await readJsonFile(paths.featuredFramesFile);
-  if (parsed === null) return new Map();
-  const result = FeaturedFramesFileSchema.safeParse(parsed);
-  if (!result.success) {
-    throw new CurationRootError(
-      `featured-frames.json is not valid: ${result.error.message}`,
-      paths.featuredFramesFile,
+/**
+ * The frame and mat picked for each photo, by root-relative path. Before
+ * frames.json, only featured photos had a frame (featured-frames.json);
+ * those carry over until frames.json is first written.
+ */
+export async function readPhotoFrames(paths: CurationPaths): Promise<Map<string, PhotoFrame>> {
+  const parsed = await readJsonFile(paths.framesFile);
+  if (parsed === null) {
+    const legacy = await readJsonFile(paths.legacyFeaturedFramesFile);
+    const result = legacy === null ? null : LegacyFeaturedFramesSchema.safeParse(legacy);
+    if (!result?.success) return new Map();
+    return new Map(
+      Object.entries(result.data.frames).map(([key, frame]) => [key, { frame, mat: 'frame' as const }]),
     );
+  }
+  const result = FramesFileSchema.safeParse(parsed);
+  if (!result.success) {
+    throw new CurationRootError(`frames.json is not valid: ${result.error.message}`, paths.framesFile);
   }
   return new Map(Object.entries(result.data.frames));
 }
 
-export async function writeFeaturedFrames(
+export async function writePhotoFrames(
   paths: CurationPaths,
-  frames: ReadonlyMap<string, FeaturedFrameChoice>,
+  frames: ReadonlyMap<string, PhotoFrame>,
 ): Promise<void> {
   const sorted = Object.fromEntries([...frames].sort(([a], [b]) => a.localeCompare(b)));
   const body = { schemaVersion: CURATION_SCHEMA_VERSION, frames: sorted };
-  await writeFileAtomically(paths.featuredFramesFile, `${JSON.stringify(body, null, 2)}\n`);
+  await writeFileAtomically(paths.framesFile, `${JSON.stringify(body, null, 2)}\n`);
 }

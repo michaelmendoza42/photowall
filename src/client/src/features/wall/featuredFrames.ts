@@ -5,13 +5,16 @@
 // faces of a moulding are lit and the bottom and right ones shaded.
 
 import {
-  FEATURED_FRAMES,
-  type FeaturedFrame,
-  type FeaturedFrameChoice,
+  FRAME_STYLES,
+  type FrameMat,
+  type PhotoFrame,
+  type FrameStyle,
+  type FrameChoice,
 } from '../../../../shared/api/curation.js';
 import { featuredPhotoRect, FEATURED_FRAME_BAND_RATIO, type Rect } from './featuredGeometry.js';
+import { galleryFrameGeometry } from './wallSpacing.js';
 
-export const FEATURED_FRAME_LABELS: Record<FeaturedFrameChoice, string> = {
+export const FRAME_LABELS: Record<FrameChoice, string> = {
   random: 'Random',
   'gallery-black': 'Gallery black',
   'white-gallery': 'White gallery',
@@ -28,16 +31,24 @@ const LOAD_SEED = Math.floor(Math.random() * 0x7fffffff);
 
 /** The frame a featured photo shows in: `random` picks one per page load. */
 export function resolveFeaturedFrame(
-  choice: FeaturedFrameChoice | undefined,
+  choice: FrameChoice | undefined,
   photoId: string,
-): FeaturedFrame {
+): FrameStyle {
   if (choice && choice !== 'random') return choice;
-  return FEATURED_FRAMES[hash(`${LOAD_SEED}:${photoId}`) % FEATURED_FRAMES.length]!;
+  return FRAME_STYLES[hash(`${LOAD_SEED}:${photoId}`) % FRAME_STYLES.length]!;
+}
+
+/** The frame and mat a photo shows in: its curator's pick, or a random frame. */
+export function resolvePhotoFrame(photo: { id: string; frame?: PhotoFrame }): {
+  style: FrameStyle;
+  mat: FrameMat;
+} {
+  return { style: resolveFeaturedFrame(photo.frame?.frame, photo.id), mat: photo.frame?.mat ?? 'frame' };
 }
 
 type Side = 'top' | 'right' | 'bottom' | 'left';
 
-interface FrameStyle {
+interface FrameLook {
   /** Share of the frame band the moulding takes; the mat or liner takes the rest. */
   moulding: number;
   /** Colors across the moulding from its outer edge to its inner edge. */
@@ -55,7 +66,7 @@ interface FrameStyle {
   floating?: boolean;
 }
 
-const STYLES: Record<FeaturedFrame, FrameStyle> = {
+const STYLES: Record<FrameStyle, FrameLook> = {
   'gallery-black': {
     moulding: 0.34,
     profile: ['#2b2b2b', '#151515', '#111111', '#1c1c1c', '#3a3a3a'],
@@ -118,6 +129,7 @@ const MAX_CANVAS_EDGE = 2400;
 const CACHE_LIMIT = 24;
 const canvasCache = new Map<string, HTMLCanvasElement>();
 const dataUrlCache = new Map<string, string>();
+const canvasUrls = new WeakMap<HTMLCanvasElement, string>();
 
 /**
  * A frame for a `width`×`height` hero tile (any units) holding a photo of
@@ -125,7 +137,7 @@ const dataUrlCache = new Map<string, string>();
  * the photo itself. Cached by shape.
  */
 export function featuredFrameCanvas(
-  frame: FeaturedFrame,
+  frame: FrameStyle,
   width: number,
   height: number,
   photo: { width: number; height: number },
@@ -148,9 +160,219 @@ export function featuredFrameCanvas(
   return canvas;
 }
 
+export const MAT_LABELS: Record<FrameMat, string> = {
+  frame: 'Frame’s own',
+  none: 'No mat',
+  white: 'White',
+  cream: 'Cream',
+  grey: 'Grey',
+  black: 'Black',
+  linen: 'Linen',
+  velvet: 'Velvet',
+};
+const MAT_OVERRIDES: Record<Exclude<FrameMat, 'frame'>, FrameLook['mat']> = {
+  none: { color: '#111111', texture: 'none' },
+  white: { color: '#f5f2eb', texture: 'paper', bevel: '#fffdf8' },
+  cream: { color: '#ece3cf', texture: 'paper', bevel: '#f8f2e4' },
+  grey: { color: '#bebbb5', texture: 'paper', bevel: '#dcd9d3' },
+  black: { color: '#1e1e1e', texture: 'paper', bevel: '#f2f2f2' },
+  linen: { color: '#d8ccb1', texture: 'linen' },
+  velvet: { color: '#4b1717', texture: 'velvet' },
+};
+
+/** Moulding width of each frame as a share of the photo's shorter side, in a gallery wall. */
+export function galleryMouldingRatio(frame: FrameStyle): number {
+  return 0.09 * (0.5 + STYLES[frame].moulding);
+}
+
+/** Whether a frame with `mat` leaves a mat between moulding and photo. */
+export function galleryHasMat(mat: FrameMat): boolean {
+  return mat !== 'none';
+}
+
+/**
+ * A gallery-wall frame: `width`×`height`, a moulding `mouldingWidth`
+ * wide, and `mat` from the moulding in to `photo` (where the photo goes,
+ * uncropped). Cached by shape.
+ */
+export function galleryFrameCanvas(
+  frame: FrameStyle,
+  mat: FrameMat,
+  width: number,
+  height: number,
+  mouldingWidth: number,
+  photo: Rect,
+  maxEdge = 900,
+): HTMLCanvasElement {
+  const factor = Math.min(2, maxEdge / Math.max(width, height, 1));
+  const pixelWidth = Math.max(8, Math.round(width * factor));
+  const pixelHeight = Math.max(8, Math.round(height * factor));
+  const key = [
+    'gallery', frame, mat, pixelWidth, pixelHeight,
+    ...[mouldingWidth, photo.x, photo.y, photo.width, photo.height].map((v) => Math.round(v * factor)),
+  ].join(':');
+  const cached = canvasCache.get(key);
+  if (cached) return cached;
+  const canvas = document.createElement('canvas');
+  canvas.width = pixelWidth;
+  canvas.height = pixelHeight;
+  const context = canvas.getContext('2d');
+  if (context) {
+    const style = mat === 'frame' ? STYLES[frame] : { ...STYLES[frame], mat: MAT_OVERRIDES[mat], floating: undefined };
+    const scaled = (r: Rect): Rect => ({ x: r.x * factor, y: r.y * factor, width: r.width * factor, height: r.height * factor });
+    drawFrameAround(context, style, pixelWidth, pixelHeight, mouldingWidth * factor, scaled(photo), hash(`${frame}:${mat}`));
+  }
+  if (canvasCache.size >= CACHE_LIMIT * 8) canvasCache.delete(canvasCache.keys().next().value!);
+  canvasCache.set(key, canvas);
+  return canvas;
+}
+
+/**
+ * Where the photo sits in a framed tile and how wide the moulding is, for
+ * a featured photo's hero frame or a framed wall's frame.
+ */
+export function tileFrameGeometry(
+  tile: Rect,
+  photo: { width: number; height: number },
+  frame: { style: FrameStyle; mat: FrameMat; kind: 'hero' | 'gallery' },
+): { photo: Rect; moulding: number } {
+  if (frame.kind === 'gallery') {
+    return galleryFrameGeometry(tile, photo, galleryMouldingRatio(frame.style), frame.mat);
+  }
+  const band = FEATURED_FRAME_BAND_RATIO * Math.min(tile.width, tile.height);
+  const moulding = band * STYLES[frame.style].moulding;
+  if (frame.mat !== 'none') return { photo: featuredPhotoRect(tile, photo), moulding };
+  // No mat: the photo fills the frame's opening.
+  const opening = {
+    x: tile.x + moulding,
+    y: tile.y + moulding,
+    width: tile.width - 2 * moulding,
+    height: tile.height - 2 * moulding,
+  };
+  const aspect = photo.width > 0 && photo.height > 0 ? photo.width / photo.height : 1;
+  const width = Math.min(opening.width, opening.height * aspect);
+  const height = width / aspect;
+  return {
+    photo: { x: tile.x + (tile.width - width) / 2, y: tile.y + (tile.height - height) / 2, width, height },
+    moulding,
+  };
+}
+
+/** Moulding width, in px, of the slice canvases below. */
+const SLICE_MOULDING_PX = 96;
+/** The strip of mat beside the moulding that holds its shadow. */
+const SLICE_SHADOW_PX = 24;
+const SLICE_SIZE_PX = 2 * (SLICE_MOULDING_PX + SLICE_SHADOW_PX) + 16;
+const sliceCache = new Map<string, HTMLCanvasElement>();
+
+/**
+ * A frame drawn once for nine-slice scaling: corners and edges are the
+ * moulding plus the strip of mat its shadow falls on, `border` px wide;
+ * the middle is plain mat, stretched under the photo. `moulding` is the
+ * moulding's own width in px.
+ */
+export function gallerySliceCanvas(
+  style: FrameStyle,
+  mat: FrameMat,
+): { canvas: HTMLCanvasElement; border: number; moulding: number } {
+  const key = `${style}:${mat}`;
+  let canvas = sliceCache.get(key);
+  if (!canvas) {
+    canvas = document.createElement('canvas');
+    canvas.width = SLICE_SIZE_PX;
+    canvas.height = SLICE_SIZE_PX;
+    const context = canvas.getContext('2d');
+    if (context) {
+      const look: FrameLook = {
+        ...STYLES[style],
+        ...(mat === 'frame' ? {} : { mat: MAT_OVERRIDES[mat] }),
+        floating: undefined,
+      };
+      // The photo covers the whole opening here; the wall draws it on top.
+      const opening = {
+        x: SLICE_MOULDING_PX,
+        y: SLICE_MOULDING_PX,
+        width: SLICE_SIZE_PX - 2 * SLICE_MOULDING_PX,
+        height: SLICE_SIZE_PX - 2 * SLICE_MOULDING_PX,
+      };
+      drawFrameAround(context, look, SLICE_SIZE_PX, SLICE_SIZE_PX, SLICE_MOULDING_PX, opening, hash(key));
+      // The middle stretches under the photo: plain mat, so no texture
+      // smears into stripes.
+      const border = SLICE_MOULDING_PX + SLICE_SHADOW_PX;
+      context.fillStyle = look.mat.color;
+      context.fillRect(border, border, SLICE_SIZE_PX - 2 * border, SLICE_SIZE_PX - 2 * border);
+    }
+    sliceCache.set(key, canvas);
+  }
+  return { canvas, border: SLICE_MOULDING_PX + SLICE_SHADOW_PX, moulding: SLICE_MOULDING_PX };
+}
+
+/**
+ * How far each frame stands off the wall, relative to a plain frame: deep
+ * mouldings and shadow boxes cast longer shadows than thin modern frames.
+ */
+const FRAME_DEPTH: Record<FrameStyle, number> = {
+  'gallery-black': 0.9,
+  'white-gallery': 0.9,
+  'natural-oak': 1,
+  walnut: 1.15,
+  'shadow-box': 1.6,
+  'brushed-silver': 0.85,
+  gilded: 1.4,
+  baroque: 1.75,
+};
+
+export function frameDepth(style: FrameStyle): number {
+  return FRAME_DEPTH[style];
+}
+
+let shadowCanvas: HTMLCanvasElement | null = null;
+/** How far, in px, the shadow canvas's shadow fades out beyond its core. */
+export const SHADOW_SLICE_BLUR_PX = 36;
+/** Nine-slice border of the shadow canvas: the fade plus a little core. */
+export const SHADOW_SLICE_BORDER_PX = 48;
+
+/**
+ * A soft rectangular shadow for nine-slice scaling under hung photos and
+ * frames: a solid core inset SHADOW_SLICE_BLUR_PX, fading out to the edge.
+ */
+export function shadowSliceCanvas(): HTMLCanvasElement {
+  if (shadowCanvas) return shadowCanvas;
+  const size = SHADOW_SLICE_BORDER_PX * 2 + 16;
+  shadowCanvas = document.createElement('canvas');
+  shadowCanvas.width = size;
+  shadowCanvas.height = size;
+  const context = shadowCanvas.getContext('2d');
+  if (context) {
+    const inset = SHADOW_SLICE_BLUR_PX;
+    // White: each shadow layer sets its own color (tint) and strength (alpha).
+    context.filter = `blur(${SHADOW_SLICE_BLUR_PX / 3}px)`;
+    context.fillStyle = '#ffffff';
+    context.fillRect(inset * 0.6, inset * 0.6, size - 1.2 * inset, size - 1.2 * inset);
+  }
+  return shadowCanvas;
+}
+
+/** A framed tile's frame as a data URL for DOM previews (hover pop, photo view). */
+export function galleryFrameDataUrl(
+  frame: { style: FrameStyle; mat: FrameMat },
+  width: number,
+  height: number,
+  geometry: { photo: Rect; moulding: number },
+  maxEdge = 1600,
+): string {
+  const canvas = galleryFrameCanvas(frame.style, frame.mat, width, height, geometry.moulding, geometry.photo, maxEdge);
+  let url = canvasUrls.get(canvas);
+  if (!url) {
+    url = canvas.toDataURL('image/png');
+    canvasUrls.set(canvas, url);
+  }
+  return url;
+}
+
 /** The same frame as a data URL, for DOM previews. */
 export function featuredFrameDataUrl(
-  frame: FeaturedFrame,
+  frame: FrameStyle,
   width: number,
   height: number,
   photo: { width: number; height: number },
@@ -169,7 +391,7 @@ export function featuredFrameDataUrl(
 
 function drawFrame(
   context: CanvasRenderingContext2D,
-  style: FrameStyle,
+  style: FrameLook,
   width: number,
   height: number,
   photoShape: { width: number; height: number },
@@ -177,8 +399,20 @@ function drawFrame(
 ): void {
   const tile = { x: 0, y: 0, width, height };
   const band = FEATURED_FRAME_BAND_RATIO * Math.min(width, height);
-  const mouldingWidth = band * style.moulding;
-  const photo = featuredPhotoRect(tile, photoShape);
+  drawFrameAround(context, style, width, height, band * style.moulding, featuredPhotoRect(tile, photoShape), seed);
+}
+
+/** A frame `width`×`height` with a moulding `mouldingWidth` wide, matted to `photo`. */
+function drawFrameAround(
+  context: CanvasRenderingContext2D,
+  style: FrameLook,
+  width: number,
+  height: number,
+  mouldingWidth: number,
+  photo: Rect,
+  seed: number,
+): void {
+  const tile = { x: 0, y: 0, width, height };
   const opening: Rect = {
     x: mouldingWidth,
     y: mouldingWidth,
@@ -215,7 +449,7 @@ function drawFrame(
 
 function drawMat(
   context: CanvasRenderingContext2D,
-  style: FrameStyle,
+  style: FrameLook,
   opening: Rect,
   photo: Rect,
   random: () => number,
@@ -346,7 +580,7 @@ const SIDE_LIGHT: Record<Side, number> = { top: 0.9, left: 0.55, right: -0.55, b
 
 function drawMoulding(
   context: CanvasRenderingContext2D,
-  style: FrameStyle,
+  style: FrameLook,
   side: Side,
   tile: Rect,
   depth: number,
@@ -479,7 +713,7 @@ function drawMoulding(
 }
 
 /** Carved rosettes over the mitred corners of the ornate frames. */
-function drawCorners(context: CanvasRenderingContext2D, style: FrameStyle, tile: Rect, depth: number): void {
+function drawCorners(context: CanvasRenderingContext2D, style: FrameLook, tile: Rect, depth: number): void {
   const radius = depth * 0.48;
   for (const [cx, cy] of [
     [depth / 2, depth / 2],

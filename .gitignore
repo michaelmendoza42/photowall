@@ -6,7 +6,7 @@ scratch/*
 !scratch/README.md
 
 # Node / build artifacts
-node_modules/
+node_modules
 dist/
 .vite/
 *.tsbuildinfo

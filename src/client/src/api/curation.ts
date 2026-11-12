@@ -14,7 +14,11 @@ import {
   curationPhotoStarPath,
   shareResourcePath,
   type AlbumCurationResponse,
-  type FeaturedFrameChoice,
+  type FrameChoice,
+  type FrameMat,
+  type WallDisplaySettings,
+  CURATION_DISPLAY_PATH,
+  curationPhotoFramePath,
   type CurationSessionResponse,
   type PhotoEditResponse,
   type PhotoMoveResponse,
@@ -93,12 +97,29 @@ export function setPhotoFeatured(
   photoId: string,
   featured: boolean,
   replace = false,
-  frame?: FeaturedFrameChoice,
+  frame?: FrameChoice,
+  mat?: FrameMat,
 ): Promise<{ photo: PhotoQueryRecord }> {
   return fetchJson(curationPhotoFeaturedPath(photoId), {
     method: 'POST',
-    body: { featured, replace, ...(frame ? { frame } : {}) },
+    body: { featured, replace, ...(frame ? { frame } : {}), ...(mat ? { mat } : {}) },
   });
+}
+
+/** Pick a photo's frame and mat; random with the frame's own mat clears the pick. */
+export function setPhotoFrame(
+  photoId: string,
+  frame: FrameChoice,
+  mat: FrameMat,
+): Promise<{ photo: PhotoQueryRecord }> {
+  return fetchJson(curationPhotoFramePath(photoId), { method: 'POST', body: { frame, mat } });
+}
+
+/** The curator's defaults for wall spacing and photo-view frames. */
+export function setDisplayDefaults(
+  display: Partial<WallDisplaySettings>,
+): Promise<AlbumCurationResponse> {
+  return fetchJson(CURATION_DISPLAY_PATH, { method: 'PUT', body: display });
 }
 
 export function hidePhoto(photoId: string): Promise<PhotoMoveResponse> {

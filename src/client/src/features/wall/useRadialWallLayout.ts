@@ -7,12 +7,14 @@ import {
   tileNearestViewportCenter,
 } from './focusNavigation.js';
 import type { GroupedWallFoundation } from './groupedWall.js';
-import type { FeaturedFrame } from '../../../../shared/api/curation.js';
+import type { FrameMat, FrameStyle, WallSpacing } from '../../../../shared/api/curation.js';
 import { FEATURED_VIEWPORT_SHARE } from './featuredGeometry.js';
-import { resolveFeaturedFrame } from './featuredFrames.js';
+import { resolvePhotoFrame } from './featuredFrames.js';
+import { framedCellAspect, insetByGap, WALL_GAP_RATIO } from './wallSpacing.js';
 import {
   buildRadialWallLayout,
   groupPhotosByDirectory,
+  radialMeanColumnWidth,
   type RadialWallGroup,
   type RadialWallLayout,
 } from './radialWall.js';
@@ -43,8 +45,17 @@ export function useRadialWallLayout(input: {
   featuredPhotoIds?: ReadonlySet<string>;
   /** The wall's on-screen size; hero tiles fill 90% of it at the default zoom. */
   viewport?: { width: number; height: number };
-}): RadialWallLayout {
-  const { photos, groupedFoundation = null, referenceWidth, featuredPhotoIds, viewport } = input;
+  /** Edge to edge, spaced apart, or spaced apart in frames. */
+  spacing?: WallSpacing;
+}): WallLayout {
+  const {
+    photos,
+    groupedFoundation = null,
+    referenceWidth,
+    featuredPhotoIds,
+    viewport,
+    spacing = 'none',
+  } = input;
   // Rounded so small window resizes don't re-lay out the whole wall.
   const boxWidth = roundBox((viewport?.width ?? 0) * FEATURED_VIEWPORT_SHARE);
   const boxHeight = roundBox((viewport?.height ?? 0) * FEATURED_VIEWPORT_SHARE);
@@ -55,46 +66,138 @@ export function useRadialWallLayout(input: {
   // Until the wall knows its size, lay out nothing: a layout without its
   // hero tiles would open the wall on the wrong center.
   const sizeUnknown = viewport !== undefined && (viewport.width <= 0 || viewport.height <= 0);
-  return useMemo(() => {
-    if (sizeUnknown) return buildRadialWallLayout({ groups: [], referenceWidth: 0, maxRowHeight: 0, columnWidthFactors: [] });
-    const groups: RadialWallGroup[] =
-      groupedFoundation?.mode === 'grouped'
-        ? groupedFoundation.albums.map((album) => ({
-            key: album.area.albumKey,
-            photos: album.photos,
-          }))
-        : groupPhotosByDirectory(photos);
-    return buildRadialWallLayout({
-      groups: featuredPhotoIds ? withFeatured(groups, featuredPhotoIds) : groups,
-      referenceWidth: roundedWidth,
-      maxRowHeight: DEFAULT_MAX_ROW_HEIGHT,
-      columnWidthFactors: DEFAULT_MOSAIC_COLUMN_FACTORS,
-      ...(boxWidth > 0 && boxHeight > 0
-        ? { featuredBox: { width: boxWidth, height: boxHeight } }
-        : {}),
-    });
-  }, [photos, groupedFoundation, roundedWidth, featuredPhotoIds, boxWidth, boxHeight, sizeUnknown]);
+  return useMemo(
+    () =>
+      buildWallLayout({
+        photos,
+        groupedFoundation,
+        referenceWidth: roundedWidth,
+        featuredPhotoIds,
+        featuredBox: sizeUnknown ? null : { width: boxWidth, height: boxHeight },
+        spacing,
+      }),
+    [photos, groupedFoundation, roundedWidth, featuredPhotoIds, boxWidth, boxHeight, sizeUnknown, spacing],
+  );
+}
+
+/**
+ * The wall's layout for a spacing (see useRadialWallLayout). A null
+ * `featuredBox` means the wall's size isn't known yet: nothing is laid out.
+ */
+export function buildWallLayout(input: {
+  photos: readonly PhotoQueryRecord[];
+  groupedFoundation?: GroupedWallFoundation | null;
+  referenceWidth: number;
+  featuredPhotoIds?: ReadonlySet<string>;
+  featuredBox: { width: number; height: number } | null;
+  spacing: WallSpacing;
+}): WallLayout {
+  const { photos, groupedFoundation = null, featuredPhotoIds, featuredBox, spacing } = input;
+  const boxWidth = featuredBox?.width ?? 0;
+  const boxHeight = featuredBox?.height ?? 0;
+  if (featuredBox === null) {
+    return {
+      ...buildRadialWallLayout({ groups: [], referenceWidth: 0, maxRowHeight: 0, columnWidthFactors: [] }),
+      gap: 0,
+      spacing,
+    };
+  }
+  const groups: RadialWallGroup[] =
+    groupedFoundation?.mode === 'grouped'
+      ? groupedFoundation.albums.map((album) => ({
+          key: album.area.albumKey,
+          photos: album.photos,
+        }))
+      : groupPhotosByDirectory(photos);
+  const options = {
+    referenceWidth: input.referenceWidth,
+    maxRowHeight: DEFAULT_MAX_ROW_HEIGHT,
+    columnWidthFactors: DEFAULT_MOSAIC_COLUMN_FACTORS,
+  };
+  const gap = radialMeanColumnWidth(options) * WALL_GAP_RATIO[spacing];
+  const featured = featuredPhotoIds ? withFeatured(groups, featuredPhotoIds) : groups;
+  const layout = buildRadialWallLayout({
+    ...options,
+    groups: spacing === 'framed' ? framedGroups(featured, radialMeanColumnWidth(options), gap) : featured,
+    raggedEdge: spacing === 'none',
+    ...(boxWidth > 0 && boxHeight > 0
+      ? { featuredBox: { width: boxWidth, height: boxHeight } }
+      : {}),
+  });
+  if (gap <= 0) return { ...layout, gap, spacing };
+  // Each tile sits half a gap in from its cell, with its photo's real size.
+  const byId = new Map(photos.map((photo) => [photo.id, photo]));
+  return {
+    ...layout,
+    rows: layout.rows.map((row) => ({
+      ...row,
+      tiles: row.tiles.map((tile) => {
+        const photo = byId.get(tile.photoId);
+        return insetByGap(
+          photo ? { ...tile, sourceWidth: photo.width, sourceHeight: photo.height } : tile,
+          gap,
+        );
+      }),
+    })),
+    gap,
+    spacing,
+  };
+}
+
+/** A wall layout, with the gap its tiles were drawn in from their cells. */
+export type WallLayout = RadialWallLayout & { gap: number; spacing: WallSpacing };
+
+/**
+ * Groups whose photos are shaped as framed cells for packing. Featured
+ * photos keep their own shape: their hero tile is sized to the screen.
+ */
+function framedGroups(
+  groups: readonly RadialWallGroup[],
+  columnWidth: number,
+  gap: number,
+): RadialWallGroup[] {
+  return groups.map((group) => ({
+    ...group,
+    photos: group.photos.map((photo) => {
+      if (photo === group.featured) return photo;
+      const aspect = framedCellAspect(photo, columnWidth, gap);
+      return { ...photo, width: Math.round(aspect * 10000), height: 10000, aspectRatio: aspect };
+    }),
+  }));
 }
 
 function roundBox(size: number): number {
   return Math.floor(size / FEATURED_BOX_STEP_PX) * FEATURED_BOX_STEP_PX;
 }
 
+/** How a tile is framed: a featured photo's hero frame, or a framed wall's. */
+export interface TileFrame {
+  style: FrameStyle;
+  mat: FrameMat;
+  kind: 'hero' | 'gallery';
+}
+
 /**
- * The frame each hero tile hangs in, by photo id. `random` frames are
- * picked once per page load.
+ * The frame each framed tile hangs in, by photo id: featured photos'
+ * hero tiles always, and on a framed wall every other photo too. Unpicked
+ * frames are random, picked once per page load.
  */
-export function useFeaturedFrames(
-  layout: RadialWallLayout,
+export function useTileFrames(
+  layout: WallLayout,
+  photos: readonly PhotoQueryRecord[],
   photosById: ReadonlyMap<string, PhotoQueryRecord>,
-): ReadonlyMap<string, FeaturedFrame> {
+): ReadonlyMap<string, TileFrame> {
   return useMemo(() => {
-    const frames = new Map<string, FeaturedFrame>();
+    const frames = new Map<string, TileFrame>();
+    if (layout.spacing === 'framed') {
+      for (const photo of photos) frames.set(photo.id, { ...resolvePhotoFrame(photo), kind: 'gallery' });
+    }
     for (const id of layout.featuredPhotoIds) {
-      frames.set(id, resolveFeaturedFrame(photosById.get(id)?.featuredFrame, id));
+      const photo = photosById.get(id);
+      if (photo) frames.set(id, { ...resolvePhotoFrame(photo), kind: 'hero' });
     }
     return frames;
-  }, [layout.featuredPhotoIds, photosById]);
+  }, [layout.spacing, layout.featuredPhotoIds, photos, photosById]);
 }
 
 /**

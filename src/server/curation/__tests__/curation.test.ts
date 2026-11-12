@@ -14,6 +14,8 @@ import {
   VIEW_AS_GUEST,
   VIEW_AS_HEADER,
   curationPhotoFeaturedPath,
+  curationPhotoFramePath,
+  CURATION_DISPLAY_PATH,
   curationPhotoHidePath,
   curationPhotoRestorePath,
   curationPhotoPrivatePath,
@@ -236,7 +238,14 @@ describe('curation routes', () => {
     await start({ pin: null, libraryWrites: true });
 
     const session = await app.inject({ method: 'GET', url: CURATION_SESSION_PATH });
-    expect(session.json()).toEqual({ enabled: false, curator: false, vip: false, vipPinSet: false, libraryWrites: false });
+    expect(session.json()).toEqual({
+      enabled: false,
+      curator: false,
+      vip: false,
+      vipPinSet: false,
+      libraryWrites: false,
+      display: { spacing: 'none', lightboxFrames: false },
+    });
     expect((await photos()).totalMatching).toBe(4);
     // Even asked for directly, viewers never get hidden photos.
     expect((await photos(undefined, `folder=${WEDDING}/_hidden`)).totalMatching).toBe(0);
@@ -633,36 +642,83 @@ describe('curation routes', () => {
     expect(stored.photos).toEqual([other.relativePath]);
   });
 
-  it('keeps the frame each featured photo hangs in', async () => {
+  it('keeps the frame and mat the curator picks for any photo, featured or not', async () => {
     await start({ pin: PIN, libraryWrites: true });
     const cookie = await login();
     await curatorPut(cookie, CURATION_ALBUM_DISPLAY_PATH, { folder: '', onDisplay: true });
-    const [first, second] = (await photos(cookie, `folder=${WEDDING}`)).photos;
-    const feature = (id: string, payload: object) =>
-      app.inject({ method: 'POST', url: curationPhotoFeaturedPath(id), payload, headers: { cookie } });
+    const [first, second, third] = (await photos(cookie, `folder=${WEDDING}`)).photos;
+    const post = (url: string, payload: object, withCookie = cookie) =>
+      app.inject({ method: 'POST', url, payload, headers: withCookie ? { cookie: withCookie } : {} });
+    const framesFile = path.join(dataRoot, 'curation', 'frames.json');
 
-    // Random unless chosen; guests get the frame too.
-    expect((await feature(first!.id, { featured: true })).json()).toMatchObject({
-      photo: { featured: true, featuredFrame: 'random' },
+    // Any photo: only the curator, and only known frames and mats.
+    expect((await post(curationPhotoFramePath(third!.id), { frame: 'walnut', mat: 'cream' }, '')).statusCode).toBe(403);
+    expect((await post(curationPhotoFramePath(third!.id), { frame: 'neon', mat: 'cream' })).statusCode).toBe(400);
+    expect((await post(curationPhotoFramePath(third!.id), { frame: 'walnut', mat: 'tartan' })).statusCode).toBe(400);
+    expect((await post(curationPhotoFramePath(third!.id), { frame: 'walnut', mat: 'cream' })).json()).toMatchObject({
+      photo: { id: third!.id, frame: { frame: 'walnut', mat: 'cream' } },
     });
-    expect((await feature(first!.id, { featured: true, frame: 'gilded' })).json()).toMatchObject({
-      photo: { featuredFrame: 'gilded' },
-    });
-    expect((await photos(undefined, `folder=${WEDDING}`)).photos.find((p) => p.id === first!.id))
-      .toMatchObject({ featuredFrame: 'gilded' });
-    expect((await feature(first!.id, { featured: true, frame: 'neon' })).statusCode).toBe(400);
+    // Guests get it too, to hang it the same way.
+    expect((await photos(undefined, `folder=${WEDDING}`)).photos.find((p) => p.id === third!.id))
+      .toMatchObject({ frame: { frame: 'walnut', mat: 'cream' } });
+    // Random with the frame's own mat is what an unpicked photo gets: it clears the pick.
+    const cleared = (await post(curationPhotoFramePath(third!.id), { frame: 'random', mat: 'frame' })).json();
+    expect(cleared.photo.frame).toBeUndefined();
 
-    // Replacing carries the new photo's frame; the old one's is forgotten.
-    expect((await feature(second!.id, { featured: true, frame: 'walnut' })).statusCode).toBe(409);
+    // Featuring sets the frame and mat; without them the photo keeps its own.
+    expect((await post(curationPhotoFeaturedPath(first!.id), { featured: true })).json().photo.frame).toBeUndefined();
     expect(
-      (await feature(second!.id, { featured: true, replace: true, frame: 'walnut' })).json(),
-    ).toMatchObject({ photo: { featuredFrame: 'walnut' } });
-    const framesFile = path.join(dataRoot, 'curation', 'featured-frames.json');
+      (await post(curationPhotoFeaturedPath(first!.id), { featured: true, frame: 'gilded', mat: 'velvet' })).json(),
+    ).toMatchObject({ photo: { featured: true, frame: { frame: 'gilded', mat: 'velvet' } } });
+    expect((await post(curationPhotoFeaturedPath(first!.id), { featured: true, frame: 'neon' })).statusCode).toBe(400);
+
+    // Replacing carries the new photo's frame; unfeaturing keeps each photo's frame.
+    expect((await post(curationPhotoFeaturedPath(second!.id), { featured: true, frame: 'walnut' })).statusCode).toBe(409);
+    expect(
+      (await post(curationPhotoFeaturedPath(second!.id), { featured: true, replace: true, frame: 'walnut' })).json(),
+    ).toMatchObject({ photo: { featured: true, frame: { frame: 'walnut', mat: 'frame' } } });
+    await post(curationPhotoFeaturedPath(second!.id), { featured: false });
     expect(JSON.parse(await fs.readFile(framesFile, 'utf8')).frames).toEqual({
-      [second!.relativePath]: 'walnut',
+      [first!.relativePath]: { frame: 'gilded', mat: 'velvet' },
+      [second!.relativePath]: { frame: 'walnut', mat: 'frame' },
     });
-    await feature(second!.id, { featured: false });
-    expect(JSON.parse(await fs.readFile(framesFile, 'utf8')).frames).toEqual({});
+  });
+
+  it('carries featured photos\' frames over from before frames had mats', async () => {
+    await fs.mkdir(path.join(dataRoot, 'curation'), { recursive: true });
+    const photo = (await (async () => {
+      await start({ pin: PIN, libraryWrites: true });
+      const cookie = await login();
+      await curatorPut(cookie, CURATION_ALBUM_DISPLAY_PATH, { folder: '', onDisplay: true });
+      return (await photos(cookie, `folder=${WEDDING}`)).photos[0]!;
+    })());
+    await app.close();
+    await fs.writeFile(
+      path.join(dataRoot, 'curation', 'featured-frames.json'),
+      JSON.stringify({ schemaVersion: 1, frames: { [photo.relativePath]: 'baroque' } }),
+    );
+    await start({ pin: PIN, libraryWrites: true });
+    expect((await photos(await login(), `folder=${WEDDING}`)).photos.find((p) => p.id === photo.id))
+      .toMatchObject({ frame: { frame: 'baroque', mat: 'frame' } });
+  });
+
+  it('lets the curator set the wall spacing and photo-view frames every visitor starts with', async () => {
+    await start({ pin: PIN, libraryWrites: true });
+    const cookie = await login();
+    const session = async (withCookie?: string) =>
+      (await app.inject({ method: 'GET', url: CURATION_SESSION_PATH, headers: withCookie ? { cookie: withCookie } : {} }))
+        .json() as CurationSessionResponse;
+    expect((await session()).display).toEqual({ spacing: 'none', lightboxFrames: false });
+    expect((await curatorPut('', CURATION_DISPLAY_PATH, { spacing: 'framed' })).statusCode).toBe(403);
+    expect((await curatorPut(cookie, CURATION_DISPLAY_PATH, { spacing: 'tiled' })).statusCode).toBe(400);
+    expect((await curatorPut(cookie, CURATION_DISPLAY_PATH, { spacing: 'framed' })).json()).toMatchObject({
+      display: { spacing: 'framed', lightboxFrames: false },
+    });
+    await curatorPut(cookie, CURATION_DISPLAY_PATH, { lightboxFrames: true });
+    // Guests start from them; the curator's albums.json keeps them.
+    expect((await session()).display).toEqual({ spacing: 'framed', lightboxFrames: true });
+    const albums = JSON.parse(await fs.readFile(path.join(dataRoot, 'curation', 'albums.json'), 'utf8'));
+    expect(albums.display).toEqual({ spacing: 'framed', lightboxFrames: true });
   });
 
   it('unfeatures a photo when it is hidden, and restoring does not feature it again', async () => {

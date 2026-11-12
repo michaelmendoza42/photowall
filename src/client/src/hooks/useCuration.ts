@@ -8,7 +8,9 @@ import {
 import type {
   AlbumCurationResponse,
   CurationSessionResponse,
-  FeaturedFrameChoice,
+  FrameChoice,
+  FrameMat,
+  WallDisplaySettings,
 } from '../../../shared/api/curation.js';
 import {
   chooseCuratorPin,
@@ -28,6 +30,8 @@ import {
   setPhotoPrivate,
   starPhoto,
   setPhotoFeatured,
+  setPhotoFrame,
+  setDisplayDefaults,
 } from '../api/curation.js';
 import type { PhotoEdit } from '../../../shared/api/edits.js';
 import { queryKeys } from './queryKeys.js';
@@ -166,9 +170,47 @@ export function useSetPhotoFeatured() {
       photoId: string;
       featured: boolean;
       replace?: boolean;
-      frame?: FeaturedFrameChoice;
-    }) => setPhotoFeatured(input.photoId, input.featured, input.replace, input.frame),
+      frame?: FrameChoice;
+      mat?: FrameMat;
+    }) => setPhotoFeatured(input.photoId, input.featured, input.replace, input.frame, input.mat),
     onSuccess: () => refreshWall(qc),
+  });
+}
+
+export function useSetPhotoFrame() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { photoId: string; frame: FrameChoice; mat: FrameMat }) =>
+      setPhotoFrame(input.photoId, input.frame, input.mat),
+    onSuccess: () => refreshWall(qc),
+  });
+}
+
+/** Save the curator's display defaults; every visitor's session picks them up. */
+export function useSetDisplayDefaults() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (display: Partial<WallDisplaySettings>) => setDisplayDefaults(display),
+    // Show the new defaults at once; put them back if saving fails.
+    onMutate: async (display) => {
+      // A refetch already on its way would land with the old defaults.
+      await qc.cancelQueries({ queryKey: queryKeys.curationSession });
+      const previous = qc.getQueryData<CurationSessionResponse>(queryKeys.curationSession);
+      if (previous) {
+        qc.setQueryData<CurationSessionResponse>(queryKeys.curationSession, {
+          ...previous,
+          display: { ...previous.display, ...display },
+        });
+      }
+      return { previous };
+    },
+    onError: (_err, _display, context) => {
+      if (context?.previous) qc.setQueryData(queryKeys.curationSession, context.previous);
+    },
+    onSuccess: (albums) => {
+      qc.setQueryData(queryKeys.curationAlbums, albums);
+      void qc.invalidateQueries({ queryKey: queryKeys.curationSession });
+    },
   });
 }
 

@@ -13,11 +13,20 @@ import type { PhotoQueryRecord } from '../../../../shared/api/photos.js';
 import { computeFocusedPhotoRenderSize } from '../wall/hoverPreview.js';
 import { photoAlbumName } from '../wall/albumAreas.js';
 import {
-  FEATURED_FRAME_CHOICES,
-  type FeaturedFrameChoice,
+  FRAME_CHOICES,
+  FRAME_MATS,
+  type FrameChoice,
+  type FrameMat,
+  type FrameStyle,
+  type PhotoFrame,
 } from '../../../../shared/api/curation.js';
-import { featuredFrameDataUrl, FEATURED_FRAME_LABELS } from '../wall/featuredFrames.js';
-import { featuredPhotoRect, featuredTileAspect } from '../wall/featuredGeometry.js';
+import {
+  FRAME_LABELS,
+  galleryFrameDataUrl,
+  galleryMouldingRatio,
+  MAT_LABELS,
+} from '../wall/featuredFrames.js';
+import { framedPhotoAspect, galleryFrameGeometry } from '../wall/wallSpacing.js';
 import {
   MAX_WHEEL_ZOOM_STEP,
   WHEEL_ZOOM_SENSITIVITY,
@@ -52,12 +61,20 @@ export interface FocusedPhotoLightboxProps {
     pending?: boolean;
   };
   /** Curator-only: make the photo its album's featured photo, or stop featuring it. */
+  /** The frame to show the photo in, when the photo view shows frames. */
+  frame?: { style: FrameStyle; mat: FrameMat };
+  /** Curator-only: pick the photo's frame and mat. */
+  curatorFrame?: {
+    current: PhotoFrame;
+    onSave: (frame: FrameChoice, mat: FrameMat) => void;
+    pending?: boolean;
+  };
   curatorFeatured?: {
     featured: boolean;
-    /** The frame it hangs in while featured. */
-    frame?: FeaturedFrameChoice;
-    /** Feature it in `frame`, or change its frame. */
-    onFeature: (frame: FeaturedFrameChoice) => void;
+    /** Its frame and mat. */
+    frame: PhotoFrame;
+    /** Feature it in this frame, or change its frame. */
+    onFeature: (frame: FrameChoice, mat: FrameMat) => void;
     onUnfeature: () => void;
     pending?: boolean;
     /**
@@ -475,14 +492,20 @@ export function FocusedPhotoLightbox(
     curatorStar,
     curatorPrivate,
     curatorFeatured,
+    curatorFrame,
+    frame,
     sourceAlbum,
     onEdit,
     onImageError,
   } = props;
 
-  const [framePickerOpen, setFramePickerOpen] = useState(false);
+  const [pickerMode, setPickerMode] = useState<'feature' | 'frame' | null>(null);
+  const framePickerOpen = pickerMode !== null;
+  const setFramePickerOpen = (open: boolean) => {
+    if (!open) setPickerMode(null);
+  };
   // A different photo starts with the picker closed.
-  useEffect(() => setFramePickerOpen(false), [photo.id]);
+  useEffect(() => setPickerMode(null), [photo.id]);
 
   // The lightbox only ever holds the focused photo as its one slide, so
   // its own arrow-key navigation has nothing to move to (and it stops
@@ -566,13 +589,27 @@ export function FocusedPhotoLightbox(
     onPrevious,
   });
 
+  // With frames on, the photo view fits the framed photo; the photo sits
+  // inside its frame, uncropped.
+  const framed = useMemo(() => {
+    if (!frame) return null;
+    const share = galleryMouldingRatio(frame.style);
+    const aspect = framedPhotoAspect(photo, share, frame.mat);
+    const size = computeFocusedPhotoRenderSize({
+      viewport: viewportSize,
+      photo: { width: aspect * 1000, height: 1000 },
+    });
+    const geometry = galleryFrameGeometry({ x: 0, y: 0, ...size }, photo, share, frame.mat);
+    return { size, geometry };
+  }, [frame, photo, viewportSize]);
   const renderSize = useMemo(
     () =>
+      framed?.size ??
       computeFocusedPhotoRenderSize({
         viewport: viewportSize,
         photo: { width: photo.width, height: photo.height },
       }),
-    [photo.height, photo.width, viewportSize],
+    [framed, photo.height, photo.width, viewportSize],
   );
 
   const [slideElement, setSlideElement] = useState<HTMLDivElement | null>(null);
@@ -677,9 +714,18 @@ export function FocusedPhotoLightbox(
               className="focused-photo__frame"
               data-testid="focused-photo-frame"
               data-zoom={pinch.zoom.scale.toFixed(3)}
+              data-frame={frame?.style}
+              data-mat={frame?.mat}
               style={{
                 width: renderSize.width,
                 height: renderSize.height,
+                ...(frame && framed
+                  ? {
+                      position: 'relative',
+                      backgroundSize: '100% 100%',
+                      backgroundImage: `url("${galleryFrameDataUrl(frame, renderSize.width, renderSize.height, framed.geometry, 2000)}")`,
+                    }
+                  : {}),
                 transform: frameTransform,
                 transition: swipe.animating && !zoomed
                   ? `transform ${SWIPE_ANIMATION_MS}ms ease-out`
@@ -694,6 +740,17 @@ export function FocusedPhotoLightbox(
                 alt=""
                 draggable={false}
                 onError={onImageError}
+                style={
+                  framed
+                    ? {
+                        position: 'absolute',
+                        left: framed.geometry.photo.x,
+                        top: framed.geometry.photo.y,
+                        width: framed.geometry.photo.width,
+                        height: framed.geometry.photo.height,
+                      }
+                    : undefined
+                }
               />
             </div>
           </div>
@@ -724,7 +781,7 @@ export function FocusedPhotoLightbox(
           ) : null,
         controls: () => (
           <>
-            {(curatorAction || curatorStar || curatorFeatured || curatorPrivate || onEdit) && (
+            {(curatorAction || curatorStar || curatorFeatured || curatorFrame || curatorPrivate || onEdit) && (
               <div className="focused-photo__curator">
                 {curatorStar && (
                   <button
@@ -748,7 +805,7 @@ export function FocusedPhotoLightbox(
                   <button
                     type="button"
                     className="focused-photo__curate"
-                    onClick={() => setFramePickerOpen(true)}
+                    onClick={() => setPickerMode('feature')}
                     disabled={curatorFeatured.pending}
                     aria-pressed={curatorFeatured.featured}
                     data-testid="focused-photo-featured"
@@ -760,6 +817,18 @@ export function FocusedPhotoLightbox(
                     }
                   >
                     {curatorFeatured.featured ? '◆ Featured' : 'Make featured'}
+                  </button>
+                )}
+                {curatorFrame && (
+                  <button
+                    type="button"
+                    className="focused-photo__curate"
+                    onClick={() => setPickerMode('frame')}
+                    disabled={curatorFrame.pending}
+                    data-testid="focused-photo-frame-pick"
+                    title="Pick the frame and mat this photo hangs in on a framed wall and in the photo view"
+                  >
+                    Frame
                   </button>
                 )}
                 {curatorPrivate && (
@@ -824,21 +893,37 @@ export function FocusedPhotoLightbox(
                 From {sourceAlbum}
               </p>
             )}
-            {curatorFeatured && framePickerOpen && !curatorFeatured.replacing && (
-              <FeaturedFramePicker
+            {curatorFeatured && pickerMode === 'feature' && !curatorFeatured.replacing && (
+              <FramePicker
                 photo={photo}
+                mode="feature"
                 featured={curatorFeatured.featured}
                 current={curatorFeatured.frame}
                 pending={curatorFeatured.pending}
-                onChoose={(frame) => {
-                  setFramePickerOpen(false);
-                  curatorFeatured.onFeature(frame);
+                onChoose={(chosen, mat) => {
+                  setPickerMode(null);
+                  curatorFeatured.onFeature(chosen, mat);
                 }}
                 onUnfeature={() => {
-                  setFramePickerOpen(false);
+                  setPickerMode(null);
                   curatorFeatured.onUnfeature();
                 }}
-                onCancel={() => setFramePickerOpen(false)}
+                onCancel={() => setPickerMode(null)}
+                mediaSourceResolver={mediaSourceResolver}
+              />
+            )}
+            {curatorFrame && pickerMode === 'frame' && (
+              <FramePicker
+                photo={photo}
+                mode="frame"
+                featured={false}
+                current={curatorFrame.current}
+                pending={curatorFrame.pending}
+                onChoose={(chosen, mat) => {
+                  setPickerMode(null);
+                  curatorFrame.onSave(chosen, mat);
+                }}
+                onCancel={() => setPickerMode(null)}
                 mediaSourceResolver={mediaSourceResolver}
               />
             )}
@@ -925,51 +1010,65 @@ function ReplaceFeaturedDialog(props: {
 }
 
 /**
- * Chooses the frame a featured photo hangs in, previewing this photo in
- * each one, or Random: a different frame on every page load.
+ * Chooses the frame and mat a photo hangs in, previewing this photo in
+ * each frame, or Random: a different frame each time the wall loads.
+ * `feature` mode features the photo in that frame.
  */
-function FeaturedFramePicker(props: {
+function FramePicker(props: {
   photo: PhotoQueryRecord;
+  mode: 'feature' | 'frame';
   featured: boolean;
-  current?: FeaturedFrameChoice;
+  current: PhotoFrame;
   pending?: boolean;
-  onChoose: (frame: FeaturedFrameChoice) => void;
-  onUnfeature: () => void;
+  onChoose: (frame: FrameChoice, mat: FrameMat) => void;
+  onUnfeature?: () => void;
   onCancel: () => void;
   mediaSourceResolver?: WallMediaSourceResolver;
 }): JSX.Element {
-  const { photo, featured, current, pending, onChoose, onUnfeature, onCancel, mediaSourceResolver } =
+  const { photo, mode, featured, current, pending, onChoose, onUnfeature, onCancel, mediaSourceResolver } =
     props;
-  const [choice, setChoice] = useState<FeaturedFrameChoice>(current ?? 'random');
+  const [frame, setFrame] = useState<FrameChoice>(current.frame);
+  const [mat, setMat] = useState<FrameMat>(current.mat);
   const thumb = resolveWallMediaSource(photo, 'thumb', mediaSourceResolver);
   const width = 132;
-  const height = width / featuredTileAspect(photo.width / Math.max(1, photo.height));
-  const inner = featuredPhotoRect({ x: 0, y: 0, width, height }, photo);
-  const preview = (frame: FeaturedFrameChoice) => (
-    <span
-      className="frame-picker__preview"
-      style={{
-        width,
-        height,
-        backgroundImage:
-          frame === 'random'
-            ? undefined
-            : `url("${featuredFrameDataUrl(frame, width, height, photo, 400)}")`,
-      }}
-    >
-      <img
-        src={thumb}
-        alt=""
-        draggable={false}
-        style={{ left: inner.x, top: inner.y, width: inner.width, height: inner.height }}
-      />
-      {frame === 'random' && <span className="frame-picker__dice">?</span>}
-    </span>
-  );
+  const preview = (style: FrameChoice) => {
+    const shown = style === 'random' ? 'gallery-black' : style;
+    const share = galleryMouldingRatio(shown);
+    const height = width / framedPhotoAspect(photo, share, mat);
+    const geometry = galleryFrameGeometry({ x: 0, y: 0, width, height }, photo, share, mat);
+    return (
+      <span
+        className="frame-picker__preview"
+        style={{
+          width,
+          height,
+          backgroundImage:
+            style === 'random'
+              ? undefined
+              : `url("${galleryFrameDataUrl({ style: shown, mat }, width, height, geometry, 400)}")`,
+        }}
+      >
+        <img
+          src={thumb}
+          alt=""
+          draggable={false}
+          style={{
+            left: geometry.photo.x,
+            top: geometry.photo.y,
+            width: geometry.photo.width,
+            height: geometry.photo.height,
+          }}
+        />
+        {style === 'random' && <span className="frame-picker__dice">?</span>}
+      </span>
+    );
+  };
+  const unchanged = frame === current.frame && mat === current.mat;
   return (
     <div
       className="replace-featured"
-      data-testid="featured-frame-picker"
+      data-testid="frame-picker"
+      data-mode={mode}
       onClick={(event) => {
         if (event.target === event.currentTarget) onCancel();
       }}
@@ -981,38 +1080,55 @@ function FeaturedFramePicker(props: {
         aria-labelledby="frame-picker-title"
       >
         <h2 id="frame-picker-title" className="replace-featured__title">
-          {featured ? 'Featured photo frame' : 'Feature this photo'}
+          {mode === 'feature' ? (featured ? 'Featured photo' : 'Feature this photo') : 'Frame'}
         </h2>
         <p className="replace-featured__body">
-          It hangs large at the center of its album, in this frame. Random picks a different
-          frame each time the wall loads.
+          {mode === 'feature'
+            ? 'It hangs large at the center of its album, in this frame.'
+            : 'It hangs in this frame on a framed wall and in the photo view.'}{' '}
+          Random picks a different frame each time the wall loads.
         </p>
         <div className="frame-picker__grid" role="radiogroup" aria-label="Frame">
-          {FEATURED_FRAME_CHOICES.map((frame) => (
+          {FRAME_CHOICES.map((choice) => (
             <button
-              key={frame}
+              key={choice}
               type="button"
               role="radio"
-              aria-checked={choice === frame}
+              aria-checked={frame === choice}
               className="frame-picker__option"
-              data-testid={`featured-frame-option-${frame}`}
-              data-selected={choice === frame ? 'true' : 'false'}
-              onClick={() => setChoice(frame)}
-              onDoubleClick={() => onChoose(frame)}
+              data-testid={`frame-option-${choice}`}
+              data-selected={frame === choice ? 'true' : 'false'}
+              onClick={() => setFrame(choice)}
             >
-              {preview(frame)}
-              <span className="frame-picker__label">{FEATURED_FRAME_LABELS[frame]}</span>
+              {preview(choice)}
+              <span className="frame-picker__label">{FRAME_LABELS[choice]}</span>
+            </button>
+          ))}
+        </div>
+        <div className="frame-picker__mats" role="radiogroup" aria-label="Mat">
+          {FRAME_MATS.map((choice) => (
+            <button
+              key={choice}
+              type="button"
+              role="radio"
+              aria-checked={mat === choice}
+              className="frame-picker__mat"
+              data-testid={`mat-option-${choice}`}
+              data-selected={mat === choice ? 'true' : 'false'}
+              onClick={() => setMat(choice)}
+            >
+              {MAT_LABELS[choice]}
             </button>
           ))}
         </div>
         <div className="replace-featured__actions">
-          {featured && (
+          {mode === 'feature' && featured && onUnfeature && (
             <button
               type="button"
               className="focused-photo__curate"
               onClick={onUnfeature}
               disabled={pending}
-              data-testid="featured-frame-unfeature"
+              data-testid="frame-unfeature"
             >
               Unfeature
             </button>
@@ -1021,7 +1137,7 @@ function FeaturedFramePicker(props: {
             type="button"
             className="focused-photo__curate"
             onClick={onCancel}
-            data-testid="featured-frame-cancel"
+            data-testid="frame-cancel"
           >
             Cancel
           </button>
@@ -1029,11 +1145,11 @@ function FeaturedFramePicker(props: {
             autoFocus
             type="button"
             className="focused-photo__curate replace-featured__confirm"
-            onClick={() => onChoose(choice)}
-            disabled={pending || (featured && choice === current)}
-            data-testid="featured-frame-confirm"
+            onClick={() => onChoose(frame, mat)}
+            disabled={pending || ((mode === 'frame' || featured) && unchanged)}
+            data-testid="frame-confirm"
           >
-            {featured ? 'Save frame' : 'Make featured'}
+            {mode === 'feature' && !featured ? 'Make featured' : 'Save frame'}
           </button>
         </div>
       </div>

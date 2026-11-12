@@ -88,6 +88,12 @@ export interface RadialWallOptions {
    * one, featured photos are laid out like any other.
    */
   featuredBox?: { width: number; height: number };
+  /**
+   * Let outer-ring tiles reach past the edge so the loop shows no straight
+   * seam (default). Spaced walls turn it off: overlapping tiles would read
+   * as frames hung over one another.
+   */
+  raggedEdge?: boolean;
 }
 
 /** Candidate columns considered for each placement. */
@@ -337,7 +343,7 @@ export function buildRadialWallLayout(options: RadialWallOptions): RadialWallLay
   const contentHeight = high;
   const { slots } = fitting;
   const assigned = placeCenterOut(slots, groups, worldWidth, contentHeight);
-  const reach = columns.length >= MIN_RING_COLUMNS
+  const reach = columns.length >= MIN_RING_COLUMNS && options.raggedEdge !== false
     ? raggedEdges(slots, worldWidth, contentHeight)
     : slots.map(() => ({ left: 0, right: 0, top: 0, bottom: 0, layer: 0 }));
 
@@ -369,6 +375,15 @@ export function buildRadialWallLayout(options: RadialWallOptions): RadialWallLay
     groupCenters: assigned.groupCenters,
     featuredPhotoIds,
   };
+}
+
+/** Mean column width the layout starts from (before columns resize). */
+export function radialMeanColumnWidth(
+  options: Pick<RadialWallOptions, 'referenceWidth' | 'columnWidthFactors' | 'tileScale'>,
+): number {
+  const factors = options.columnWidthFactors.filter((f) => Number.isFinite(f) && f > 0);
+  const count = factors.length > 0 ? factors.length : 1;
+  return (options.referenceWidth * (options.tileScale ?? WALL_TILE_SCALE)) / count;
 }
 
 /** Group photos by folder, in order of first appearance. */

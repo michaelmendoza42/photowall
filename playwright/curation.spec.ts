@@ -371,7 +371,7 @@ interface PhotoRow {
   directoryPath: string;
   starred?: boolean;
   featured?: boolean;
-  featuredFrame?: string;
+  frame?: { frame: string; mat: string };
 }
 
 async function allPhotos(api: APIRequestContext): Promise<PhotoRow[]> {
@@ -558,20 +558,20 @@ test('the curator features one photo per album in a frame, confirming before rep
   await tile.click();
   const modal = page.getByTestId('focused-photo-modal');
   const button = page.getByTestId('focused-photo-featured');
-  const picker = page.getByTestId('featured-frame-picker');
+  const picker = page.getByTestId('frame-picker');
   await expect(button).toHaveAttribute('data-featured', 'false');
   await expect(button).toHaveText('Make featured');
 
   // Featuring asks for a frame first; Random is the default.
   await button.click();
   await expect(picker).toBeVisible();
-  await expect(page.getByTestId('featured-frame-option-random')).toHaveAttribute('data-selected', 'true');
-  await page.getByTestId('featured-frame-option-gilded').click();
-  await page.getByTestId('featured-frame-confirm').click();
+  await expect(page.getByTestId('frame-option-random')).toHaveAttribute('data-selected', 'true');
+  await page.getByTestId('frame-option-gilded').click();
+  await page.getByTestId('frame-confirm').click();
   await expect(picker).toBeHidden();
   await expect(button).toHaveAttribute('data-featured', 'true');
   await expect(button).toContainText('Featured');
-  expect((await photoById(page.request, firstId)).featuredFrame).toBe('gilded');
+  expect((await photoById(page.request, firstId)).frame).toEqual({ frame: 'gilded', mat: 'frame' });
 
   // Step to another photo of the same album.
   const byId = new Map((await allPhotos(page.request)).map((p) => [p.id, p]));
@@ -588,8 +588,8 @@ test('the curator features one photo per album in a frame, confirming before rep
   const dialog = page.getByTestId('replace-featured');
   const featureInWalnut = async () => {
     await button.click();
-    await page.getByTestId('featured-frame-option-walnut').click();
-    await page.getByTestId('featured-frame-confirm').click();
+    await page.getByTestId('frame-option-walnut').click();
+    await page.getByTestId('frame-confirm').click();
   };
   await expect(button).toHaveAttribute('data-featured', 'false');
   await featureInWalnut();
@@ -616,7 +616,7 @@ test('the curator features one photo per album in a frame, confirming before rep
   const featured = (await allPhotos(page.request)).filter(
     (p) => p.featured && p.directoryPath === first.directoryPath,
   );
-  expect(featured.map((p) => [p.id, p.featuredFrame])).toEqual([[secondId, 'walnut']]);
+  expect(featured.map((p) => [p.id, p.frame?.frame])).toEqual([[secondId, 'walnut']]);
 
   // On the wall it is a hero tile filling about 90% of the screen at the
   // wall's zoom (the frame included), and it pops in its frame on hover.
@@ -652,9 +652,107 @@ test('the curator features one photo per album in a frame, confirming before rep
   await hero.click({ force: true });
   await expect(modal).toHaveAttribute('data-photo-id', secondId);
   await button.click();
-  await page.getByTestId('featured-frame-unfeature').click();
+  await page.getByTestId('frame-unfeature').click();
   await expect(button).toHaveAttribute('data-featured', 'false');
   await page.getByTestId('focused-photo-close').click();
+});
+
+test('the curator hangs the wall with spacing and frames; guests start there and can change it', async ({
+  page,
+  browser,
+}) => {
+  await page.request.post('/api/curation/session', { data: { pin: PIN } });
+  await page.goto('/');
+  const shell = page.getByTestId('wall-shell');
+  const wall = page.getByTestId('wall-canvas');
+  await expect(shell).toHaveAttribute('data-screen', 'ready', { timeout: 60_000 });
+  await expect(wall).toHaveAttribute('data-spacing', 'none');
+
+  // The curator's defaults: a framed wall, frames in the photo view.
+  await openControls(page);
+  await page.getByTestId('controls-default-spacing-framed').click();
+  await page.getByTestId('controls-default-lightbox-frames').check();
+  await expect(page.getByTestId('controls-spacing-framed')).toHaveAttribute('aria-checked', 'true');
+  await closeControls(page);
+  await expect(wall).toHaveAttribute('data-spacing', 'framed');
+
+  // The curator picks a frame and mat for one photo.
+  const tile = await pickCenteredTile(page);
+  const photoId = (await tile.getAttribute('data-photo-id'))!;
+  await tile.click();
+  await page.getByTestId('focused-photo-frame-pick').click();
+  const picker = page.getByTestId('frame-picker');
+  await expect(picker).toHaveAttribute('data-mode', 'frame');
+  // It opens on the photo's current pick (Random when it has none).
+  const current = (await photoById(page.request, photoId)).frame?.frame ?? 'random';
+  await expect(page.getByTestId(`frame-option-${current}`)).toHaveAttribute('data-selected', 'true');
+  await page.getByTestId('frame-option-walnut').click();
+  await page.getByTestId('mat-option-cream').click();
+  await page.getByTestId('frame-confirm').click();
+  await expect(picker).toBeHidden();
+  expect((await photoById(page.request, photoId)).frame).toEqual({ frame: 'walnut', mat: 'cream' });
+  // The photo view shows it in that frame.
+  const frame = page.getByTestId('focused-photo-frame');
+  await expect(frame).toHaveAttribute('data-frame', 'walnut');
+  await expect(frame).toHaveAttribute('data-mat', 'cream');
+  await page.getByTestId('focused-photo-close').click();
+
+  // Hovering pops a framed photo, frame and all, to half the photo view's size.
+  await page.getByTestId('controls-trigger').hover();
+  const hovered = await pickCenteredTile(page);
+  const hoveredId = (await hovered.getAttribute('data-photo-id'))!;
+  const box = (await hovered.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  const pop = page.getByTestId('wall-hover-preview');
+  await expect(pop).toHaveAttribute('data-photo-id', hoveredId);
+  await expect(pop).toHaveAttribute('data-frame', /.+/);
+  await page.waitForTimeout(400);
+  const popBox = (await pop.boundingBox())!;
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  const viewBox = (await frame.boundingBox())!;
+  const expected = Math.max(box.width * 1.08, viewBox.width / 2);
+  expect(popBox.width / expected).toBeGreaterThan(0.85);
+  expect(popBox.width / expected).toBeLessThan(1.15);
+  await page.getByTestId('focused-photo-close').click();
+
+  // A guest starts from the curator's defaults and can change the spacing,
+  // fading to black and back.
+  const other = await browser.newContext({ baseURL: BASE_URL });
+  const guest = await other.newPage();
+  await guest.goto('/');
+  const guestWall = guest.getByTestId('wall-canvas');
+  await expect(guest.getByTestId('wall-shell')).toHaveAttribute('data-screen', 'ready', { timeout: 60_000 });
+  await expect(guestWall).toHaveAttribute('data-spacing', 'framed');
+  await expect(guest.getByTestId('controls-default-spacing-none')).toHaveCount(0);
+  await openControls(guest);
+  const veil = guest.getByTestId('wall-veil');
+  // Record how dark the veil gets, every frame.
+  await veil.evaluate((element) => {
+    const record = window as unknown as { veilMax: number };
+    record.veilMax = 0;
+    const sample = () => {
+      record.veilMax = Math.max(record.veilMax, Number(getComputedStyle(element).opacity));
+      requestAnimationFrame(sample);
+    };
+    requestAnimationFrame(sample);
+  });
+  await guest.getByTestId('controls-spacing-spaced').click();
+  await expect(guestWall).toHaveAttribute('data-spacing', 'spaced');
+  await expect.poll(async () => Number(await veil.evaluate((v) => getComputedStyle(v).opacity))).toBeLessThan(0.05);
+  expect(await guest.evaluate(() => (window as unknown as { veilMax: number }).veilMax)).toBeGreaterThan(0.9);
+  await guest.getByTestId('controls-lightbox-frames').uncheck();
+  await guest.getByTestId('controls-spacing-none').click();
+  await expect(guestWall).toHaveAttribute('data-spacing', 'none');
+  // Remembered on this browser; Use defaults goes back to the curator's.
+  await guest.reload();
+  await expect(guest.getByTestId('wall-canvas')).toHaveAttribute('data-spacing', 'none', { timeout: 60_000 });
+  await openControls(guest);
+  await guest.getByTestId('controls-wall-reset').click();
+  await expect(guest.getByTestId('wall-canvas')).toHaveAttribute('data-spacing', 'framed');
+  await other.close();
+
+  // Put the defaults back for the tests after this one.
+  await page.request.put('/api/curation/display', { data: { spacing: 'none', lightboxFrames: false } });
 });
 
 test('the curator previews the wall as a guest and keeps curating', async ({ page }) => {

@@ -18,7 +18,7 @@ interface HoverCursorPanOptions {
 	zoomRef: MutableRefObject<number>;
 	publishCamera: (next: CameraState) => void;
 	flushCamera: () => void;
-	/** Current hover pop rect (viewport px), or null when nothing is hovered. */
+	/** The hovered photo as drawn on the wall (viewport px), or null when nothing is hovered. */
 	getHoverRect: () => PreviewRect | null;
 	/** Last cursor position (viewport px). */
 	getCursor: () => { x: number; y: number } | null;

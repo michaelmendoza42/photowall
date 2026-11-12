@@ -22,7 +22,9 @@ import {
   useRescanLibrary,
   useSetAlbumDisplay,
   useSetDefaultView,
+  useSetDisplayDefaults,
   useSetPhotoFeatured,
+  useSetPhotoFrame,
   useSetPhotoPrivate,
   useStarPhoto,
 } from '../../hooks/useCuration.js';
@@ -31,10 +33,21 @@ import { queryKeys } from '../../hooks/queryKeys.js';
 import {
   SHARE_URL_PARAM,
   isInHiddenFolder,
-  type FeaturedFrameChoice,
+  DEFAULT_WALL_DISPLAY,
+  type FrameChoice,
+  type FrameMat,
   type PhotoFeaturedConflictResponse,
+  type PhotoFrame,
+  type WallSpacing,
 } from '../../../../shared/api/curation.js';
 import { ApiError } from '../../api/http.js';
+import {
+  effectiveWallDisplay,
+  readWallDisplayPreference,
+  writeWallDisplayPreference,
+  type WallDisplayPreference,
+} from '../../state/wallDisplay.js';
+import { resolvePhotoFrame } from './featuredFrames.js';
 import { CurationToast, type CurationToastState } from './CurationToast.js';
 import {
   EMPTY_FILTERS,
@@ -137,6 +150,14 @@ export function WallShell(): JSX.Element {
   const sessionQuery = useCurationSession();
   const session = sessionQuery.data ?? null;
   const isCurator = session?.curator === true;
+  // Wall spacing and photo-view frames: the curator's defaults, unless this
+  // viewer chose otherwise (remembered on this browser).
+  const [displayPreference, setDisplayPreference] = useState(() => readWallDisplayPreference());
+  const display = effectiveWallDisplay(session?.display ?? DEFAULT_WALL_DISPLAY, displayPreference);
+  const updateDisplayPreference = useCallback((next: WallDisplayPreference) => {
+    setDisplayPreference(next);
+    writeWallDisplayPreference(next);
+  }, []);
   // The curator can preview the wall as a guest sees it while keeping
   // every curator tool. Remembered on this browser.
   const [previewAsGuest, setPreviewAsGuest] = useState(() => readGuestPreview());
@@ -159,6 +180,7 @@ export function WallShell(): JSX.Element {
   const choosePin = useChooseCuratorPin();
   const curatorLogout = useCuratorLogout();
   const setVipPin = useSetVipPin();
+  const setDisplayDefaults = useSetDisplayDefaults();
   const clearVipPin = useClearVipPin();
   const setAlbumDisplay = useSetAlbumDisplay();
   const setDefaultView = useSetDefaultView();
@@ -659,6 +681,41 @@ export function WallShell(): JSX.Element {
   }, []);
 
   const wallReady = screen.kind === 'ready' && Boolean(firstPage) && !photosQuery.hasNextPage;
+
+  // A new spacing re-lays out the whole wall: fade to black, switch
+  // underneath, fade back, so the photos jumping about never shows. Before
+  // the wall is up there's nothing to hide.
+  const [shownSpacing, setShownSpacing] = useState<WallSpacing>(display.spacing);
+  const veilRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (display.spacing === shownSpacing) return undefined;
+    const veil = veilRef.current;
+    const reducedMotion =
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!wallReady || !veil || reducedMotion) {
+      setShownSpacing(display.spacing);
+      return undefined;
+    }
+    let cancelled = false;
+    veil.style.transition = `opacity ${SPACING_FADE_OUT_MS}ms ease-in`;
+    veil.style.opacity = '1';
+    const timer = window.setTimeout(() => {
+      if (cancelled) return;
+      setShownSpacing(display.spacing);
+      // Let the new wall paint before fading back in.
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => {
+          veil.style.transition = `opacity ${SPACING_FADE_IN_MS}ms ease-out`;
+          veil.style.opacity = '0';
+        }),
+      );
+    }, SPACING_FADE_OUT_MS);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [display.spacing, shownSpacing, wallReady]);
   useEffect(() => {
     const anchor = pendingShareAnchorRef.current;
     if (!wallReady || !anchor || !photosByIdRef.current.has(anchor.photoId)) return undefined;
@@ -804,17 +861,19 @@ export function WallShell(): JSX.Element {
   const [featuredConflict, setFeaturedConflict] = useState<{
     photoId: string;
     current: PhotoQueryRecord;
-    frame: FeaturedFrameChoice;
+    frame: FrameChoice;
+    mat: FrameMat;
   } | null>(null);
   const runFeatured = useCallback(
     (
       photo: PhotoQueryRecord,
       featured: boolean,
       replace: boolean,
-      frame?: FeaturedFrameChoice,
+      frame?: FrameChoice,
+      mat?: FrameMat,
     ) => {
       setPhotoFeatured.mutate(
-        { photoId: photo.id, featured, replace, ...(frame ? { frame } : {}) },
+        { photoId: photo.id, featured, replace, ...(frame ? { frame } : {}), ...(mat ? { mat } : {}) },
         {
           onSuccess: (result) => {
             setFeaturedConflict(null);
@@ -823,7 +882,12 @@ export function WallShell(): JSX.Element {
           onError: (err) => {
             const current = featuredConflictPhoto(err);
             if (current) {
-              setFeaturedConflict({ photoId: photo.id, current, frame: frame ?? 'random' });
+              setFeaturedConflict({
+                photoId: photo.id,
+                current,
+                frame: frame ?? 'random',
+                mat: mat ?? 'frame',
+              });
               return;
             }
             setFeaturedConflict(null);
@@ -845,17 +909,35 @@ export function WallShell(): JSX.Element {
       featuredConflict?.photoId === focusedPhotoRecord.id ? featuredConflict.current : undefined;
     return {
       featured,
-      frame: focusedPhotoRecord.featuredFrame,
+      frame: focusedPhotoRecord.frame ?? UNPICKED_FRAME,
       pending: setPhotoFeatured.isPending,
-      onFeature: (frame: FeaturedFrameChoice) =>
-        runFeatured(focusedPhotoRecord, true, false, frame),
+      onFeature: (frame: FrameChoice, mat: FrameMat) =>
+        runFeatured(focusedPhotoRecord, true, false, frame, mat),
       onUnfeature: () => runFeatured(focusedPhotoRecord, false, false),
       replacing,
       onConfirmReplace: () =>
-        runFeatured(focusedPhotoRecord, true, true, featuredConflict?.frame),
+        runFeatured(focusedPhotoRecord, true, true, featuredConflict?.frame, featuredConflict?.mat),
       onCancelReplace: () => setFeaturedConflict(null),
     };
   }, [focusedPhotoRecord, isCurator, setPhotoFeatured.isPending, runFeatured, featuredConflict]);
+
+  const setPhotoFrame = useSetPhotoFrame();
+  const curatorFrame = useMemo(() => {
+    if (!focusedPhotoRecord || !isCurator) return undefined;
+    return {
+      current: focusedPhotoRecord.frame ?? UNPICKED_FRAME,
+      pending: setPhotoFrame.isPending,
+      onSave: (frame: FrameChoice, mat: FrameMat) =>
+        setPhotoFrame.mutate(
+          { photoId: focusedPhotoRecord.id, frame, mat },
+          {
+            onSuccess: ({ photo }) => setFocusedPhoto((prev) => updateFocusedPhoto(prev, photo)),
+            onError: (err) =>
+              setToast({ message: `Could not change the frame: ${err.message}`, tone: 'error' }),
+          },
+        ),
+    };
+  }, [focusedPhotoRecord, isCurator, setPhotoFrame]);
 
   const setPhotoPrivate = useSetPhotoPrivate();
   const curatorPrivate = useMemo(() => {
@@ -938,6 +1020,7 @@ export function WallShell(): JSX.Element {
   const sharedWallProps = {
     photos,
     featuredPhotoIds,
+    spacing: shownSpacing,
     selectionKey,
     worldWidth,
     hasNextPage: photosQuery.hasNextPage,
@@ -996,6 +1079,7 @@ export function WallShell(): JSX.Element {
         />
       )}
 
+      <div className="wall-veil" ref={veilRef} aria-hidden="true" data-testid="wall-veil" />
       <ControlsPanel
         open={menuOpen}
         onToggleOpen={() => setMenuOpen((v) => !v)}
@@ -1013,6 +1097,11 @@ export function WallShell(): JSX.Element {
           onSetDisplay: handleSetDisplay,
           onToggleDefault: handleToggleDefault,
           onToggleDefaultStarred: handleToggleDefaultStarred,
+          onSetDisplayDefaults: (next) =>
+            setDisplayDefaults.mutate(next, {
+              onError: (err) =>
+                setToast({ message: `Could not save the defaults: ${err.message}`, tone: 'error' }),
+            }),
           onRescan: handleRescan,
           previewAsGuest: guestView,
           onPreviewAsGuestChange: handleGuestPreviewChange,
@@ -1021,6 +1110,15 @@ export function WallShell(): JSX.Element {
           rescanPending: rescanLibrary.isPending,
         }}
         share={{ onShare: handleShare, pending: sharePending, url: shareUrl }}
+        wall={{
+          spacing: display.spacing,
+          onSpacingChange: (spacing) => updateDisplayPreference({ ...displayPreference, spacing }),
+          lightboxFrames: display.lightboxFrames,
+          onLightboxFramesChange: (lightboxFrames) =>
+            updateDisplayPreference({ ...displayPreference, lightboxFrames }),
+          customized: Object.keys(displayPreference).length > 0,
+          onReset: () => updateDisplayPreference({}),
+        }}
         errorMessage={controlsError}
       />
 
@@ -1033,6 +1131,8 @@ export function WallShell(): JSX.Element {
           curatorAction={curatorAction}
           curatorStar={curatorStar}
           curatorFeatured={curatorFeatured}
+          curatorFrame={curatorFrame}
+          frame={display.lightboxFrames ? resolvePhotoFrame(focusedPhoto.photo) : undefined}
           curatorPrivate={curatorPrivate}
           sourceAlbum={focusedFromBestOf ? photoAlbumName(focusedPhoto.photo) : undefined}
           onEdit={handleEditOpen}
@@ -1089,6 +1189,11 @@ function featuredConflictPhoto(err: unknown): PhotoQueryRecord | null {
   const body = err.body as Partial<PhotoFeaturedConflictResponse> | null;
   return body?.error === 'featured_exists' && body.current ? body.current : null;
 }
+
+/** What an unpicked photo hangs in: a random frame with that frame's own mat. */
+const UNPICKED_FRAME: PhotoFrame = { frame: 'random', mat: 'frame' };
+const SPACING_FADE_OUT_MS = 150;
+const SPACING_FADE_IN_MS = 200;
 
 function readGuestPreview(): boolean {
   try {

@@ -6,9 +6,8 @@ import {
 	type WallMediaSourceResolver,
 } from "./mediaSourceResolver.js";
 import { variantForDrawnSize, wallPixelRatio } from "./pixiScene.js";
-import type { FeaturedFrame } from "../../../../shared/api/curation.js";
-import { featuredPhotoRect } from "./featuredGeometry.js";
-import { featuredFrameDataUrl } from "./featuredFrames.js";
+import { galleryFrameDataUrl, tileFrameGeometry } from "./featuredFrames.js";
+import type { TileFrame } from "./useRadialWallLayout.js";
 
 export interface WallHoverPopState extends PreviewRect {
 	photo: PhotoQueryRecord;
@@ -35,10 +34,10 @@ const HANDOFF_WINDOW_MS = 50;
 export function WallHoverPopLayer(props: {
 	preview: WallHoverPopState | null;
 	mediaSourceResolver?: WallMediaSourceResolver;
-	/** Hero tiles' frames, which they keep when popped. */
-	featuredFrames?: ReadonlyMap<string, FeaturedFrame>;
+	/** Framed tiles' frames, which they keep, scaled up, when popped. */
+	tileFrames?: ReadonlyMap<string, TileFrame>;
 }): JSX.Element {
-	const { preview, mediaSourceResolver, featuredFrames } = props;
+	const { preview, mediaSourceResolver, tileFrames } = props;
 	const [settling, setSettling] = useState<WallHoverPopState[]>([]);
 	const lastRef = useRef<WallHoverPopState | null>(null);
 	// Moving straight onto a neighbour clears the hover (leave) and sets it
@@ -84,7 +83,7 @@ export function WallHoverPopLayer(props: {
 					key={`settle:${p.photo.id}`}
 					preview={p}
 					settling
-					frame={featuredFrames?.get(p.photo.id)}
+					frame={tileFrames?.get(p.photo.id)}
 					mediaSourceResolver={mediaSourceResolver}
 				/>
 			))}
@@ -92,7 +91,7 @@ export function WallHoverPopLayer(props: {
 				<WallHoverPop
 					key={preview.photo.id}
 					preview={preview}
-					frame={featuredFrames?.get(preview.photo.id)}
+					frame={tileFrames?.get(preview.photo.id)}
 					mediaSourceResolver={mediaSourceResolver}
 				/>
 			)}
@@ -103,15 +102,16 @@ export function WallHoverPopLayer(props: {
 export function WallHoverPop(props: {
 	preview: WallHoverPopState;
 	settling?: boolean;
-	/** A hero tile's frame: the pop shows the photo uncropped in it. */
-	frame?: FeaturedFrame;
+	/** A framed tile's frame: the pop shows the photo uncropped in it. */
+	frame?: TileFrame;
 	mediaSourceResolver?: WallMediaSourceResolver;
 }): JSX.Element {
 	const { preview, settling = false, frame, mediaSourceResolver } = props;
 	const { photo } = preview;
-	const inner = frame
-		? featuredPhotoRect({ x: 0, y: 0, width: preview.width, height: preview.height }, photo)
+	const geometry = frame
+		? tileFrameGeometry({ x: 0, y: 0, width: preview.width, height: preview.height }, photo, frame)
 		: null;
+	const inner = geometry?.photo ?? null;
 	const variant = variantForDrawnSize(
 		Math.max(inner?.width ?? preview.width, inner?.height ?? preview.height) *
 			wallPixelRatio(),
@@ -141,16 +141,18 @@ export function WallHoverPop(props: {
 			className={className}
 			data-testid={settling ? "wall-hover-preview-settling" : "wall-hover-preview"}
 			data-photo-id={photo.id}
-			data-frame={frame}
+			data-frame={frame?.style}
+			data-mat={frame?.mat}
 			style={
 				{
 					width: preview.width,
 					height: preview.height,
 					"--hover-preview-left": `${preview.left}px`,
 					"--hover-preview-top": `${preview.top}px`,
-					backgroundImage: frame
-						? `url("${featuredFrameDataUrl(frame, preview.width, preview.height, photo, 1600)}")`
-						: `url("${thumbSrc}")`,
+					backgroundImage:
+						frame && geometry
+							? `url("${galleryFrameDataUrl(frame, preview.width, preview.height, geometry)}")`
+							: `url("${thumbSrc}")`,
 				} as unknown as React.CSSProperties
 			}
 		>

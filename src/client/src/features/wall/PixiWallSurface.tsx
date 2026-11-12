@@ -1,5 +1,5 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
-import { Application, Container, Rectangle, Sprite, Texture } from 'pixi.js';
+import { Application, Container, NineSliceSprite, Rectangle, Sprite, Texture } from 'pixi.js';
 import { Viewport } from 'pixi-viewport';
 import type { MediaVariant } from '../../../../shared/api/media.js';
 import {
@@ -13,7 +13,13 @@ import {
 } from './pixiScene.js';
 import type { WallMediaSourceResolver } from './mediaSourceResolver.js';
 import { destroyPixiApp } from './destroyPixiApp.js';
-import { featuredFrameCanvas } from './featuredFrames.js';
+import {
+  galleryFrameCanvas,
+  gallerySliceCanvas,
+  SHADOW_SLICE_BLUR_PX,
+  SHADOW_SLICE_BORDER_PX,
+  shadowSliceCanvas,
+} from './featuredFrames.js';
 import {
   browserMediaDiagnostics,
   mediaVariantFromSource,
@@ -53,8 +59,11 @@ interface SpriteEntry {
   /** Tile size the sprite is laid out at. */
   width: number;
   height: number;
-  /** A hero tile's frame, drawn under the photo.  */
-  frame: Sprite | null;
+  /** A framed tile's frame, drawn under the photo. */
+  frame: Sprite | NineSliceSprite | null;
+  frameKind: 'hero' | 'gallery' | null;
+  /** A hung tile's shadow layers, drawn under its frame or photo. */
+  shadows: NineSliceSprite[];
 }
 
 export const PixiWallSurface = memo(function PixiWallSurface(
@@ -206,12 +215,15 @@ export const PixiWallSurface = memo(function PixiWallSurface(
       const removedSprite = entry.sprite;
       const removedView = entry.view;
       const removedFrame = entry.frame;
+      const removedShadows = entry.shadows;
       scene.removeChild(removedSprite);
       if (removedFrame) scene.removeChild(removedFrame);
+      for (const shadow of removedShadows) scene.removeChild(shadow);
       spriteEntries.delete(key);
       requestAnimationFrame(() => {
         removedSprite.destroy();
         removedFrame?.destroy();
+        for (const shadow of removedShadows) shadow.destroy();
         removedView?.destroy(false);
       });
     }
@@ -345,6 +357,8 @@ function syncSprite(args: {
     width: spriteData.width,
     height: spriteData.height,
     frame: null,
+    frameKind: null,
+    shadows: [],
   };
   spriteEntries.set(spriteData.key, entry);
   syncFrame(scene, entry, spriteData, zIndex);
@@ -406,48 +420,132 @@ function showTexture(entry: SpriteEntry, base: Texture): void {
   if (previousView) destroyTextureAfterRender(previousView);
 }
 
-/** Frame textures, one per drawn frame canvas (canvases are cached by shape). */
-const frameTextures = new WeakMap<HTMLCanvasElement, Texture>();
+/** Textures, one per drawn canvas (frame canvases are cached by shape and style). */
+const canvasTextures = new WeakMap<HTMLCanvasElement, Texture>();
 
-/** Add, move or remove a hero tile's frame to match `spriteData`. */
+function textureFor(canvas: HTMLCanvasElement): Texture {
+  let texture = canvasTextures.get(canvas);
+  if (!texture) {
+    texture = Texture.from(canvas);
+    canvasTextures.set(canvas, texture);
+  }
+  return texture;
+}
+
+function removeSprite(scene: Container, sprite: Container | null): null {
+  if (sprite) {
+    scene.removeChild(sprite);
+    requestAnimationFrame(() => sprite.destroy());
+  }
+  return null;
+}
+
+/**
+ * Add, move or remove a tile's frame and shadow to match `spriteData`. A
+ * featured photo's hero frame is drawn for its exact shape; a framed
+ * wall's frames are drawn once per style and mat and nine-slice scaled,
+ * so thousands of them stay cheap.
+ */
 function syncFrame(
   scene: Container,
   entry: SpriteEntry,
   spriteData: PixiSceneSprite,
   zIndex: number,
 ): void {
+  syncShadow(scene, entry, spriteData, zIndex);
   const rect = spriteData.frame;
-  if (!rect) {
-    if (entry.frame) {
-      const frame = entry.frame;
-      scene.removeChild(frame);
-      entry.frame = null;
-      requestAnimationFrame(() => frame.destroy());
+  const kind = rect?.kind ?? null;
+  if (!rect || entry.frameKind !== kind) {
+    entry.frame = removeSprite(scene, entry.frame);
+    entry.frameKind = null;
+  }
+  if (!rect) return;
+  const photo = {
+    x: spriteData.x - rect.x,
+    y: spriteData.y - rect.y,
+    width: spriteData.width,
+    height: spriteData.height,
+  };
+  if (rect.kind === 'hero') {
+    const texture = textureFor(
+      galleryFrameCanvas(rect.style, rect.mat, rect.width, rect.height, rect.moulding, photo, 2400),
+    );
+    if (!entry.frame) {
+      entry.frame = new Sprite(texture);
+      scene.addChild(entry.frame);
+    } else if ((entry.frame as Sprite).texture !== texture) {
+      (entry.frame as Sprite).texture = texture;
     }
-    return;
+    entry.frame.x = rect.x;
+    entry.frame.y = rect.y;
+    entry.frame.width = rect.width;
+    entry.frame.height = rect.height;
+  } else {
+    const slice = gallerySliceCanvas(rect.style, rect.mat);
+    const texture = textureFor(slice.canvas);
+    let frame = entry.frame as NineSliceSprite | null;
+    if (!frame) {
+      frame = new NineSliceSprite({
+        texture,
+        leftWidth: slice.border,
+        topHeight: slice.border,
+        rightWidth: slice.border,
+        bottomHeight: slice.border,
+      });
+      entry.frame = frame;
+      scene.addChild(frame);
+    } else if (frame.texture !== texture) {
+      frame.texture = texture;
+    }
+    // The slice's moulding is drawn at a fixed size: scale it to this one.
+    const scale = rect.moulding / slice.moulding;
+    frame.scale.set(scale);
+    frame.width = rect.width / scale;
+    frame.height = rect.height / scale;
+    frame.x = rect.x;
+    frame.y = rect.y;
   }
-  const canvas = featuredFrameCanvas(rect.style, rect.width, rect.height, {
-    width: spriteData.sourceWidth ?? 1,
-    height: spriteData.sourceHeight ?? 1,
-  });
-  let texture = frameTextures.get(canvas);
-  if (!texture) {
-    texture = Texture.from(canvas);
-    frameTextures.set(canvas, texture);
-  }
-  if (!entry.frame) {
-    entry.frame = new Sprite(texture);
-    scene.addChild(entry.frame);
-  } else if (entry.frame.texture !== texture) {
-    entry.frame.texture = texture;
-  }
-  const frame = entry.frame;
-  frame.x = rect.x;
-  frame.y = rect.y;
-  frame.width = rect.width;
-  frame.height = rect.height;
+  entry.frameKind = rect.kind;
   // Just under its own photo, above every tile drawn before it.
-  frame.zIndex = zIndex - 0.5;
+  if (entry.frame) entry.frame.zIndex = zIndex - 0.5;
+}
+
+/** Shadows on a sunny day are a little cool: the blue sky lights them. */
+const SHADOW_TINT = 0x1c2030;
+
+function syncShadow(
+  scene: Container,
+  entry: SpriteEntry,
+  spriteData: PixiSceneSprite,
+  zIndex: number,
+): void {
+  const layers = spriteData.shadows ?? [];
+  while (entry.shadows.length > layers.length) removeSprite(scene, entry.shadows.pop() ?? null);
+  layers.forEach((layer, index) => {
+    let shadow = entry.shadows[index];
+    if (!shadow) {
+      shadow = new NineSliceSprite({
+        texture: textureFor(shadowSliceCanvas()),
+        leftWidth: SHADOW_SLICE_BORDER_PX,
+        topHeight: SHADOW_SLICE_BORDER_PX,
+        rightWidth: SHADOW_SLICE_BORDER_PX,
+        bottomHeight: SHADOW_SLICE_BORDER_PX,
+      });
+      shadow.tint = SHADOW_TINT;
+      entry.shadows.push(shadow);
+      scene.addChild(shadow);
+    }
+    // The canvas's shadow fades out over its outer SHADOW_SLICE_BLUR_PX:
+    // scale that to the blur, around the layer's rectangle.
+    const scale = layer.blur / SHADOW_SLICE_BLUR_PX;
+    shadow.scale.set(scale);
+    shadow.width = (layer.width + 2 * layer.blur) / scale;
+    shadow.height = (layer.height + 2 * layer.blur) / scale;
+    shadow.x = layer.x - layer.blur;
+    shadow.y = layer.y - layer.blur;
+    shadow.alpha = layer.alpha;
+    shadow.zIndex = zIndex - 0.9 + index * 0.1;
+  });
 }
 
 function applySpriteLayout(

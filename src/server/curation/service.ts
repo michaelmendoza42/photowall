@@ -5,7 +5,10 @@ import {
   isInHiddenFolder,
   VIEW_AS_GUEST,
   VIEW_AS_HEADER,
-  type FeaturedFrameChoice,
+  type FrameChoice,
+  type FrameMat,
+  type PhotoFrame,
+  type WallDisplaySettings,
 } from '../../shared/api/curation.js';
 import type { LibraryService } from '../snapshots/library-service.js';
 import type { PhotoRecord } from '../scanner/types.js';
@@ -37,8 +40,8 @@ import {
   readAlbumSettings,
   readOrCreateSessionSecret,
   readPhotoFlag,
-  readFeaturedFrames,
-  writeFeaturedFrames,
+  readPhotoFrames,
+  writePhotoFrames,
   photoFlagFile,
   writePhotoFlag,
   type PhotoFlag,
@@ -115,9 +118,9 @@ export class CurationService {
     private: null,
     featured: null,
   };
-  /** The frame each featured photo hangs in, by path. */
-  private featuredFrames = new Map<string, FeaturedFrameChoice>();
-  private featuredFramesMtimeMs: number | null = null;
+  /** The frame and mat the curator picked for a photo, by path. */
+  private photoFrames = new Map<string, PhotoFrame>();
+  private photoFramesMtimeMs: number | null = null;
 
   constructor(private readonly options: CurationServiceOptions) {}
 
@@ -126,7 +129,7 @@ export class CurationService {
     await this.reloadSettings();
     await this.reloadEdits();
     for (const flag of PHOTO_FLAGS) await this.reloadFlag(flag);
-    await this.reloadFeaturedFrames();
+    await this.reloadPhotoFrames();
     this.secret = await readOrCreateSessionSecret(this.paths);
     this.pinHash = await readPinHash(this.paths);
     await this.reloadVipPin();
@@ -154,8 +157,8 @@ export class CurationService {
         await this.reloadFlag(flag);
       }
     }
-    if ((await statMtime(this.getPaths().featuredFramesFile)) !== this.featuredFramesMtimeMs) {
-      await this.reloadFeaturedFrames();
+    if ((await statMtime(this.getPaths().framesFile)) !== this.photoFramesMtimeMs) {
+      await this.reloadPhotoFrames();
     }
     if ((await statMtime(this.getPaths().vipPinFile)) !== this.vipPinMtimeMs) {
       await this.reloadVipPin();
@@ -321,7 +324,7 @@ export class CurationService {
       starredPaths: this.flags.starred,
       privatePaths: this.flags.private,
       featuredPaths: this.flags.featured,
-      featuredFrames: this.featuredFrames,
+      photoFrames: this.photoFrames,
     });
     // One snapshot at a time; settings changes clear the cache.
     if (this.catalogCache.size > 4) this.catalogCache.clear();
@@ -378,17 +381,18 @@ export class CurationService {
    * it. An album (one folder) has at most one featured photo: featuring
    * another replaces the current one only with `replace`; otherwise
    * nothing changes and the current one comes back as `current`. `frame`
-   * sets the frame it hangs in (kept when left out, `random` at first).
+   * and `mat` set the frame it hangs in (a left-out mat is kept); left
+   * out, the photo keeps whatever frame it has.
    */
   setFeatured(
     photoId: string,
     featured: boolean,
     replace: boolean,
-    frame?: FeaturedFrameChoice,
+    frame?: FrameChoice,
+    mat?: FrameMat,
   ): Promise<{ photo: PhotoRecord } | { current: PhotoRecord }> {
     return this.serialize(async () => {
       await this.reloadFlag('featured');
-      await this.reloadFeaturedFrames();
       const photo = this.requirePhoto(photoId);
       const set = this.flags.featured;
       if (featured && isInHiddenFolder(photo.directoryPath)) {
@@ -396,14 +400,10 @@ export class CurationService {
       }
       if (!featured) {
         if (set.delete(photo.relativePath)) await this.saveFlag('featured');
-        if (this.featuredFrames.delete(photo.relativePath)) await this.saveFeaturedFrames();
         return { photo };
       }
       if (set.has(photo.relativePath)) {
-        if (frame && this.featuredFrames.get(photo.relativePath) !== frame) {
-          this.featuredFrames.set(photo.relativePath, frame);
-          await this.saveFeaturedFrames();
-        }
+        if (frame) await this.storeFrame(photo, frame, mat);
         return { photo };
       }
       // Paths of photos no longer in the library still hold their folder's
@@ -417,28 +417,56 @@ export class CurationService {
         );
         if (current) return { current };
       }
-      for (const relativePath of others) {
-        set.delete(relativePath);
-        this.featuredFrames.delete(relativePath);
-      }
+      for (const relativePath of others) set.delete(relativePath);
       set.add(photo.relativePath);
-      this.featuredFrames.set(photo.relativePath, frame ?? 'random');
       await this.saveFlag('featured');
-      await this.saveFeaturedFrames();
+      if (frame) await this.storeFrame(photo, frame, mat);
       return { photo };
     });
   }
 
-  private async saveFeaturedFrames(): Promise<void> {
-    await writeFeaturedFrames(this.getPaths(), this.featuredFrames);
-    this.featuredFramesMtimeMs = await statMtime(this.getPaths().featuredFramesFile);
+  /**
+   * Pick the frame and mat a photo hangs in. `random` with the frame's own
+   * mat is what an unpicked photo gets, so it clears the pick.
+   */
+  setPhotoFrame(photoId: string, frame: FrameChoice, mat: FrameMat): Promise<PhotoRecord> {
+    return this.serialize(async () => {
+      const photo = this.requirePhoto(photoId);
+      await this.storeFrame(photo, frame, mat);
+      return photo;
+    });
+  }
+
+  /** Inside `serialize`. A left-out mat keeps the photo's current one. */
+  private async storeFrame(photo: PhotoRecord, frame: FrameChoice, mat?: FrameMat): Promise<void> {
+    await this.reloadPhotoFrames();
+    const next = { frame, mat: mat ?? this.photoFrames.get(photo.relativePath)?.mat ?? 'frame' };
+    const current = this.photoFrames.get(photo.relativePath);
+    if (current?.frame === next.frame && current.mat === next.mat) return;
+    if (next.frame === 'random' && next.mat === 'frame') this.photoFrames.delete(photo.relativePath);
+    else this.photoFrames.set(photo.relativePath, next);
+    await this.savePhotoFrames();
+  }
+
+  /** The curator's defaults for wall spacing and photo-view frames. */
+  setDisplayDefaults(display: Partial<WallDisplaySettings>): Promise<AlbumSettings> {
+    return this.serialize(async () => {
+      await this.reloadSettings();
+      const current = this.requireSettings();
+      return this.saveSettings({ ...current, display: { ...current.display, ...display } });
+    });
+  }
+
+  private async savePhotoFrames(): Promise<void> {
+    await writePhotoFrames(this.getPaths(), this.photoFrames);
+    this.photoFramesMtimeMs = await statMtime(this.getPaths().framesFile);
     this.catalogCache.clear();
   }
 
-  private async reloadFeaturedFrames(): Promise<void> {
+  private async reloadPhotoFrames(): Promise<void> {
     const paths = this.getPaths();
-    this.featuredFramesMtimeMs = await statMtime(paths.featuredFramesFile);
-    this.featuredFrames = await readFeaturedFrames(paths);
+    this.photoFramesMtimeMs = await statMtime(paths.framesFile);
+    this.photoFrames = await readPhotoFrames(paths);
     this.catalogCache.clear();
   }
 
@@ -574,8 +602,14 @@ export class CurationService {
         await this.saveFlag(flag);
       }
     }
-    await this.reloadFeaturedFrames();
-    if (this.featuredFrames.delete(photo.relativePath)) await this.saveFeaturedFrames();
+    // Its frame follows it too.
+    await this.reloadPhotoFrames();
+    const frame = this.photoFrames.get(photo.relativePath);
+    if (frame && movedPhoto.relativePath !== photo.relativePath) {
+      this.photoFrames.delete(photo.relativePath);
+      this.photoFrames.set(movedPhoto.relativePath, frame);
+      await this.savePhotoFrames();
+    }
     this.catalogCache.clear();
     return { snapshot, photo: withEdit(movedPhoto, this.edits.get(movedPhoto.relativePath)) };
   }
