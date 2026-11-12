@@ -62,6 +62,12 @@ export interface RadialWallGroup {
    * columns wide at the group's center.
    */
   featured?: PhotoQueryRecord;
+  /**
+   * Photos laid out two columns wide (by id), each mapped to its shape at
+   * that width. In `photos` they keep their one-column shape, used if no
+   * room for two columns turns up.
+   */
+  wide?: ReadonlyMap<string, PhotoQueryRecord>;
 }
 
 export interface RadialWallLayout extends PackerResult {
@@ -94,6 +100,17 @@ export interface RadialWallOptions {
    * as frames hung over one another.
    */
   raggedEdge?: boolean;
+  /**
+   * The most a tile may be shortened (as a share of its height) to line up
+   * with a neighbour and break a seam. Framed walls lower it: shortening a
+   * framed cell shrinks its photo, while stretching only adds mat.
+   */
+  levelMaxShrink?: number;
+  /**
+   * Narrow columns take the tallest of the next few photos and wide
+   * columns the widest, so no wide photo ends up tiny in a narrow column.
+   */
+  shapeToColumn?: boolean;
 }
 
 /** Candidate columns considered for each placement. */
@@ -121,6 +138,28 @@ const REGION_SAMPLES_PER_SIDE = 64;
 const REGION_ITERATIONS = 60;
 const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
 const SHAPE_SHUFFLE_SEED = 'radial-wall-shapes';
+/**
+ * A two-column tile won't continue a straight seam beside it that already
+ * runs this many column widths.
+ */
+const SPAN_SEAM_MAX_RUN = 3;
+/** How much a column's bottom tile may stretch to meet its neighbour for a two-column tile. */
+const SPAN_STRETCH_MAX_RATIO = 0.15;
+/**
+ * The tallest step (in column widths) one photo may fill to bring two
+ * columns level for a two-column tile.
+ */
+const SPAN_FILL_MAX_WIDTH_RATIO = 1.5;
+/** Photos a column looks ahead through to find one whose shape suits its width. */
+const SHAPE_FIT_WINDOW = 8;
+
+/** 1 for a photo whose one-column shape is very wide (a panorama), else 0. */
+function wideFirst(photo: PhotoQueryRecord): number {
+  return photo.aspectRatio >= 1.6 ? 1 : 0;
+}
+
+/** Two-column tiles have their own shape buckets, after the one-column ones. */
+const SPAN_BUCKET_OFFSET = ASPECT_BUCKET_EDGES.length + 1;
 /**
  * A hero lands on two columns of equal height. A difference smaller than
  * a tile is closed by stretching or trimming one column's last tile (a
@@ -157,6 +196,8 @@ interface Slot {
   repeat: boolean;
   /** A hero tile, and the featured photo it shows. */
   hero?: PhotoQueryRecord;
+  /** Two columns wide, shaped by one of its group's wide photos. */
+  span?: boolean;
 }
 
 interface Pack {
@@ -165,6 +206,8 @@ interface Pack {
   photosLeft: number;
   /** Heroes that couldn't be placed: this height doesn't work. */
   heroesMissing: number;
+  /** Wide photos that got two columns, by id, in their two-column shape. */
+  spanned: Map<string, PhotoQueryRecord>;
 }
 
 /** A group's featured photo, the columns its hero tile spans and its size. */
@@ -287,9 +330,21 @@ export function buildRadialWallLayout(options: RadialWallOptions): RadialWallLay
   );
   const shapeQueues = groups.map((group, index) =>
     stableShufflePhotos(
-      group.photos.filter((photo) => photo !== heroPhotos[index]),
+      group.photos.filter((photo) => photo !== heroPhotos[index] && !group.wide?.has(photo.id)),
       `${SHAPE_SHUFFLE_SEED}:${index}`,
     ),
+  );
+  // Wide photos wait for two lined-up columns; each keeps its one-column
+  // shape in case none turns up.
+  const wideQueues = groups.map((group, index) =>
+    stableShufflePhotos(
+      group.photos.filter((photo) => photo !== heroPhotos[index] && group.wide?.has(photo.id)),
+      `${SHAPE_SHUFFLE_SEED}:wide:${index}`,
+    )
+      .map((photo) => ({ single: photo, wide: group.wide!.get(photo.id)! }))
+      // Two columns matter most to photos too wide for one (they'd be
+      // tiny); favorites come after, should room run short.
+      .sort((a, b) => wideFirst(b.single) - wideFirst(a.single)),
   );
 
   // Regions barely change across the heights tried, so build them once
@@ -303,7 +358,17 @@ export function buildRadialWallLayout(options: RadialWallOptions): RadialWallLay
     heroes.push({ group, photo, ...span, ...size, y: regions.seeds[group]!.y });
   });
   const packAt = (height: number): Pack =>
-    packShapes(shapeQueues, columns, height, regions, estimatedHeight / height, heroes);
+    packShapes(
+      shapeQueues,
+      columns,
+      height,
+      regions,
+      estimatedHeight / height,
+      heroes,
+      options.levelMaxShrink ?? LEVEL_MAX_CROP,
+      wideQueues,
+      options.shapeToColumn ?? false,
+    );
   const fits = (pack: Pack): boolean => pack.photosLeft === 0 && pack.heroesMissing === 0;
 
   // Smallest height whose interior holds every photo.
@@ -342,7 +407,7 @@ export function buildRadialWallLayout(options: RadialWallOptions): RadialWallLay
 
   const contentHeight = high;
   const { slots } = fitting;
-  const assigned = placeCenterOut(slots, groups, worldWidth, contentHeight);
+  const assigned = placeCenterOut(slots, groups, worldWidth, contentHeight, fitting.spanned);
   const reach = columns.length >= MIN_RING_COLUMNS && options.raggedEdge !== false
     ? raggedEdges(slots, worldWidth, contentHeight)
     : slots.map(() => ({ left: 0, right: 0, top: 0, bottom: 0, layer: 0 }));
@@ -547,11 +612,22 @@ function packShapes(
   /** Maps this pack's y onto the regions' y. */
   regionScaleY: number,
   heroes: readonly Hero[] = [],
+  /** The most a tile may be shortened to line up with a neighbour. */
+  levelMaxShrink = LEVEL_MAX_CROP,
+  /** Each group's wide photos, in one- and two-column shapes. */
+  wideQueues: ReadonlyArray<ReadonlyArray<{ single: PhotoQueryRecord; wide: PhotoQueryRecord }>> = [],
+  /** Narrow columns take tall photos and wide columns wide ones. */
+  shapeToColumn = false,
 ): Pack {
   const queues = shapeQueues.map((queue) => queue.slice());
   const heads = queues.map(() => 0);
   const repeatCursors = queues.map(() => 0);
-  let photosLeft = queues.reduce((sum, queue) => sum + queue.length, 0);
+  const wideHeads = queues.map(() => 0);
+  const wideTotal = wideQueues.reduce((sum, queue) => sum + queue.length, 0);
+  let widePlaced = 0;
+  const spanned = new Map<string, PhotoQueryRecord>();
+  const singleTotal = queues.reduce((sum, queue) => sum + queue.length, 0);
+  let photosLeft = singleTotal + wideTotal;
   const columns = initialColumns.map((column) => ({ ...column }));
   const minWidth =
     Math.min(...initialColumns.map((column) => column.width)) * RESPLIT_MIN_WIDTH_RATIO;
@@ -593,11 +669,35 @@ function packShapes(
     return { group: regions.ownerAt(x, regionY, anyGroup), repeat: true };
   };
 
-  const peek = (group: number, repeat: boolean): PhotoQueryRecord => {
+  const meanColumn =
+    initialColumns.reduce((sum, column) => sum + column.width, 0) / Math.max(1, initialColumns.length);
+  /**
+   * Which of the next few photos a column of `width` takes: with
+   * `shapeToColumn`, narrow columns take the tallest shape and wide ones
+   * the widest, so no wide photo ends up tiny in a narrow column.
+   */
+  const fitIndex = (group: number, width: number | undefined): number => {
+    const head = heads[group]!;
+    if (!shapeToColumn || width === undefined) return head;
+    const share = width / meanColumn;
+    if (share > 0.92 && share < 1.08) return head;
+    const queue = queues[group]!;
+    let pick = head;
+    for (let index = head + 1; index < Math.min(queue.length, head + SHAPE_FIT_WINDOW); index += 1) {
+      const better =
+        share <= 0.92
+          ? queue[index]!.aspectRatio < queue[pick]!.aspectRatio
+          : queue[index]!.aspectRatio > queue[pick]!.aspectRatio;
+      if (better) pick = index;
+    }
+    return pick;
+  };
+
+  const peek = (group: number, repeat: boolean, width?: number): PhotoQueryRecord => {
     const queue = queues[group]!;
     return repeat
       ? queue[repeatCursors[group]! % queue.length]!
-      : queue[heads[group]!]!;
+      : queue[fitIndex(group, width)]!;
   };
 
   const take = (group: number, repeat: boolean, width: number, gap: number | null): PhotoQueryRecord => {
@@ -619,7 +719,7 @@ function packShapes(
       return queue[pick]!;
     }
     const head = heads[group]!;
-    let pick = head;
+    let pick = gap === null ? fitIndex(group, width) : head;
     if (gap !== null) {
       let bestCrop = Number.POSITIVE_INFINITY;
       const end = Math.min(queue.length, head + CLOSE_FIT_WINDOW);
@@ -691,7 +791,9 @@ function packShapes(
         slot.height += level - tops[lower]!;
         tops[lower] = level;
       }
-      if (resplitBoundary(columns, boundary, minWidth, maxWidth)) seamStarts[boundary] = level;
+      if (resplitBoundary(columns, boundary, minWidth, maxWidth)) {
+        seamStarts[boundary] = level;
+      }
     }
   };
 
@@ -789,7 +891,131 @@ function packShapes(
     return 'placed';
   };
 
+  /** Where each column's last two-column tile ends (so none stacks on it). */
+  const spanTop = new Array<number>(columns.length).fill(-1);
+  const hasWide = (group: number): boolean =>
+    wideHeads[group]! < (wideQueues[group]?.length ?? 0);
+
+  /**
+   * Hang a wide photo across two lined-up interior columns, if a pair is
+   * level and it's that photo's turn: wide photos are spread evenly
+   * through the packing, so they land all over the wall, not just at the
+   * top where the first pairs line up.
+   */
+  const trySpan = (): boolean => {
+    const singlesPlaced = singleTotal - (photosLeft - (wideTotal - widePlaced));
+    const wideDue =
+      widePlaced < wideTotal &&
+      widePlaced / Math.max(1, wideTotal) <= singlesPlaced / Math.max(1, singleTotal) + 0.05;
+    if (!wideDue) return false;
+    // Of the pairs that work, prefer the one whose shared edge has run
+    // straight the longest: a tile across it ends that seam.
+    const candidates: Array<{ lane: number; run: number }> = [];
+    for (let lane = 1; lane + 2 <= lastLane; lane += 1) {
+      candidates.push({ lane, run: Math.min(tops[lane]!, tops[lane + 1]!) - seamStarts[lane]! });
+    }
+    candidates.sort((a, b) => b.run - a.run || a.lane - b.lane);
+    let fill: { lane: number; gap: number; top: number } | null = null;
+    for (const { lane } of candidates) {
+      const right = lane + 1;
+      const top = Math.max(tops[lane]!, tops[right]!);
+      if (Math.min(tops[lane]!, tops[right]!) <= ALIGN_EPSILON_PX) continue;
+      // Nearly level will do: the shorter column's bottom tile stretches a
+      // little to meet the other (on a framed wall, a little more mat).
+      const lower = tops[lane]! < tops[right]! ? lane : right;
+      const gap = top - tops[lower]!;
+      const stretched = gap > ALIGN_EPSILON_PX ? bottomSlot(lower) : null;
+      const uneven =
+        gap > ALIGN_EPSILON_PX && (!stretched || gap / stretched.height > SPAN_STRETCH_MAX_RATIO);
+      if (!isOpen(lane) || !isOpen(right) || locked.has(lane)) continue;
+      // Never stack two-column tiles: a run of them would be a double-wide
+      // column with straight edges, a long seam either side.
+      if (spanTop[lane] === tops[lane] || spanTop[right] === tops[right]) continue;
+      // Nor extend a seam beside it that already runs long.
+      const longSeam = [lane - 1, right].some(
+        (boundary) =>
+          boundary >= 0 &&
+          boundary < columns.length - 1 &&
+          top - seamStarts[boundary]! > columns[boundary]!.width * SPAN_SEAM_MAX_RUN,
+      );
+      if (longSeam) continue;
+      if (locked.has(lane - 1) && pendingHeroes.some((hero) => hero.lane === lane)) continue;
+      if (uneven) {
+        // Too far apart to stretch: remember the pair that one photo in the
+        // lower column would bring level (the smallest step up).
+        const column = columns[lower]!;
+        const smallest = column.width * DISPLAY_HEIGHT_MIN_WIDTH_RATIO;
+        const fits = gap >= smallest && gap <= column.width * SPAN_FILL_MAX_WIDTH_RATIO;
+        if (fits && !inRing(lower) && top <= height - smallest && (!fill || gap < fill.gap)) {
+          fill = { lane: lower, gap, top };
+        }
+        continue;
+      }
+      const width = columns[lane]!.width + columns[right]!.width;
+      const regionY = (top + width / 2) * regionScaleY;
+      const group = regions.ownerAt(columns[right]!.x, regionY, hasWide);
+      if (group < 0) continue;
+      const shape = wideQueues[group]![wideHeads[group]!]!.wide;
+      const bottom = top + computeDisplayHeight(width, shape);
+      const minTile = Math.max(columns[lane]!.width, columns[right]!.width) * DISPLAY_HEIGHT_MIN_WIDTH_RATIO;
+      if (bottom > height - minTile) continue;
+      if (stretched) {
+        stretched.height += gap;
+        tops[lower] = top;
+      }
+      slots.push({
+        x: columns[lane]!.x,
+        y: top,
+        width,
+        height: bottom - top,
+        lane,
+        group,
+        bucket: SPAN_BUCKET_OFFSET + aspectBucket(shape),
+        repeat: false,
+        span: true,
+      });
+      spanned.set(shape.id, shape);
+      wideHeads[group] = wideHeads[group]! + 1;
+      widePlaced += 1;
+      photosLeft -= 1;
+      lastSlot[lane] = -1;
+      lastSlot[right] = -1;
+      tops[lane] = bottom;
+      tops[right] = bottom;
+      spanTop[lane] = bottom;
+      spanTop[right] = bottom;
+      resplitAround(lane, right);
+      return true;
+    }
+    // No pair is level: level one with a photo picked to fit the step (on a
+    // framed wall its mat takes up any difference), so the wide photo hangs
+    // across it next.
+    if (fill) {
+      const column = columns[fill.lane]!;
+      const source = sourceAt(fill.lane, column.x + column.width / 2, tops[fill.lane]! + fill.gap / 2, false);
+      if (source.group >= 0) {
+        place(fill.lane, source, take(source.group, source.repeat, column.width, fill.gap), fill.top);
+        return true;
+      }
+    }
+    return false;
+  };
+
+  /** A group out of one-column photos hangs its waiting wide ones in one column. */
+  const releaseWide = (): void => {
+    wideQueues.forEach((queue, group) => {
+      if (heads[group]! < queues[group]!.length || !hasWide(group)) return;
+      for (let index = wideHeads[group]!; index < queue.length; index += 1) {
+        queues[group]!.push(queue[index]!.single);
+      }
+      widePlaced += queue.length - wideHeads[group]!;
+      wideHeads[group] = queue.length;
+    });
+  };
+
   while (open > 0) {
+    releaseWide();
+    if (trySpan()) continue;
     let heroPlaced = false;
     for (let index = 0; index < pendingHeroes.length; index += 1) {
       const hero = pendingHeroes[index]!;
@@ -822,8 +1048,8 @@ function packShapes(
       const column = columns[lane]!;
       const source = sourceAt(lane, column.x + column.width / 2, tops[lane]! + column.width / 2, false);
       sources.set(lane, source);
-      return { group: source.group, photo: peek(source.group, source.repeat) };
-    });
+      return { group: source.group, photo: peek(source.group, source.repeat, column.width) };
+    }, levelMaxShrink);
     const column = columns[choice.lane]!;
     const minTile = column.width * DISPLAY_HEIGHT_MIN_WIDTH_RATIO;
     if (choice.bottom > height - minTile) {
@@ -837,7 +1063,7 @@ function packShapes(
     place(choice.lane, source, take(source.group, source.repeat, column.width, null), choice.bottom);
   }
 
-  return { slots, photosLeft, heroesMissing: heroesMissing + pendingHeroes.length };
+  return { slots, photosLeft, heroesMissing: heroesMissing + pendingHeroes.length, spanned };
 }
 
 function chooseColumn(
@@ -847,6 +1073,8 @@ function chooseColumn(
   height: number,
   isOpen: (index: number) => boolean,
   photoFor: (lane: number) => { group: number; photo: PhotoQueryRecord },
+  /** The most a tile may be shortened to line up with a neighbour. */
+  maxShrink = LEVEL_MAX_CROP,
 ): { lane: number; group: number; bottom: number } {
   // The few lowest open columns, by linear scan (worlds can have 100+).
   const candidates: number[] = [];
@@ -891,7 +1119,9 @@ function chooseColumn(
       const sliver = width * DISPLAY_HEIGHT_MIN_WIDTH_RATIO;
       if (target < height - ALIGN_EPSILON_PX && target > height - sliver) continue;
       const crop = computeCropPenalty(width, photo, target - top);
-      if (crop > LEVEL_MAX_CROP) continue;
+      // Shortening a framed cell shrinks its photo; stretching only adds mat.
+      const shortening = target - top < computeDisplayHeight(width, photo);
+      if (crop > (shortening ? maxShrink : LEVEL_MAX_CROP)) continue;
       const boundary = Math.min(lane, neighbor);
       const reference = columns[boundary]!.width;
       const run = Math.min(top, target) - seamStarts[boundary]!;
@@ -934,12 +1164,15 @@ function placeCenterOut(
   groups: readonly RadialWallGroup[],
   worldWidth: number,
   worldHeight: number,
+  /** Wide photos that got two columns, in their two-column shape. */
+  spanned: ReadonlyMap<string, PhotoQueryRecord> = new Map(),
 ): {
   photos: PhotoQueryRecord[];
   duplicate: boolean[];
   groupCenters: Map<string, { x: number; y: number }>;
 } {
-  const bucketCount = ASPECT_BUCKET_EDGES.length + 1;
+  // One-column shapes, then two-column ones.
+  const bucketCount = 2 * SPAN_BUCKET_OFFSET;
   const centerX = worldWidth / 2;
   const centerY = worldHeight / 2;
   const originalSlots: number[][][] = groups.map(() =>
@@ -975,7 +1208,11 @@ function placeCenterOut(
     // The hero shows its photo; the other tiles share out the rest.
     const rest = hero ? group.photos.filter((photo) => photo !== hero) : group.photos;
     const byBucket: PhotoQueryRecord[][] = Array.from({ length: bucketCount }, () => []);
-    for (const photo of starredFirst(rest)) byBucket[aspectBucket(photo)]!.push(photo);
+    for (const photo of starredFirst(rest)) {
+      const wide = spanned.get(photo.id);
+      if (wide) byBucket[SPAN_BUCKET_OFFSET + aspectBucket(wide)]!.push(photo);
+      else byBucket[aspectBucket(photo)]!.push(photo);
+    }
     let sumX = 0;
     let sumY = 0;
     let count = 0;

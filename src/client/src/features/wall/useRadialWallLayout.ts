@@ -120,6 +120,9 @@ export function buildWallLayout(input: {
     ...options,
     groups: spacing === 'framed' ? framedGroups(featured, radialMeanColumnWidth(options), gap) : featured,
     raggedEdge: spacing === 'none',
+    ...(spacing === 'framed'
+      ? { shapeToColumn: true, levelMaxShrink: FRAMED_LEVEL_MAX_SHRINK }
+      : {}),
     ...(boxWidth > 0 && boxHeight > 0
       ? { featuredBox: { width: boxWidth, height: boxHeight } }
       : {}),
@@ -144,6 +147,11 @@ export function buildWallLayout(input: {
   };
 }
 
+/** How much a framed cell may be shortened to line up with a neighbour. */
+const FRAMED_LEVEL_MAX_SHRINK = 0.1;
+/** Photos at least this wide get two columns on a framed wall. */
+const FRAMED_WIDE_ASPECT = 1.9;
+
 /** A wall layout, with the gap its tiles were drawn in from their cells. */
 export type WallLayout = RadialWallLayout & { gap: number; spacing: WallSpacing };
 
@@ -156,14 +164,23 @@ function framedGroups(
   columnWidth: number,
   gap: number,
 ): RadialWallGroup[] {
-  return groups.map((group) => ({
-    ...group,
-    photos: group.photos.map((photo) => {
+  const shaped = (photo: PhotoQueryRecord, width: number): PhotoQueryRecord => {
+    const aspect = framedCellAspect(photo, width, gap);
+    return { ...photo, width: Math.round(aspect * 10000), height: 10000, aspectRatio: aspect };
+  };
+  return groups.map((group) => {
+    const wide = new Map<string, PhotoQueryRecord>();
+    const photos = group.photos.map((photo) => {
       if (photo === group.featured) return photo;
-      const aspect = framedCellAspect(photo, columnWidth, gap);
-      return { ...photo, width: Math.round(aspect * 10000), height: 10000, aspectRatio: aspect };
-    }),
-  }));
+      // Favorites hang larger, and very wide photos would be too small in
+      // one column: both get two columns where they fit.
+      if (photo.starred || photo.width / Math.max(1, photo.height) >= FRAMED_WIDE_ASPECT) {
+        wide.set(photo.id, shaped(photo, 2 * columnWidth));
+      }
+      return shaped(photo, columnWidth);
+    });
+    return { ...group, photos, ...(wide.size > 0 ? { wide } : {}) };
+  });
 }
 
 function roundBox(size: number): number {

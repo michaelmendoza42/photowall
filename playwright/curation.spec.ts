@@ -726,20 +726,25 @@ test('the curator hangs the wall with spacing and frames; guests start there and
   await expect(guest.getByTestId('controls-default-spacing-none')).toHaveCount(0);
   await openControls(guest);
   const veil = guest.getByTestId('wall-veil');
-  // Record how dark the veil gets, every frame.
+  // Record each step of the fade, and the spacing the wall shows at it,
+  // as they happen (sampling frames can miss a short fade on a busy machine).
   await veil.evaluate((element) => {
-    const record = window as unknown as { veilMax: number };
-    record.veilMax = 0;
-    const sample = () => {
-      record.veilMax = Math.max(record.veilMax, Number(getComputedStyle(element).opacity));
-      requestAnimationFrame(sample);
-    };
-    requestAnimationFrame(sample);
+    const record = window as unknown as { veilSteps: string[]; veilObserver: MutationObserver };
+    record.veilSteps = [];
+    // Kept on window so it lives as long as the page.
+    record.veilObserver = new MutationObserver(() => {
+      const spacing = document.querySelector('[data-testid="wall-canvas"]')?.getAttribute('data-spacing');
+      const step = `${(element as HTMLElement).style.opacity}@${spacing}`;
+      if (record.veilSteps.at(-1) !== step) record.veilSteps.push(step);
+    });
+    record.veilObserver.observe(element, { attributes: true, attributeFilter: ['style'] });
   });
   await guest.getByTestId('controls-spacing-spaced').click();
   await expect(guestWall).toHaveAttribute('data-spacing', 'spaced');
-  await expect.poll(async () => Number(await veil.evaluate((v) => getComputedStyle(v).opacity))).toBeLessThan(0.05);
-  expect(await guest.evaluate(() => (window as unknown as { veilMax: number }).veilMax)).toBeGreaterThan(0.9);
+  // Fully black while the wall still shows the old spacing, clear after.
+  const steps = () => guest.evaluate(() => (window as unknown as { veilSteps: string[] }).veilSteps);
+  await expect.poll(async () => (await steps()).at(-1)).toBe('0@spaced');
+  expect((await steps())[0]).toBe('1@framed');
   await guest.getByTestId('controls-lightbox-frames').uncheck();
   await guest.getByTestId('controls-spacing-none').click();
   await expect(guestWall).toHaveAttribute('data-spacing', 'none');
