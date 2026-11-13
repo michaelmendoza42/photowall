@@ -10,6 +10,7 @@ import {
   turnedSize,
   type PhotoEdit,
 } from '../../shared/api/edits.js';
+import { frameToTurned, frameWarp, hasWarp } from '../../shared/api/editWarp.js';
 
 interface RawImage {
   data: Buffer;
@@ -25,7 +26,9 @@ const RAW = { depth: 'uchar' } as const;
  * Geometry matches the browser editor: the photo turns in quarter steps,
  * mirrors in its turned axes, then straightens about its center, zoomed
  * just enough to cover its frame. The crop is a fraction of that frame.
- * Colors use the shared matrix the editor's ColorMatrixFilter uses.
+ * Perspective and lens correction (editWarp.ts) replace that rotate step
+ * with a projective resample. Colors use the shared matrix the editor's
+ * ColorMatrixFilter uses.
  */
 export async function renderEdit(
   sourcePath: string,
@@ -40,7 +43,9 @@ export async function renderEdit(
 
   // Decode once, shrunk to the detail the output needs (with headroom).
   const turnedSource = turnedSize(sourceWidth, sourceHeight, edit.rotation);
-  const cover = straightenCover(turnedSource.width, turnedSource.height, edit.straighten);
+  const cover = hasWarp(edit)
+    ? warpCover(turnedSource.width, turnedSource.height, edit)
+    : straightenCover(turnedSource.width, turnedSource.height, edit.straighten);
   const cropLong = Math.max(
     (edit.crop.w * turnedSource.width) / cover,
     (edit.crop.h * turnedSource.height) / cover,
@@ -59,7 +64,10 @@ export async function renderEdit(
   );
 
   let extract: { left: number; top: number; width: number; height: number } | null = null;
-  if (hasGeometry(edit)) {
+  if (hasWarp(edit)) {
+    if (edit.rotation !== 0) image = await toRaw(fromRaw(image).rotate(edit.rotation));
+    image = warpCrop(image, edit, longEdge);
+  } else if (hasGeometry(edit)) {
     const odd = edit.rotation === 90 || edit.rotation === 270;
     // sharp mirrors before it rotates, so a mirror seen after a quarter
     // turn is the other axis before it.
@@ -115,6 +123,59 @@ export async function renderEdit(
   if (matrix) applyColorMatrixToRgb(out.data, out.info.channels, matrix);
   if (edit.grain > 0) addGrain(out, grainNoise(edit.grain), seedOf(edit));
   return fromRaw(out);
+}
+
+/** How much the warp zooms the photo in (frame px per turned px, at the center). */
+function warpCover(width: number, height: number, edit: PhotoEdit): number {
+  const warp = frameWarp(width, height, edit);
+  const [x0, y0] = warp.toFrame([width / 2, height / 2]);
+  const [x1, y1] = warp.toFrame([width / 2 + 1, height / 2]);
+  return Math.max(1e-6, Math.hypot(x1 - x0, y1 - y0));
+}
+
+/**
+ * The crop of a perspective/lens-corrected photo, resampled straight from
+ * the turned image: every output pixel is traced back through the frame
+ * (mirroring included) and the warp to a turned-image position, then
+ * sampled bilinearly. Output is the crop at most `longEdge` on its long side.
+ */
+function warpCrop(image: RawImage, edit: PhotoEdit, longEdge: number): RawImage {
+  const { width: W, height: H, channels } = image.info;
+  const warp = frameWarp(W, H, edit);
+  const cropW = edit.crop.w * W;
+  const cropH = edit.crop.h * H;
+  const s = Math.min(1, longEdge / Math.max(cropW, cropH));
+  const outW = Math.max(1, Math.round(cropW * s));
+  const outH = Math.max(1, Math.round(cropH * s));
+  const out = Buffer.alloc(outW * outH * channels);
+  const src = image.data;
+  const x0 = edit.crop.x * W;
+  const y0 = edit.crop.y * H;
+  for (let oy = 0; oy < outH; oy++) {
+    const fy = y0 + ((oy + 0.5) * cropH) / outH;
+    for (let ox = 0; ox < outW; ox++) {
+      const fx = x0 + ((ox + 0.5) * cropW) / outW;
+      // Pixel centers sit at +0.5; sample in index space.
+      const [tx, ty] = frameToTurned(warp, W, H, edit, [fx, fy]);
+      const sx = Math.min(W - 1, Math.max(0, tx - 0.5));
+      const sy = Math.min(H - 1, Math.max(0, ty - 0.5));
+      const ix = Math.min(W - 2, Math.floor(sx));
+      const iy = Math.min(H - 2, Math.floor(sy));
+      const ax = sx - ix;
+      const ay = sy - iy;
+      const i00 = (iy * W + ix) * channels;
+      const i10 = i00 + channels;
+      const i01 = i00 + W * channels;
+      const i11 = i01 + channels;
+      const o = (oy * outW + ox) * channels;
+      for (let c = 0; c < channels; c++) {
+        const top = src[i00 + c]! + (src[i10 + c]! - src[i00 + c]!) * ax;
+        const bottom = src[i01 + c]! + (src[i11 + c]! - src[i01 + c]!) * ax;
+        out[o + c] = Math.round(top + (bottom - top) * ay);
+      }
+    }
+  }
+  return { data: out, info: { width: outW, height: outH, channels } };
 }
 
 function outputLongEdge(

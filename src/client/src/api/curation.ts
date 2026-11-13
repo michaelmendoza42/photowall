@@ -25,7 +25,12 @@ import {
   type ShareCreateRequest,
   type ShareRecord,
 } from '../../../shared/api/curation.js';
-import { curationPhotoEditPath, type PhotoEdit } from '../../../shared/api/edits.js';
+import {
+  curationPhotoCameraPath,
+  curationPhotoEditPath,
+  type PhotoCameraResponse,
+  type PhotoEdit,
+} from '../../../shared/api/edits.js';
 import type { PhotoQueryRecord } from '../../../shared/api/photos.js';
 import { fetchJson } from './http.js';
 
@@ -132,6 +137,10 @@ export function restorePhoto(photoId: string): Promise<PhotoMoveResponse> {
 
 export function savePhotoEdit(photoId: string, edit: PhotoEdit): Promise<PhotoEditResponse> {
   return fetchJson(curationPhotoEditPath(photoId), { method: 'PUT', body: { edit } });
+}
+
+export function fetchPhotoCamera(photoId: string): Promise<PhotoCameraResponse> {
+  return fetchJson(curationPhotoCameraPath(photoId));
 }
 
 export function revertPhotoEdit(photoId: string): Promise<PhotoEditResponse> {

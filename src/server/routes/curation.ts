@@ -33,6 +33,9 @@ import { ShareCreateSchema, type ShareService } from '../curation/shares.js';
 import type { AlbumSettings } from '../curation/storage.js';
 import { PhotoEditSchema } from '../curation/edits.js';
 import type { PhotoEditResponse } from '../../shared/api/curation.js';
+import type { PhotoCameraResponse } from '../../shared/api/edits.js';
+import { readFocal35 } from '../media/camera-info.js';
+import { resolveSafeSourcePath } from '../media/source-resolver.js';
 
 const FolderSchema = z.string().max(1024).regex(FOLDER_PATH_PATTERN);
 const LoginSchema = z.object({ pin: z.string().min(1).max(256) });
@@ -325,6 +328,18 @@ export async function registerCurationRoutes(
     } catch (err) {
       return sendMoveError(reply, err);
     }
+  });
+
+  // The editor's perspective correction models the lens with the photo's focal length.
+  app.get('/api/curation/photos/:photoId/camera', async (request, reply) => {
+    if (!requireCurator(request, reply)) return reply;
+    const params = PhotoParamsSchema.safeParse(request.params);
+    const snapshot = library.getActiveSnapshot();
+    if (!params.success || !snapshot) return sendError(reply, 404, { error: 'photo_not_found' });
+    const source = await resolveSafeSourcePath(snapshot, params.data.photoId);
+    if (!source.ok) return sendError(reply, 404, { error: 'photo_not_found' });
+    const focal35 = await readFocal35(source.absolutePath).catch(() => null);
+    return { focal35 } satisfies PhotoCameraResponse;
   });
 
   app.post(CURATION_RESCAN_PATH, async (request, reply) => {

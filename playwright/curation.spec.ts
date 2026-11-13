@@ -303,6 +303,53 @@ test('closing the editor leaves the wall drawing', async ({ page }) => {
   expect(errors).toEqual([]);
 });
 
+test('the curator corrects perspective and lens; the server renders the corrected photo', async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on('pageerror', (err) => errors.push(err.message));
+  await page.request.post('/api/curation/session', { data: { pin: PIN } });
+  await page.goto('/');
+  await expect(page.getByTestId('wall-shell')).toHaveAttribute('data-screen', 'ready', {
+    timeout: 60_000,
+  });
+  const tile = await pickCenteredTile(page);
+  const photoId = (await tile.getAttribute('data-photo-id'))!;
+  const photo = await photoById(page.request, photoId);
+  const originalBytes = await fs.readFile(path.join(libraryRoot, photo.relativePath));
+  await tile.click();
+  await page.getByTestId('focused-photo-edit').click();
+  const editor = page.getByTestId('photo-editor');
+  await expect(page.getByTestId('photo-editor-stage')).not.toContainText('Loading photo');
+  await page.getByTestId('photo-editor-tab-crop').click();
+
+  // Auto loads the detector on first use and always says what it did.
+  await page.getByTestId('photo-editor-auto-general').click();
+  await expect(page.getByTestId('photo-editor-auto-status')).toBeVisible({ timeout: 60_000 });
+
+  await page.getByTestId('photo-editor-perspective-vertical').fill('8');
+  await page.getByTestId('photo-editor-lens').fill('20');
+  await page.getByTestId('photo-editor-save').click();
+  await expect(page.getByTestId('curation-toast')).toContainText(`Edited: ${photo.filename}`);
+  await expect(editor).toHaveCount(0);
+
+  const records = (await page.request.get('/api/photos?limit=5000').then((r) => r.json())) as {
+    photos: { id: string; edit?: { perspectiveVertical: number; lensDistortion: number; focal35: number } }[];
+  };
+  const edit = records.photos.find((p) => p.id === photoId)!.edit!;
+  expect(edit.perspectiveVertical).toBeCloseTo(8);
+  expect(edit.lensDistortion).toBe(20);
+  expect(edit.focal35).toBeGreaterThanOrEqual(12);
+  // The focused view shows the server's corrected render.
+  const image = page.getByTestId('focused-photo-image');
+  await expect(image).toHaveAttribute('src', /&v=[\d.]+-\w+$/);
+  const rendered = await page.request.get((await image.getAttribute('src'))!);
+  expect(rendered.status()).toBe(200);
+  expect(rendered.headers()['content-type']).toMatch(/^image\//);
+  expect(await fs.readFile(path.join(libraryRoot, photo.relativePath))).toEqual(originalBytes);
+  expect(errors).toEqual([]);
+});
+
 test('a share link reopens the same albums for someone else', async ({ page, browser }) => {
   const curator = await playwrightRequest.newContext({ baseURL: BASE_URL });
   await curator.post('/api/curation/session', { data: { pin: PIN } });

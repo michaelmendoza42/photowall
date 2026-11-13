@@ -8,6 +8,7 @@ import {
   normalizeEdit,
   type PhotoEdit,
 } from '../../shared/api/edits.js';
+import { DEFAULT_FOCAL35 } from '../../shared/api/editWarp.js';
 import type { PhotoRecord } from '../scanner/types.js';
 import {
   CURATION_SCHEMA_VERSION,
@@ -22,6 +23,11 @@ const unit = (limit: number) => z.number().finite().min(-limit).max(limit);
 export const PhotoEditSchema = z.object({
   rotation: z.union([z.literal(0), z.literal(90), z.literal(180), z.literal(270)]),
   straighten: unit(EDIT_LIMITS.straighten),
+  // Added with perspective correction; older recipes read as neutral.
+  perspectiveVertical: unit(EDIT_LIMITS.perspective).default(0),
+  perspectiveHorizontal: unit(EDIT_LIMITS.perspective).default(0),
+  lensDistortion: unit(EDIT_LIMITS.lensDistortion).default(0),
+  focal35: z.number().finite().min(EDIT_LIMITS.focal35Min).max(EDIT_LIMITS.focal35Max).default(DEFAULT_FOCAL35),
   flipX: z.boolean(),
   flipY: z.boolean(),
   crop: z.object({

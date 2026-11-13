@@ -5,6 +5,8 @@ import {
   Container,
   Graphics,
   ImageSource,
+  Mesh,
+  MeshGeometry,
   NoiseFilter,
   Sprite,
   Texture,
@@ -18,6 +20,8 @@ import {
   turnedSize,
   type PhotoEdit,
 } from '../../../../shared/api/edits.js';
+import { hasWarp } from '../../../../shared/api/editWarp.js';
+import { warpMeshData, warpMeshKey } from './warpMesh.js';
 import type { ScreenRect } from './cropMath.js';
 import { destroyPixiApp } from '../wall/destroyPixiApp.js';
 
@@ -30,6 +34,8 @@ const PIXI_BLUR_SIGMA_PER_STRENGTH = 1.37;
  * Pixi preview of a light edit. The scene graph mirrors how the server
  * renders: view (fit + crop mask) > flip (mirror in turned axes) >
  * photo (quarter turn + straighten, zoomed to cover) > sprite (colors).
+ * With perspective or lens correction, a mesh warped by the shared math
+ * (editWarp.ts) stands in for the rotated sprite.
  */
 export class EditorScene {
   private readonly app = new Application();
@@ -41,6 +47,9 @@ export class EditorScene {
   private readonly blur = new BlurFilter({ strength: 0, quality: 4 });
   private readonly noise = new NoiseFilter({ noise: 0, seed: 0.5 });
   private sprite: Sprite | null = null;
+  private mesh: Mesh<MeshGeometry> | null = null;
+  private meshKey = '';
+  private image: HTMLImageElement | null = null;
   private texture: Texture | null = null;
   /** While cropping, the crop frame stays where it is on screen. */
   private cropFrame: ScreenRect | null = null;
@@ -88,7 +97,30 @@ export class EditorScene {
     this.sprite = new Sprite(this.texture);
     this.sprite.anchor.set(0.5);
     this.photo.addChild(this.sprite);
+    this.image = image;
     return { width: image.naturalWidth, height: image.naturalHeight };
+  }
+
+  /** The loaded photo, unedited (Auto perspective reads its pixels). */
+  photoImage(): HTMLImageElement | null {
+    return this.image;
+  }
+
+  /** The warped mesh for `edit`, created on first use and rebuilt only when the warp changes. */
+  private warpedMesh(edit: PhotoEdit): Mesh<MeshGeometry> {
+    const texture = this.texture!;
+    const key = warpMeshKey(edit);
+    if (!this.mesh) {
+      const data = warpMeshData(texture.width, texture.height, edit);
+      this.mesh = new Mesh({ geometry: new MeshGeometry(data), texture });
+      this.mesh.label = 'warped-photo';
+      this.photo.addChild(this.mesh);
+      this.meshKey = key;
+    } else if (key !== this.meshKey) {
+      this.mesh.geometry.positions = warpMeshData(texture.width, texture.height, edit).positions;
+      this.meshKey = key;
+    }
+    return this.mesh;
   }
 
   /** Forget where the crop frame was, so the next render fits it again. */
@@ -106,8 +138,13 @@ export class EditorScene {
     const { sprite } = this;
     if (!sprite || this.destroyed) return null;
     const { width: W, height: H } = turnedSize(sprite.texture.width, sprite.texture.height, edit.rotation);
-    this.photo.angle = edit.rotation + edit.straighten;
-    this.photo.scale.set(straightenCover(W, H, edit.straighten));
+    const warped = hasWarp(edit);
+    // The mesh carries the turn, straighten and cover zoom in its vertices.
+    const shown: Sprite | Mesh<MeshGeometry> = warped ? this.warpedMesh(edit) : sprite;
+    sprite.visible = !warped;
+    if (this.mesh) this.mesh.visible = warped;
+    this.photo.angle = warped ? 0 : edit.rotation + edit.straighten;
+    this.photo.scale.set(warped ? 1 : straightenCover(W, H, edit.straighten));
     this.flip.scale.set(edit.flipX ? -1 : 1, edit.flipY ? -1 : 1);
 
     const { crop } = edit;
@@ -158,7 +195,9 @@ export class EditorScene {
       this.noise.noise = grainNoise(edit.grain);
       filters.push(this.noise);
     }
-    sprite.filters = filters.length > 0 ? filters : null;
+    sprite.filters = null;
+    if (this.mesh) this.mesh.filters = null;
+    shown.filters = filters.length > 0 ? filters : null;
     return frame;
   }
 

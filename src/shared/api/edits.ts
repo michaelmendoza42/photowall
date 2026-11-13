@@ -1,4 +1,6 @@
 // Light photo edits: the curator's non-destructive recipe for one photo.
+import { DEFAULT_FOCAL35, hasWarp } from './editWarp.js';
+
 //
 // The original file is never changed. A recipe is stored beside the
 // curation settings and applied when the server renders a photo's
@@ -45,6 +47,17 @@ export interface PhotoEdit {
   rotation: EditRotation;
   /** Degrees clockwise; the photo zooms in so no blank corners show. */
   straighten: number;
+  /**
+   * Perspective, degrees (see editWarp.ts): vertical tips the photo toward
+   * or away from you (converging verticals), horizontal turns it left or
+   * right. Like straighten, the photo zooms so no blank corners show.
+   */
+  perspectiveVertical: number;
+  perspectiveHorizontal: number;
+  /** -100..100; positive straightens barrel distortion (lines bowing outward). */
+  lensDistortion: number;
+  /** 35mm-equivalent focal length the perspective model assumes (from EXIF when known). */
+  focal35: number;
   /** Mirror left-right / top-bottom, as seen after the quarter turn. */
   flipX: boolean;
   flipY: boolean;
@@ -68,6 +81,10 @@ export interface PhotoEdit {
 
 export const EDIT_LIMITS = {
   straighten: 45,
+  perspective: 30,
+  lensDistortion: 100,
+  focal35Min: 12,
+  focal35Max: 200,
   temperature: 1,
   exposure: 2,
   brightness: 1,
@@ -85,6 +102,10 @@ export const FULL_CROP: EditCrop = { x: 0, y: 0, w: 1, h: 1 };
 export const NEUTRAL_EDIT: PhotoEdit = {
   rotation: 0,
   straighten: 0,
+  perspectiveVertical: 0,
+  perspectiveHorizontal: 0,
+  lensDistortion: 0,
+  focal35: DEFAULT_FOCAL35,
   flipX: false,
   flipY: false,
   crop: FULL_CROP,
@@ -101,6 +122,16 @@ export const NEUTRAL_EDIT: PhotoEdit = {
 
 export function curationPhotoEditPath(photoId: string): string {
   return `/api/curation/photos/${encodeURIComponent(photoId)}/edit`;
+}
+
+/** The camera facts the editor's perspective correction needs. */
+export function curationPhotoCameraPath(photoId: string): string {
+  return `/api/curation/photos/${encodeURIComponent(photoId)}/camera`;
+}
+
+export interface PhotoCameraResponse {
+  /** 35mm-equivalent focal length from EXIF, or null when the photo doesn't say. */
+  focal35: number | null;
 }
 
 export interface PhotoEditRequest {
@@ -123,6 +154,13 @@ export function normalizeEdit(edit: PhotoEdit): PhotoEdit {
   return {
     rotation: edit.rotation,
     straighten: round(clamp(edit.straighten, EDIT_LIMITS.straighten), 2),
+    perspectiveVertical: round(clamp(edit.perspectiveVertical ?? 0, EDIT_LIMITS.perspective), 2),
+    perspectiveHorizontal: round(clamp(edit.perspectiveHorizontal ?? 0, EDIT_LIMITS.perspective), 2),
+    lensDistortion: round(clamp(edit.lensDistortion ?? 0, EDIT_LIMITS.lensDistortion), 1),
+    focal35: round(
+      Math.min(EDIT_LIMITS.focal35Max, Math.max(EDIT_LIMITS.focal35Min, edit.focal35 ?? DEFAULT_FOCAL35)),
+      1,
+    ),
     flipX: edit.flipX,
     flipY: edit.flipY,
     crop: {
@@ -153,6 +191,7 @@ export function hasGeometry(edit: PhotoEdit): boolean {
   return (
     edit.rotation !== 0 ||
     edit.straighten !== 0 ||
+    hasWarp(edit) ||
     edit.flipX ||
     edit.flipY ||
     crop.x !== 0 ||
@@ -186,6 +225,9 @@ export function editVersion(edit: PhotoEdit): string {
     e.blur,
     e.grain,
     e.look,
+    // Appended only when used, so edits saved before perspective existed
+    // keep their versions (and their cached renders).
+    ...(hasWarp(e) ? [e.perspectiveVertical, e.perspectiveHorizontal, e.lensDistortion, e.focal35] : []),
   ].join('|');
   let hash = 0x811c9dc5;
   for (let i = 0; i < text.length; i++) {

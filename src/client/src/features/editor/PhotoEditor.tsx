@@ -11,11 +11,20 @@ import {
   type EditRotation,
   type PhotoEdit,
 } from '../../../../shared/api/edits.js';
+import {
+  DEFAULT_FOCAL35,
+  frameWarp,
+  hasWarp,
+  turnedToFrame,
+  type Point,
+} from '../../../../shared/api/editWarp.js';
 import { mediaOriginalPath } from '../../../../shared/api/media.js';
 import type { PhotoQueryRecord } from '../../../../shared/api/photos.js';
+import { fetchPhotoCamera } from '../../api/curation.js';
 import { CropOverlay } from './CropOverlay.js';
-import { centeredCrop, type ScreenRect } from './cropMath.js';
+import { centeredCrop, keepCropInside, type ScreenRect } from './cropMath.js';
 import { EditorScene } from './editorScene.js';
+import { autoPerspective, type AutoMode } from './perspective/autoPerspective.js';
 
 type Tab = 'crop' | 'adjust' | 'looks';
 const TABS = ['crop', 'adjust', 'looks'] as const;
@@ -120,14 +129,31 @@ export function PhotoEditor(props: PhotoEditorProps): JSX.Element {
   const { photo, saving, error, onCancel, onSave, onRevert } = props;
   const stageRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<EditorScene | null>(null);
-  const [edit, setEdit] = useState<PhotoEdit>(() => photo.edit ?? NEUTRAL_EDIT);
+  // Defaults first, so a recipe saved before a field existed still has it.
+  const [edit, setEdit] = useState<PhotoEdit>(() => ({ ...NEUTRAL_EDIT, ...photo.edit }));
   const [tab, setTab] = useState<Tab>(readStoredTab);
   const [aspect, setAspect] = useState<Aspect>('free');
   const [frame, setFrame] = useState<ScreenRect | null>(null);
   const [size, setSize] = useState<{ width: number; height: number } | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [layoutTick, setLayoutTick] = useState(0);
+  /** Focal length from the photo's EXIF: undefined while loading, null when unknown. */
+  const [cameraFocal, setCameraFocal] = useState<number | null | undefined>(undefined);
+  const [autoBusy, setAutoBusy] = useState<AutoMode | null>(null);
+  const [autoMessage, setAutoMessage] = useState<string | null>(null);
+  /** The frame Auto found, in the turned photo, for "Crop to frame". */
+  const [found, setFound] = useState<{ quad: Point[]; rotation: EditRotation; lens: number } | null>(null);
   const cropping = tab === 'crop';
+
+  useEffect(() => {
+    let live = true;
+    fetchPhotoCamera(photo.id)
+      .then((camera) => live && setCameraFocal(camera.focal35))
+      .catch(() => live && setCameraFocal(null));
+    return () => {
+      live = false;
+    };
+  }, [photo.id]);
 
   useEffect(() => {
     const stage = stageRef.current;
@@ -208,7 +234,73 @@ export function PhotoEditor(props: PhotoEditorProps): JSX.Element {
   const resetCrop = () => {
     refit();
     setAspect('free');
-    update({ rotation: 0, straighten: 0, flipX: false, flipY: false, crop: FULL_CROP });
+    setFound(null);
+    setAutoMessage(null);
+    update({
+      rotation: 0,
+      straighten: 0,
+      perspectiveVertical: 0,
+      perspectiveHorizontal: 0,
+      lensDistortion: 0,
+      flipX: false,
+      flipY: false,
+      crop: FULL_CROP,
+    });
+  };
+
+  /** The focal length the perspective model should use for this photo. */
+  const focalFor = (current: PhotoEdit) => (hasWarp(current) ? current.focal35 : (cameraFocal ?? DEFAULT_FOCAL35));
+
+  /** Perspective/lens change: the first one pins the lens's focal length into the recipe. */
+  const updateWarp = (patch: Partial<PhotoEdit>) =>
+    setEdit((current) => ({ ...current, focal35: focalFor(current), ...patch }));
+
+  const runAuto = async (mode: AutoMode) => {
+    const image = sceneRef.current?.photoImage();
+    if (!image || autoBusy) return;
+    setAutoBusy(mode);
+    setAutoMessage(null);
+    const startEdit = edit;
+    try {
+      const focal35 = focalFor(startEdit);
+      const result = await autoPerspective(image, startEdit, mode, focal35);
+      if (result.angles) {
+        const { vertical, horizontal, rotate } = result.angles;
+        const round = (v: number) => Math.round(v * 10) / 10;
+        refit();
+        setEdit((current) => ({
+          ...current,
+          focal35,
+          perspectiveVertical: round(vertical),
+          perspectiveHorizontal: round(horizontal),
+          straighten: round(rotate),
+        }));
+      }
+      setFound(result.quad ? { quad: result.quad, rotation: startEdit.rotation, lens: startEdit.lensDistortion } : null);
+      setAutoMessage(result.message);
+    } catch (err) {
+      setAutoMessage(err instanceof Error ? err.message : String(err));
+    } finally {
+      setAutoBusy(null);
+    }
+  };
+
+  const canCropToFrame = found !== null && turned !== null && found.rotation === edit.rotation && found.lens === edit.lensDistortion;
+  const cropToFrame = () => {
+    if (!found || !turned) return;
+    const { width: W, height: H } = turned;
+    const warp = frameWarp(W, H, edit);
+    const [tl, tr, br, bl] = found.quad.map((p) => turnedToFrame(warp, W, H, edit, p)) as [Point, Point, Point, Point];
+    // Average each pair of near-parallel edges (mirroring may swap sides).
+    const xs = [(tl[0] + bl[0]) / 2, (tr[0] + br[0]) / 2];
+    const ys = [(tl[1] + tr[1]) / 2, (bl[1] + br[1]) / 2];
+    const x0 = Math.max(0, Math.min(...xs) / W);
+    const x1 = Math.min(1, Math.max(...xs) / W);
+    const y0 = Math.max(0, Math.min(...ys) / H);
+    const y1 = Math.min(1, Math.max(...ys) / H);
+    refit();
+    setAspect('free');
+    update({ crop: keepCropInside({ x: x0, y: y0, w: Math.max(EDIT_LIMITS.minCrop, x1 - x0), h: Math.max(EDIT_LIMITS.minCrop, y1 - y0) }) });
   };
 
   const onCropChange = useCallback(
@@ -319,6 +411,72 @@ export function PhotoEditor(props: PhotoEditorProps): JSX.Element {
                 <button type="button" className={`photo-editor__chip${edit.flipX ? ' is-active' : ''}`} onClick={() => mirror('x')}>Flip ↔</button>
                 <button type="button" className={`photo-editor__chip${edit.flipY ? ' is-active' : ''}`} onClick={() => mirror('y')}>Flip ↕</button>
                 <button type="button" className="photo-editor__chip" onClick={resetCrop}>Reset crop</button>
+              </div>
+
+              <div className="photo-editor__group">
+                <h3 className="photo-editor__heading">Perspective</h3>
+                <div className="photo-editor__chips">
+                  <button
+                    type="button"
+                    className="photo-editor__chip"
+                    onClick={() => void runAuto('framed')}
+                    disabled={!size || autoBusy !== null}
+                    title="Find the picture frame and square it up"
+                    data-testid="photo-editor-auto-framed"
+                  >
+                    {autoBusy === 'framed' ? 'Finding…' : 'Auto: Framed art'}
+                  </button>
+                  <button
+                    type="button"
+                    className="photo-editor__chip"
+                    onClick={() => void runAuto('general')}
+                    disabled={!size || autoBusy !== null}
+                    title="Straighten from the photo's lines, ignoring frames"
+                    data-testid="photo-editor-auto-general"
+                  >
+                    {autoBusy === 'general' ? 'Finding…' : 'Auto: General'}
+                  </button>
+                  {canCropToFrame && (
+                    <button type="button" className="photo-editor__chip" onClick={cropToFrame} data-testid="photo-editor-crop-to-frame">
+                      Crop to frame
+                    </button>
+                  )}
+                </div>
+                {autoMessage && (
+                  <p className="photo-editor__hint" role="status" data-testid="photo-editor-auto-status">
+                    {autoMessage}
+                  </p>
+                )}
+                <SliderRow
+                  label="Vertical"
+                  value={edit.perspectiveVertical}
+                  min={-EDIT_LIMITS.perspective}
+                  max={EDIT_LIMITS.perspective}
+                  step={0.1}
+                  format={(v) => `${v}°`}
+                  onChange={(perspectiveVertical) => updateWarp({ perspectiveVertical })}
+                  testId="photo-editor-perspective-vertical"
+                />
+                <SliderRow
+                  label="Horizontal"
+                  value={edit.perspectiveHorizontal}
+                  min={-EDIT_LIMITS.perspective}
+                  max={EDIT_LIMITS.perspective}
+                  step={0.1}
+                  format={(v) => `${v}°`}
+                  onChange={(perspectiveHorizontal) => updateWarp({ perspectiveHorizontal })}
+                  testId="photo-editor-perspective-horizontal"
+                />
+                <SliderRow
+                  label="Lens"
+                  value={edit.lensDistortion}
+                  min={-EDIT_LIMITS.lensDistortion}
+                  max={EDIT_LIMITS.lensDistortion}
+                  step={1}
+                  format={whole}
+                  onChange={(lensDistortion) => updateWarp({ lensDistortion })}
+                  testId="photo-editor-lens"
+                />
               </div>
             </div>
           )}
