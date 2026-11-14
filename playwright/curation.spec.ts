@@ -807,6 +807,68 @@ test('the curator hangs the wall with spacing and frames; guests start there and
   await page.request.put('/api/curation/display', { data: { spacing: 'none', lightboxFrames: false } });
 });
 
+test('fancy frames are their own group, and random frames can come from them', async ({ page }) => {
+  await page.request.post('/api/curation/session', { data: { pin: PIN } });
+  await page.request.put('/api/curation/display', { data: { lightboxFrames: true } });
+  await page.goto('/');
+  await expect(page.getByTestId('wall-shell')).toHaveAttribute('data-screen', 'ready', {
+    timeout: 60_000,
+  });
+  const fancy = ['museum-gilt', 'silver-leaf', 'carved-mahogany', 'florentine'];
+  const tile = await pickCenteredTile(page);
+  const photoId = (await tile.getAttribute('data-photo-id'))!;
+  const before = (await photoById(page.request, photoId)).frame ?? { frame: 'random', mat: 'frame' };
+  await tile.click();
+  const frame = page.getByTestId('focused-photo-frame');
+
+  // The picker lists the fancy frames apart from the standard ones.
+  await page.getByTestId('focused-photo-frame-pick').click();
+  const standardGroup = page.getByTestId('frame-group-standard');
+  const fancyGroup = page.getByTestId('frame-group-fancy');
+  await expect(standardGroup.getByTestId('frame-option-random')).toBeVisible();
+  await expect(standardGroup.getByTestId('frame-option-gilded')).toBeVisible();
+  await expect(fancyGroup.getByTestId('frame-option-random-fancy')).toBeVisible();
+  for (const style of fancy) await expect(fancyGroup.getByTestId(`frame-option-${style}`)).toBeVisible();
+  await expect(fancyGroup.getByTestId('frame-option-gilded')).toHaveCount(0);
+  // Random fancy hangs the photo in one of them.
+  await page.getByTestId('frame-option-random-fancy').click();
+  await page.getByTestId('mat-option-frame').click();
+  await page.getByTestId('frame-confirm').click();
+  expect((await photoById(page.request, photoId)).frame).toEqual({ frame: 'random-fancy', mat: 'frame' });
+  await expect(frame).toHaveAttribute('data-frame', new RegExp(`^(${fancy.join('|')})$`));
+  await page.getByTestId('focused-photo-close').click();
+
+  // Random frames come from the standard frames until the curator says otherwise.
+  const modal = page.getByTestId('focused-photo-modal');
+  /** The frames of the next few photos the curator never framed. */
+  const unpicked = async () => {
+    const framed = new Set((await allPhotos(page.request)).filter((p) => p.frame).map((p) => p.id));
+    await (await pickCenteredTile(page)).click();
+    const styles: string[] = [];
+    for (let step = 0; step < 12 && styles.length < 4; step += 1) {
+      await page.getByTestId('focused-photo-next').click();
+      const id = (await modal.getAttribute('data-photo-id'))!;
+      if (!framed.has(id)) styles.push((await frame.getAttribute('data-frame'))!);
+    }
+    await page.getByTestId('focused-photo-close').click();
+    expect(styles.length).toBeGreaterThan(0);
+    return styles;
+  };
+  for (const style of await unpicked()) expect(fancy).not.toContain(style);
+  await openControls(page);
+  await expect(page.getByTestId('controls-random-frames-standard')).toHaveAttribute('aria-checked', 'true');
+  await page.getByTestId('controls-random-frames-fancy').click();
+  await expect(page.getByTestId('controls-random-frames-fancy')).toHaveAttribute('aria-checked', 'true');
+  await closeControls(page);
+  for (const style of await unpicked()) expect(fancy).toContain(style);
+
+  // Put things back for the tests after this one.
+  await page.request.post(`/api/curation/photos/${encodeURIComponent(photoId)}/frame`, {
+    data: before,
+  });
+  await page.request.put('/api/curation/display', { data: { lightboxFrames: false, randomFrames: 'standard' } });
+});
+
 test('the curator previews the wall as a guest and keeps curating', async ({ page }) => {
   await page.request.post('/api/curation/session', { data: { pin: PIN } });
   // The previous test made a photo private.

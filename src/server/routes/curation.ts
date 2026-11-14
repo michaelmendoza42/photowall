@@ -18,6 +18,7 @@ import {
   FRAME_CHOICES,
   FRAME_MATS,
   WALL_SPACINGS,
+  RANDOM_FRAME_POOLS,
   type FrameChoice,
   type PhotoFeaturedConflictResponse,
   type PhotoMoveResponse,
@@ -54,7 +55,11 @@ const PrivateSchema = z.object({ private: z.boolean() });
 const FrameChoiceSchema = z.enum(FRAME_CHOICES as [FrameChoice, ...FrameChoice[]]);
 const FrameSchema = z.object({ frame: FrameChoiceSchema, mat: z.enum(FRAME_MATS) });
 const DisplayDefaultsSchema = z
-  .object({ spacing: z.enum(WALL_SPACINGS), lightboxFrames: z.boolean() })
+  .object({
+    spacing: z.enum(WALL_SPACINGS),
+    lightboxFrames: z.boolean(),
+    randomFrames: z.enum(RANDOM_FRAME_POOLS),
+  })
   .partial();
 const FeaturedSchema = z.object({
   featured: z.boolean(),

@@ -7,10 +7,11 @@ import {
   tileNearestViewportCenter,
 } from './focusNavigation.js';
 import type { GroupedWallFoundation } from './groupedWall.js';
-import type { FrameMat, FrameStyle, WallSpacing } from '../../../../shared/api/curation.js';
-import { FEATURED_VIEWPORT_SHARE } from './featuredGeometry.js';
+import type { FrameMat, FrameStyle, RandomFramePool, WallSpacing } from '../../../../shared/api/curation.js';
+import { FEATURED_VIEWPORT_SHARE, featuredTileSize } from './featuredGeometry.js';
 import { resolvePhotoFrame } from './featuredFrames.js';
-import { framedCellAspect, insetByGap, WALL_GAP_RATIO } from './wallSpacing.js';
+import { insetByGap, WALL_GAP_RATIO } from './wallSpacing.js';
+import { buildGalleryWallLayout } from './galleryWall.js';
 import {
   buildRadialWallLayout,
   groupPhotosByDirectory,
@@ -116,17 +117,28 @@ export function buildWallLayout(input: {
   };
   const gap = radialMeanColumnWidth(options) * WALL_GAP_RATIO[spacing];
   const featured = featuredPhotoIds ? withFeatured(groups, featuredPhotoIds) : groups;
-  const layout = buildRadialWallLayout({
-    ...options,
-    groups: spacing === 'framed' ? framedGroups(featured, radialMeanColumnWidth(options), gap) : featured,
-    raggedEdge: spacing === 'none',
-    ...(spacing === 'framed'
-      ? { shapeToColumn: true, levelMaxShrink: FRAMED_LEVEL_MAX_SHRINK }
-      : {}),
-    ...(boxWidth > 0 && boxHeight > 0
-      ? { featuredBox: { width: boxWidth, height: boxHeight } }
-      : {}),
-  });
+  // On a framed wall the featured frame itself fills the box: its cell is
+  // a gap larger, since every frame sits half a gap in from its cell.
+  const heroBox =
+    spacing === 'framed' ? { width: boxWidth + gap, height: boxHeight + gap } : { width: boxWidth, height: boxHeight };
+  const maxTileHeight = montageTileCap(featured, heroBox, gap);
+  const layout = spacing === 'framed'
+    ? buildGalleryWallLayout({
+        groups: featured,
+        large: largeFramedPhotos(featured),
+        columnWidth: radialMeanColumnWidth(options),
+        gap,
+        maxRowHeight: options.maxRowHeight,
+        ...(boxWidth > 0 && boxHeight > 0 ? { heroBox } : {}),
+        ...(maxTileHeight ? { maxTileHeight } : {}),
+      })
+    : buildRadialWallLayout({
+        ...options,
+        groups: featured,
+        ...(maxTileHeight ? { maxTileHeight } : {}),
+        raggedEdge: spacing === 'none',
+        ...(boxWidth > 0 && boxHeight > 0 ? { featuredBox: heroBox } : {}),
+      });
   if (gap <= 0) return { ...layout, gap, spacing };
   // Each tile sits half a gap in from its cell, with its photo's real size.
   const byId = new Map(photos.map((photo) => [photo.id, photo]));
@@ -147,40 +159,55 @@ export function buildWallLayout(input: {
   };
 }
 
-/** How much a framed cell may be shortened to line up with a neighbour. */
-const FRAMED_LEVEL_MAX_SHRINK = 0.1;
-/** Photos at least this wide get two columns on a framed wall. */
+/** Photos at least this wide hang larger on a framed wall. */
 const FRAMED_WIDE_ASPECT = 1.9;
+
+/**
+ * The largest any other photo may hang, as a share of the smallest
+ * featured photo's area on the wall (frames included): a featured photo
+ * is always at least twice the size of everything around it.
+ */
+export const MONTAGE_MAX_AREA_SHARE = 0.5;
+
+/**
+ * The tallest a cell `width` wide may be so its tile (drawn a gap smaller)
+ * stays within the montage's share of the smallest featured photo, or
+ * null without featured photos on the wall. `heroBox` is the box hero
+ * cells fit in; they are drawn a gap smaller too.
+ */
+function montageTileCap(
+  groups: readonly RadialWallGroup[],
+  heroBox: { width: number; height: number },
+  gap: number,
+): ((width: number) => number) | null {
+  let smallest = Number.POSITIVE_INFINITY;
+  for (const group of groups) {
+    if (!group.featured || group.photos.length < 2) continue;
+    const size = featuredTileSize(group.featured, heroBox);
+    smallest = Math.min(smallest, Math.max(0, size.width - gap) * Math.max(0, size.height - gap));
+  }
+  if (!Number.isFinite(smallest)) return null;
+  const area = smallest * MONTAGE_MAX_AREA_SHARE;
+  return (width) => area / Math.max(1, width - gap) + gap;
+}
 
 /** A wall layout, with the gap its tiles were drawn in from their cells. */
 export type WallLayout = RadialWallLayout & { gap: number; spacing: WallSpacing };
 
 /**
- * Groups whose photos are shaped as framed cells for packing. Featured
- * photos keep their own shape: their hero tile is sized to the screen.
+ * Photos that hang larger on a framed wall: favorites, and photos too
+ * wide to be anything but tiny at the usual width. Featured photos have
+ * their own size.
  */
-function framedGroups(
-  groups: readonly RadialWallGroup[],
-  columnWidth: number,
-  gap: number,
-): RadialWallGroup[] {
-  const shaped = (photo: PhotoQueryRecord, width: number): PhotoQueryRecord => {
-    const aspect = framedCellAspect(photo, width, gap);
-    return { ...photo, width: Math.round(aspect * 10000), height: 10000, aspectRatio: aspect };
-  };
-  return groups.map((group) => {
-    const wide = new Map<string, PhotoQueryRecord>();
-    const photos = group.photos.map((photo) => {
-      if (photo === group.featured) return photo;
-      // Favorites hang larger, and very wide photos would be too small in
-      // one column: both get two columns where they fit.
-      if (photo.starred || photo.width / Math.max(1, photo.height) >= FRAMED_WIDE_ASPECT) {
-        wide.set(photo.id, shaped(photo, 2 * columnWidth));
-      }
-      return shaped(photo, columnWidth);
-    });
-    return { ...group, photos, ...(wide.size > 0 ? { wide } : {}) };
-  });
+function largeFramedPhotos(groups: readonly RadialWallGroup[]): Set<string> {
+  const large = new Set<string>();
+  for (const group of groups) {
+    for (const photo of group.photos) {
+      if (photo === group.featured) continue;
+      if (photo.starred || photo.width / Math.max(1, photo.height) >= FRAMED_WIDE_ASPECT) large.add(photo.id);
+    }
+  }
+  return large;
 }
 
 function roundBox(size: number): number {
@@ -203,18 +230,19 @@ export function useTileFrames(
   layout: WallLayout,
   photos: readonly PhotoQueryRecord[],
   photosById: ReadonlyMap<string, PhotoQueryRecord>,
+  randomFrames: RandomFramePool = 'standard',
 ): ReadonlyMap<string, TileFrame> {
   return useMemo(() => {
     const frames = new Map<string, TileFrame>();
     if (layout.spacing === 'framed') {
-      for (const photo of photos) frames.set(photo.id, { ...resolvePhotoFrame(photo), kind: 'gallery' });
+      for (const photo of photos) frames.set(photo.id, { ...resolvePhotoFrame(photo, randomFrames), kind: 'gallery' });
     }
     for (const id of layout.featuredPhotoIds) {
       const photo = photosById.get(id);
-      if (photo) frames.set(id, { ...resolvePhotoFrame(photo), kind: 'hero' });
+      if (photo) frames.set(id, { ...resolvePhotoFrame(photo, randomFrames), kind: 'hero' });
     }
     return frames;
-  }, [layout.spacing, layout.featuredPhotoIds, photos, photosById]);
+  }, [layout.spacing, layout.featuredPhotoIds, photos, photosById, randomFrames]);
 }
 
 /**
@@ -275,15 +303,34 @@ function worldOf(layout: RadialWallLayout): { width: number; height: number } {
   return { width: layout.worldWidth, height: layout.contentHeight };
 }
 
+/**
+ * Where a selection opens: front and center on its featured photo (the
+ * one nearest the middle of the wall, if several albums have one), or on
+ * the middle of the wall without one.
+ */
 export function cameraOnWallCenter(
   camera: CameraState,
   layout: RadialWallLayout,
   zoom: number,
 ): CameraState {
   const bounded = withWorldBounds(camera, worldOf(layout));
+  const middle = { x: layout.worldWidth / 2, y: layout.contentHeight / 2 };
+  let target = middle;
+  let nearest = Number.POSITIVE_INFINITY;
+  for (const row of layout.rows) {
+    for (const tile of row.tiles) {
+      if (tile.duplicate || !layout.featuredPhotoIds.has(tile.photoId)) continue;
+      const center = { x: tile.x + tile.width / 2, y: tile.y + tile.height / 2 };
+      const distance = Math.hypot(center.x - middle.x, center.y - middle.y);
+      if (distance < nearest) {
+        nearest = distance;
+        target = center;
+      }
+    }
+  }
   return panTo(bounded, {
-    x: layout.worldWidth / 2 - bounded.viewport.width / (2 * zoom),
-    y: layout.contentHeight / 2 - bounded.viewport.height / (2 * zoom),
+    x: target.x - bounded.viewport.width / (2 * zoom),
+    y: target.y - bounded.viewport.height / (2 * zoom),
   });
 }
 

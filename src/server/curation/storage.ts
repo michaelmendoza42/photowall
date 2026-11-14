@@ -5,6 +5,7 @@ import { promisify } from 'node:util';
 import { z } from 'zod';
 import {
   FRAME_CHOICES,
+  RANDOM_FRAME_POOLS,
   FRAME_MATS,
   FOLDER_PATH_PATTERN,
   WALL_SPACINGS,
@@ -47,8 +48,9 @@ export const AlbumSettingsSchema = z.object({
     .object({
       spacing: z.enum(WALL_SPACINGS).default('none'),
       lightboxFrames: z.boolean().default(false),
+      randomFrames: z.enum(RANDOM_FRAME_POOLS).default('standard'),
     })
-    .default({ spacing: 'none', lightboxFrames: false }),
+    .default({ spacing: 'none', lightboxFrames: false, randomFrames: 'standard' }),
 });
 
 export type AlbumSettings = z.infer<typeof AlbumSettingsSchema>;
@@ -58,7 +60,7 @@ export const EMPTY_ALBUM_SETTINGS: AlbumSettings = {
   onDisplay: [],
   defaultView: [],
   defaultStarred: false,
-  display: { spacing: 'none', lightboxFrames: false },
+  display: { spacing: 'none', lightboxFrames: false, randomFrames: 'standard' },
 };
 
 export interface CurationPaths {

@@ -244,7 +244,7 @@ describe('curation routes', () => {
       vip: false,
       vipPinSet: false,
       libraryWrites: false,
-      display: { spacing: 'none', lightboxFrames: false },
+      display: { spacing: 'none', lightboxFrames: false, randomFrames: 'standard' },
     });
     expect((await photos()).totalMatching).toBe(4);
     // Even asked for directly, viewers never get hidden photos.
@@ -671,6 +671,14 @@ describe('curation routes', () => {
       (await post(curationPhotoFeaturedPath(first!.id), { featured: true, frame: 'gilded', mat: 'velvet' })).json(),
     ).toMatchObject({ photo: { featured: true, frame: { frame: 'gilded', mat: 'velvet' } } });
     expect((await post(curationPhotoFeaturedPath(first!.id), { featured: true, frame: 'neon' })).statusCode).toBe(400);
+    // A featured photo can hang in a fancy frame, picked or random.
+    expect(
+      (await post(curationPhotoFeaturedPath(first!.id), { featured: true, frame: 'random-fancy' })).json(),
+    ).toMatchObject({ photo: { frame: { frame: 'random-fancy', mat: 'velvet' } } });
+    expect(
+      (await post(curationPhotoFeaturedPath(first!.id), { featured: true, frame: 'museum-gilt' })).json(),
+    ).toMatchObject({ photo: { frame: { frame: 'museum-gilt', mat: 'velvet' } } });
+    await post(curationPhotoFeaturedPath(first!.id), { featured: true, frame: 'gilded' });
 
     // Replacing carries the new photo's frame; unfeaturing keeps each photo's frame.
     expect((await post(curationPhotoFeaturedPath(second!.id), { featured: true, frame: 'walnut' })).statusCode).toBe(409);
@@ -708,17 +716,20 @@ describe('curation routes', () => {
     const session = async (withCookie?: string) =>
       (await app.inject({ method: 'GET', url: CURATION_SESSION_PATH, headers: withCookie ? { cookie: withCookie } : {} }))
         .json() as CurationSessionResponse;
-    expect((await session()).display).toEqual({ spacing: 'none', lightboxFrames: false });
+    expect((await session()).display).toEqual({ spacing: 'none', lightboxFrames: false, randomFrames: 'standard' });
     expect((await curatorPut('', CURATION_DISPLAY_PATH, { spacing: 'framed' })).statusCode).toBe(403);
     expect((await curatorPut(cookie, CURATION_DISPLAY_PATH, { spacing: 'tiled' })).statusCode).toBe(400);
     expect((await curatorPut(cookie, CURATION_DISPLAY_PATH, { spacing: 'framed' })).json()).toMatchObject({
       display: { spacing: 'framed', lightboxFrames: false },
     });
     await curatorPut(cookie, CURATION_DISPLAY_PATH, { lightboxFrames: true });
+    // Random frames come from the standard frames, the fancy ones, or both.
+    expect((await curatorPut(cookie, CURATION_DISPLAY_PATH, { randomFrames: 'gaudy' })).statusCode).toBe(400);
+    await curatorPut(cookie, CURATION_DISPLAY_PATH, { randomFrames: 'fancy' });
     // Guests start from them; the curator's albums.json keeps them.
-    expect((await session()).display).toEqual({ spacing: 'framed', lightboxFrames: true });
+    expect((await session()).display).toEqual({ spacing: 'framed', lightboxFrames: true, randomFrames: 'fancy' });
     const albums = JSON.parse(await fs.readFile(path.join(dataRoot, 'curation', 'albums.json'), 'utf8'));
-    expect(albums.display).toEqual({ spacing: 'framed', lightboxFrames: true });
+    expect(albums.display).toEqual({ spacing: 'framed', lightboxFrames: true, randomFrames: 'fancy' });
   });
 
   it('unfeatures a photo when it is hidden, and restoring does not feature it again', async () => {

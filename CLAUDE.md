@@ -36,7 +36,7 @@ Single-package TypeScript app: `src/server` (Fastify), `src/client` (React + Vit
 **Client wall** (`src/client/src/features/wall/`) is where most of the complexity lives:
 - `WallShell` orchestrates the wall. It picks between `SingleStreamWallView` (a looping/wrapping single stream) and `GroupedWallView` (album areas with signposts), and hosts the controls, debug overlay and `FocusedPhotoLightbox` modal.
 - Rendering is Pixi-first. `PixiWallSurface`/`pixiScene.ts` draw the tiles and `WallCanvas` handles input. A DOM hit-target bridge keeps hover/click/tap working. `textureScheduler.ts` and `mediaSourceResolver.ts` pick derivative tiers.
-- Layout is pure and unit-tested: `packer.ts`/`groupedPacker.ts` build the gapless packing, `virtualization.ts`/`singleStreamRenderWindow.ts` handle windowing, and `dynamicLoading.ts`/`groupedLoading.ts` decide when to fetch the next page.
+- Layout is pure and unit-tested: `packer.ts`/`groupedPacker.ts`/`radialWall.ts` build the gapless and spaced packing, `galleryWall.ts` the framed wall (a gallery wall on a fine grid), `virtualization.ts`/`singleStreamRenderWindow.ts` handle windowing, and `dynamicLoading.ts`/`groupedLoading.ts` decide when to fetch the next page.
 - Input and motion have hooks and pure math kept separate: `dragGesture.ts`, `dragMomentum.ts` + `usePanMomentum.ts` (wheel/drag inertia), `useTouchPinchZoom.ts` and `useRafCameraPublisher.ts`. Camera state lives in `src/client/src/state/camera.ts`.
 
 Server data access goes through React Query hooks in `src/client/src/hooks/`, which wrap `src/client/src/api/`.

@@ -7,7 +7,7 @@ import {
   tileNearestViewportCenter,
 } from '../focusNavigation.js';
 import { buildRadialWallLayout, type RadialWallLayout } from '../radialWall.js';
-import { cameraHeldOnCenterPhoto, cameraOnWallCenter } from '../useRadialWallLayout.js';
+import { buildWallLayout, cameraHeldOnCenterPhoto, cameraOnWallCenter } from '../useRadialWallLayout.js';
 import { DEFAULT_MOSAIC_COLUMN_FACTORS } from '../worldWidth.js';
 
 function photo(group: number, index: number): PhotoQueryRecord {
@@ -108,5 +108,35 @@ describe('cameraHeldOnCenterPhoto', () => {
     expect(held.x - now.x).toBeCloseTo(camera.x - was.x);
     expect(held.y - now.y).toBeCloseTo(camera.y - was.y);
     expect(held).not.toEqual(cameraOnWallCenter(camera, after, ZOOM));
+  });
+
+  it('opens front and center on the featured photo, the one nearest the middle if several', () => {
+    const photos = [0, 1, 2].flatMap((group) =>
+      Array.from({ length: [80, 50, 120][group]! }, (_, index) => photo(group, index)),
+    );
+    const featured = new Set(['g0-3', 'g1-3', 'g2-3']);
+    const viewport = { width: 1440, height: 900 };
+    for (const spacing of ['framed', 'none'] as const) {
+      const wall = buildWallLayout({
+        photos: photos.map((p) => (featured.has(p.id) ? { ...p, featured: true } : p)),
+        referenceWidth: 3200,
+        featuredBox: { width: 1296, height: 810 },
+        featuredPhotoIds: featured,
+        spacing,
+      });
+      const heroes = wall.rows.flatMap((row) => row.tiles).filter((t) => wall.featuredPhotoIds.has(t.photoId));
+      expect(heroes.length).toBeGreaterThan(0);
+      const middle = { x: wall.worldWidth / 2, y: wall.contentHeight / 2 };
+      const central = heroes.reduce((best, t) =>
+        Math.hypot(t.x + t.width / 2 - middle.x, t.y + t.height / 2 - middle.y) <
+        Math.hypot(best.x + best.width / 2 - middle.x, best.y + best.height / 2 - middle.y)
+          ? t
+          : best,
+      );
+      const camera = cameraOnWallCenter(withViewport(INITIAL_CAMERA, viewport), wall, 1);
+      // Its center sits at the middle of the screen.
+      expect(camera.x + viewport.width / 2).toBeCloseTo(central.x + central.width / 2, 3);
+      expect(camera.y + viewport.height / 2).toBeCloseTo(central.y + central.height / 2, 3);
+    }
   });
 });

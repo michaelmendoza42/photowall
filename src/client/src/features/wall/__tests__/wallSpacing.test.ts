@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { PhotoQueryRecord } from '../../../../../shared/api/photos.js';
-import { buildWallLayout } from '../useRadialWallLayout.js';
+import { buildWallLayout, MONTAGE_MAX_AREA_SHARE } from '../useRadialWallLayout.js';
+import { computeWorldWidth } from '../worldWidth.js';
 import { galleryFrameGeometry } from '../wallSpacing.js';
 import { galleryMouldingRatio } from '../featuredFrames.js';
 import type { PackedTile } from '../packer.js';
@@ -71,37 +72,27 @@ describe('wall spacing', () => {
         expect(photo.x + photo.width).toBeLessThanOrEqual(tile.x + tile.width + 1e-6);
       }
     }
-    // Neighbours in a column sit exactly one gap apart.
-    const byLane = new Map<number, PackedTile[]>();
-    for (const tile of tilesOf(framed)) {
-      const list = byLane.get(tile.lane) ?? [];
-      list.push(tile);
-      byLane.set(tile.lane, list);
-    }
-    let gaps = 0;
+    // No two frames overlap or crowd closer than a gap.
     const all = tilesOf(framed);
-    for (const lane of byLane.values()) {
-      lane.sort((a, b) => a.y - b.y);
-      for (let i = 1; i < lane.length; i += 1) {
-        const above = lane[i - 1]!;
-        const below = lane[i]!;
-        if (Math.abs(above.x - below.x) > 1 || Math.abs(above.width - below.width) > 1) continue;
-        // A two-column photo may hang between them across this column.
-        const between = all.some(
-          (t) =>
-            t !== above &&
-            t !== below &&
-            t.x < above.x + above.width &&
-            t.x + t.width > above.x &&
-            t.y >= above.y + above.height - 1 &&
-            t.y + t.height <= below.y + 1,
-        );
-        if (between) continue;
-        expect(below.y - (above.y + above.height)).toBeCloseTo(framed.gap, 6);
-        gaps += 1;
+    for (let a = 0; a < all.length; a += 1) {
+      for (let b = a + 1; b < all.length; b += 1) {
+        const p = all[a]!;
+        const q = all[b]!;
+        const apartX = Math.max(q.x - (p.x + p.width), p.x - (q.x + q.width));
+        const apartY = Math.max(q.y - (p.y + p.height), p.y - (q.y + q.height));
+        expect(Math.max(apartX, apartY)).toBeGreaterThan(framed.gap - 1e-6);
       }
     }
-    expect(gaps).toBeGreaterThan(50);
+    // Frames hung right under one another sit exactly one gap apart.
+    let gaps = 0;
+    for (const above of all) {
+      const below = all
+        .filter((t) => t.y >= above.y + above.height && t.x < above.x + above.width && t.x + t.width > above.x)
+        .sort((a, b) => a.y - b.y)[0];
+      if (!below) continue;
+      if (Math.abs(below.y - (above.y + above.height) - framed.gap) < 1e-6) gaps += 1;
+    }
+    expect(gaps / all.length).toBeGreaterThan(0.8);
   });
 
   it('keeps mats close to even: framed cells are shaped for framed photos', () => {
@@ -121,7 +112,7 @@ describe('wall spacing', () => {
     expect(imbalance[Math.floor(imbalance.length * 0.9)]!).toBeLessThan(0.2);
   });
 
-  it('hangs favorites and very wide photos two columns wide on a framed wall', () => {
+  it('hangs favorites near the middle of a framed wall, two columns wide where room allows', () => {
     const photos = Array.from({ length: 300 }, (_, index) => photo(index, 9));
     const framed = buildWallLayout({ photos, referenceWidth: 3600, featuredBox: BOX, spacing: 'framed' });
     const tiles = tilesOf(framed).filter((t) => !t.duplicate && !framed.featuredPhotoIds.has(t.photoId));
@@ -133,8 +124,20 @@ describe('wall spacing', () => {
       const p = byId.get(t.photoId)!;
       return p.starred || p.aspectRatio >= 1.9;
     });
-    // Most get two columns; the rest fall back to one rather than fail.
-    expect(spans.length / wanted.length).toBeGreaterThan(0.6);
+    // Near the middle comes first: with one photo in nine a favorite there
+    // isn't room near it for all of them two columns wide, so some hang at
+    // the usual size rather than far out.
+    expect(spans.length / wanted.length).toBeGreaterThan(0.2);
+    // Favorites hang nearest the middle, where the wall grows out from.
+    const middle = { x: framed.worldWidth / 2, y: framed.contentHeight / 2 };
+    const distance = (t: PackedTile) => Math.hypot(t.x + t.width / 2 - middle.x, t.y + t.height / 2 - middle.y);
+    const byDistance = tiles.map(distance).sort((a, b) => a - b);
+    const rank = (t: PackedTile) => byDistance.findIndex((d) => d >= distance(t)) / byDistance.length;
+    const favoriteRanks = tiles.filter((t) => byId.get(t.photoId)!.starred).map(rank).sort((a, b) => a - b);
+    expect(favoriteRanks[Math.floor(favoriteRanks.length / 2)]!).toBeLessThan(0.15);
+    // Even the furthest, with this many favorites hanging larger, is in the
+    // nearer half.
+    expect(favoriteRanks[favoriteRanks.length - 1]!).toBeLessThan(0.5);
     for (const span of spans) {
       const p = byId.get(span.photoId)!;
       expect(p.starred || p.aspectRatio >= 1.9).toBe(true);
@@ -145,7 +148,7 @@ describe('wall spacing', () => {
     expect(
       median(tiles.filter((t) => byId.get(t.photoId)!.starred).map(area)) /
         median(tiles.filter((t) => !byId.get(t.photoId)!.starred).map(area)),
-    ).toBeGreaterThan(2);
+    ).toBeGreaterThan(1.75);
     // Other spacings don't change sizes for favorites.
     const spaced = layoutFor('spaced');
     expect(tilesOf(spaced).every((t) => t.width < columnWidth * 1.6 || spaced.featuredPhotoIds.has(t.photoId))).toBe(true);
@@ -160,6 +163,47 @@ describe('wall spacing', () => {
         .map((t) => ((t.width + framed.gap) * (t.height + framed.gap)) / (mean * mean)),
     );
     expect(smallest).toBeGreaterThan(0.25);
+  });
+
+  it('fills 90% of the screen with the featured frame on a framed wall', () => {
+    const photos = PHOTOS.map((p, index) => (index === 0 ? { ...p, featured: true } : p));
+    const ids = new Set([photos[0]!.id]);
+    const box = BOX;
+    for (const spacing of ['framed', 'spaced'] as const) {
+      const layout = buildWallLayout({ photos, referenceWidth: 3600, featuredBox: box, featuredPhotoIds: ids, spacing });
+      const hero = tilesOf(layout).find((t) => ids.has(t.photoId) && !t.duplicate)!;
+      // Frame included, it fits the box and fills it one way.
+      expect(hero.width).toBeLessThanOrEqual(box.width + 1e-6);
+      expect(hero.height).toBeLessThanOrEqual(box.height + 1e-6);
+      const fill = Math.max(hero.width / box.width, hero.height / box.height);
+      if (spacing === 'framed') expect(fill).toBeCloseTo(1, 3);
+      // Other spacings keep their gap inside the box.
+      else expect(fill).toBeLessThan(1);
+    }
+  });
+
+  it('never hangs another photo even half the size of the featured one', () => {
+    const photos = Array.from({ length: 300 }, (_, index) => photo(index, 9)).map((p, index) =>
+      index === 1 ? { ...p, featured: true } : p,
+    );
+    const ids = new Set([photos[1]!.id]);
+    for (const viewport of [{ width: 1000, height: 548 }, { width: 1440, height: 900 }, { width: 390, height: 844 }]) {
+      const box = { width: viewport.width * 0.9, height: viewport.height * 0.9 };
+      for (const spacing of ['none', 'spaced', 'framed'] as const) {
+        const layout = buildWallLayout({
+          photos,
+          referenceWidth: computeWorldWidth(viewport.width),
+          featuredBox: box,
+          featuredPhotoIds: ids,
+          spacing,
+        });
+        const tiles = tilesOf(layout);
+        const hero = tiles.find((t) => ids.has(t.photoId))!;
+        expect(hero).toBeDefined();
+        const largest = Math.max(...tiles.filter((t) => t !== hero && !ids.has(t.photoId)).map((t) => t.width * t.height));
+        expect(largest / (hero.width * hero.height)).toBeLessThanOrEqual(MONTAGE_MAX_AREA_SHARE + 1e-3);
+      }
+    }
   });
 
   it('lays out nothing until the wall knows its size', () => {

@@ -116,10 +116,11 @@ export interface PhotoPrivateRequest {
 }
 
 /**
- * Frames a photo can hang in, on a framed wall, in the photo view and when
- * featured: modern ones first, then museum classics. The client draws them.
+ * Standard frames a photo can hang in, on a framed wall, in the photo view
+ * and when featured: modern ones first, then museum classics. The client
+ * draws them.
  */
-export const FRAME_STYLES = [
+export const STANDARD_FRAME_STYLES = [
   'gallery-black',
   'white-gallery',
   'natural-oak',
@@ -129,13 +130,26 @@ export const FRAME_STYLES = [
   'gilded',
   'baroque',
 ] as const;
+/** Fancy frames: ornate museum frames with a double mat and a gilt slip. */
+export const FANCY_FRAME_STYLES = ['museum-gilt', 'silver-leaf', 'carved-mahogany', 'florentine'] as const;
+export const FRAME_STYLES = [...STANDARD_FRAME_STYLES, ...FANCY_FRAME_STYLES] as const;
 export type FrameStyle = (typeof FRAME_STYLES)[number];
-/** A frame, or `random`: a different frame on every page load. */
-export type FrameChoice = FrameStyle | 'random';
+/**
+ * A frame, or a random one picked again on every page load: `random` from
+ * the frames the curator set random frames to come from, `random-fancy`
+ * from the fancy frames.
+ */
+export type FrameChoice = FrameStyle | 'random' | 'random-fancy';
 export const FRAME_CHOICES: readonly FrameChoice[] = [
   'random',
-  ...FRAME_STYLES,
+  ...STANDARD_FRAME_STYLES,
+  'random-fancy',
+  ...FANCY_FRAME_STYLES,
 ];
+
+/** Which frames a `random` frame comes from. */
+export const RANDOM_FRAME_POOLS = ['standard', 'fancy', 'both'] as const;
+export type RandomFramePool = (typeof RANDOM_FRAME_POOLS)[number];
 
 /** Mats inside a frame; `frame` keeps the frame style's own mat. */
 export const FRAME_MATS = ['frame', 'none', 'white', 'cream', 'grey', 'black', 'linen', 'velvet'] as const;
@@ -159,9 +173,15 @@ export interface WallDisplaySettings {
   spacing: WallSpacing;
   /** The photo view shows each photo in its frame. */
   lightboxFrames: boolean;
+  /** Which frames photos without a picked frame hang in. Curator only. */
+  randomFrames: RandomFramePool;
 }
 
-export const DEFAULT_WALL_DISPLAY: WallDisplaySettings = { spacing: 'none', lightboxFrames: false };
+export const DEFAULT_WALL_DISPLAY: WallDisplaySettings = {
+  spacing: 'none',
+  lightboxFrames: false,
+  randomFrames: 'standard',
+};
 
 export const CURATION_DISPLAY_PATH = '/api/curation/display';
 

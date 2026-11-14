@@ -1021,6 +1021,7 @@ export function WallShell(): JSX.Element {
     photos,
     featuredPhotoIds,
     spacing: shownSpacing,
+    randomFrames: display.randomFrames,
     selectionKey,
     worldWidth,
     hasNextPage: photosQuery.hasNextPage,
@@ -1132,7 +1133,7 @@ export function WallShell(): JSX.Element {
           curatorStar={curatorStar}
           curatorFeatured={curatorFeatured}
           curatorFrame={curatorFrame}
-          frame={display.lightboxFrames ? resolvePhotoFrame(focusedPhoto.photo) : undefined}
+          frame={display.lightboxFrames ? resolvePhotoFrame(focusedPhoto.photo, display.randomFrames) : undefined}
           curatorPrivate={curatorPrivate}
           sourceAlbum={focusedFromBestOf ? photoAlbumName(focusedPhoto.photo) : undefined}
           onEdit={handleEditOpen}

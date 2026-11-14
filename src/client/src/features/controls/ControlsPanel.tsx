@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { LibraryFacetsResponse } from '../../../../shared/api/library.js';
 import {
+  RANDOM_FRAME_POOLS,
   WALL_SPACINGS,
   type AlbumCurationResponse,
+  type RandomFramePool,
   type CurationSessionResponse,
   type WallDisplaySettings,
   type WallSpacing,
@@ -67,6 +69,12 @@ const SPACING_LABELS: Record<WallSpacing, string> = {
   none: 'No spacing',
   spaced: 'Spacing',
   framed: 'Frames',
+};
+
+const RANDOM_FRAME_LABELS: Record<RandomFramePool, string> = {
+  standard: 'Standard',
+  fancy: 'Fancy',
+  both: 'Both',
 };
 
 function SpacingChoice(props: {
@@ -509,6 +517,22 @@ export function ControlsPanel(props: ControlsPanelProps): JSX.Element {
                     />
                     <span>Frames in photo view by default</span>
                   </label>
+                  <p className="controls__hint">Random frames come from:</p>
+                  <div className="controls__segmented" role="radiogroup" aria-label="Random frames">
+                    {RANDOM_FRAME_POOLS.map((pool) => (
+                      <button
+                        key={pool}
+                        type="button"
+                        role="radio"
+                        aria-checked={curation.session?.display.randomFrames === pool}
+                        className="controls__segment"
+                        data-testid={`controls-random-frames-${pool}`}
+                        onClick={() => curation.onSetDisplayDefaults({ randomFrames: pool })}
+                      >
+                        {RANDOM_FRAME_LABELS[pool]}
+                      </button>
+                    ))}
+                  </div>
                   <label className="controls__toggle">
                     <input
                       type="checkbox"

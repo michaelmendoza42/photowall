@@ -22,6 +22,7 @@ import {
 } from '../../../../shared/api/curation.js';
 import {
   FRAME_LABELS,
+  isFancyFrame,
   galleryFrameDataUrl,
   galleryMouldingRatio,
   MAT_LABELS,
@@ -1032,7 +1033,8 @@ function FramePicker(props: {
   const thumb = resolveWallMediaSource(photo, 'thumb', mediaSourceResolver);
   const width = 132;
   const preview = (style: FrameChoice) => {
-    const shown = style === 'random' ? 'gallery-black' : style;
+    const dice = style === 'random' || style === 'random-fancy';
+    const shown = style === 'random' ? 'gallery-black' : style === 'random-fancy' ? 'museum-gilt' : style;
     const share = galleryMouldingRatio(shown);
     const height = width / framedPhotoAspect(photo, share, mat);
     const geometry = galleryFrameGeometry({ x: 0, y: 0, width, height }, photo, share, mat);
@@ -1043,7 +1045,7 @@ function FramePicker(props: {
           width,
           height,
           backgroundImage:
-            style === 'random'
+            dice
               ? undefined
               : `url("${galleryFrameDataUrl({ style: shown, mat }, width, height, geometry, 400)}")`,
         }}
@@ -1059,10 +1061,25 @@ function FramePicker(props: {
             height: geometry.photo.height,
           }}
         />
-        {style === 'random' && <span className="frame-picker__dice">?</span>}
+        {dice && <span className="frame-picker__dice">?</span>}
       </span>
     );
   };
+  const option = (choice: FrameChoice) => (
+    <button
+      key={choice}
+      type="button"
+      role="radio"
+      aria-checked={frame === choice}
+      className="frame-picker__option"
+      data-testid={`frame-option-${choice}`}
+      data-selected={frame === choice ? 'true' : 'false'}
+      onClick={() => setFrame(choice)}
+    >
+      {preview(choice)}
+      <span className="frame-picker__label">{FRAME_LABELS[choice]}</span>
+    </button>
+  );
   const unchanged = frame === current.frame && mat === current.mat;
   return (
     <div
@@ -1088,22 +1105,15 @@ function FramePicker(props: {
             : 'It hangs in this frame on a framed wall and in the photo view.'}{' '}
           Random picks a different frame each time the wall loads.
         </p>
-        <div className="frame-picker__grid" role="radiogroup" aria-label="Frame">
-          {FRAME_CHOICES.map((choice) => (
-            <button
-              key={choice}
-              type="button"
-              role="radio"
-              aria-checked={frame === choice}
-              className="frame-picker__option"
-              data-testid={`frame-option-${choice}`}
-              data-selected={frame === choice ? 'true' : 'false'}
-              onClick={() => setFrame(choice)}
-            >
-              {preview(choice)}
-              <span className="frame-picker__label">{FRAME_LABELS[choice]}</span>
-            </button>
-          ))}
+        <div role="radiogroup" aria-label="Frame">
+          <h3 className="frame-picker__group">Standard</h3>
+          <div className="frame-picker__grid" data-testid="frame-group-standard">
+            {FRAME_CHOICES.filter((choice) => !isFancyFrame(choice)).map(option)}
+          </div>
+          <h3 className="frame-picker__group">Fancy</h3>
+          <div className="frame-picker__grid" data-testid="frame-group-fancy">
+            {FRAME_CHOICES.filter(isFancyFrame).map(option)}
+          </div>
         </div>
         <div className="frame-picker__mats" role="radiogroup" aria-label="Mat">
           {FRAME_MATS.map((choice) => (

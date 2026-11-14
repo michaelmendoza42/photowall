@@ -1,4 +1,4 @@
-import type { WallSpacing } from "../../../../shared/api/curation.js";
+import type { RandomFramePool, WallSpacing } from "../../../../shared/api/curation.js";
 import {
 	useCallback,
 	useEffect,
@@ -96,6 +96,8 @@ export interface SingleStreamWallViewProps {
 	featuredPhotoIds?: ReadonlySet<string>;
 	/** Edge to edge, spaced apart, or spaced apart in frames. */
 	spacing?: WallSpacing;
+	/** Which frames photos without a picked frame hang in. */
+	randomFrames?: RandomFramePool;
 }
 
 interface ActiveDrag {
@@ -149,6 +151,7 @@ export function SingleStreamWallView(
 		mediaSourceResolver,
 		featuredPhotoIds,
 		spacing = "none",
+		randomFrames = "standard",
 	} = props;
 
 	const containerRef = useRef<HTMLDivElement | null>(null);
@@ -318,7 +321,7 @@ export function SingleStreamWallView(
 		viewport: viewportSize,
 		spacing,
 	});
-	const tileFrames = useTileFrames(packedLayout, photos, photosById);
+	const tileFrames = useTileFrames(packedLayout, photos, photosById, randomFrames);
 	/** Hung tiles cast a shadow about half a gap wide. */
 	const shadowBlur = packedLayout.gap > 0 ? packedLayout.gap * 0.45 : undefined;
 	// The world is sized to the photos; the viewport only sets tile size.

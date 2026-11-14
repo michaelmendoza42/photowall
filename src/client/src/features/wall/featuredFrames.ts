@@ -5,8 +5,11 @@
 // faces of a moulding are lit and the bottom and right ones shaded.
 
 import {
+  FANCY_FRAME_STYLES,
   FRAME_STYLES,
+  STANDARD_FRAME_STYLES,
   type FrameMat,
+  type RandomFramePool,
   type PhotoFrame,
   type FrameStyle,
   type FrameChoice,
@@ -24,26 +27,51 @@ export const FRAME_LABELS: Record<FrameChoice, string> = {
   'brushed-silver': 'Brushed silver',
   gilded: 'Gilded',
   baroque: 'Baroque gold',
+  'random-fancy': 'Random fancy',
+  'museum-gilt': 'Museum gilt',
+  'silver-leaf': 'Silver leaf',
+  'carved-mahogany': 'Carved mahogany',
+  florentine: 'Florentine',
+};
+
+const RANDOM_POOLS: Record<RandomFramePool, readonly FrameStyle[]> = {
+  standard: STANDARD_FRAME_STYLES,
+  fancy: FANCY_FRAME_STYLES,
+  both: FRAME_STYLES,
 };
 
 /** Changes on every page load, so `random` frames change on every load too. */
 const LOAD_SEED = Math.floor(Math.random() * 0x7fffffff);
 
-/** The frame a featured photo shows in: `random` picks one per page load. */
+/**
+ * The frame a photo shows in: a random choice picks one per page load,
+ * `random` from `pool` (the curator's setting) and `random-fancy` from the
+ * fancy frames.
+ */
 export function resolveFeaturedFrame(
   choice: FrameChoice | undefined,
   photoId: string,
+  pool: RandomFramePool = 'standard',
 ): FrameStyle {
-  if (choice && choice !== 'random') return choice;
-  return FRAME_STYLES[hash(`${LOAD_SEED}:${photoId}`) % FRAME_STYLES.length]!;
+  if (choice && choice !== 'random' && choice !== 'random-fancy') return choice;
+  const styles = RANDOM_POOLS[choice === 'random-fancy' ? 'fancy' : pool];
+  return styles[hash(`${LOAD_SEED}:${photoId}`) % styles.length]!;
 }
 
 /** The frame and mat a photo shows in: its curator's pick, or a random frame. */
-export function resolvePhotoFrame(photo: { id: string; frame?: PhotoFrame }): {
+export function resolvePhotoFrame(
+  photo: { id: string; frame?: PhotoFrame },
+  pool: RandomFramePool = 'standard',
+): {
   style: FrameStyle;
   mat: FrameMat;
 } {
-  return { style: resolveFeaturedFrame(photo.frame?.frame, photo.id), mat: photo.frame?.mat ?? 'frame' };
+  return { style: resolveFeaturedFrame(photo.frame?.frame, photo.id, pool), mat: photo.frame?.mat ?? 'frame' };
+}
+
+/** Whether a frame (or a random choice) is one of the fancy frames. */
+export function isFancyFrame(choice: FrameChoice): boolean {
+  return choice === 'random-fancy' || (FANCY_FRAME_STYLES as readonly string[]).includes(choice);
 }
 
 type Side = 'top' | 'right' | 'bottom' | 'left';
@@ -61,6 +89,16 @@ interface FrameLook {
   beads?: { color: string; light: string };
   /** Carved leaf ornament along the moulding and rosettes at the corners. */
   carving?: { dark: string; light: string };
+  /** The corner rosettes' metal, light to dark; gold when left out. */
+  rosette?: [string, string, string];
+  /** A second row of beads along the moulding's outer edge. */
+  outerBeads?: boolean;
+  /** A lacquered panel along the middle of the moulding, framed by gilt. */
+  panel?: string;
+  /** A second, inner mat showing a thin reveal around the photo. */
+  innerMat?: string;
+  /** A thin gilt slip (fillet) right around the photo. */
+  fillet?: { color: string; light: string };
   mat: { color: string; texture: 'paper' | 'linen' | 'velvet' | 'none'; bevel?: string };
   /** A deep box: the photo floats above a dark backing, casting a shadow. */
   floating?: boolean;
@@ -121,6 +159,50 @@ const STYLES: Record<FrameStyle, FrameLook> = {
     beads: { color: '#a97b22', light: '#f6dc8f' },
     carving: { dark: 'rgba(60, 36, 4, 0.75)', light: 'rgba(255, 240, 180, 0.8)' },
     mat: { color: '#4b1717', texture: 'velvet' },
+  },
+  'museum-gilt': {
+    moulding: 0.62,
+    profile: ['#3f2906', '#9a6e1c', '#e2bd5c', '#fbe9a8', '#c99a36', '#6b4a0f', '#e8c76e', '#fff0bb', '#a67a24', '#5a3c09'],
+    shading: 0.24,
+    beads: { color: '#b48526', light: '#fff0b8' },
+    outerBeads: true,
+    carving: { dark: 'rgba(66, 40, 4, 0.7)', light: 'rgba(255, 244, 196, 0.85)' },
+    mat: { color: '#efe7d4', texture: 'linen' },
+    innerMat: '#2c2418',
+    fillet: { color: '#b88a2c', light: '#fbe7a6' },
+  },
+  'silver-leaf': {
+    moulding: 0.58,
+    profile: ['#4c5156', '#9aa0a6', '#dfe3e7', '#f8fafb', '#b9bec3', '#6c7277', '#d4d8dc', '#878d92'],
+    shading: 0.22,
+    beads: { color: '#9ca2a8', light: '#ffffff' },
+    carving: { dark: 'rgba(40, 46, 52, 0.6)', light: 'rgba(255, 255, 255, 0.85)' },
+    rosette: ['#ffffff', '#b8bec4', '#555b61'],
+    mat: { color: '#e9e8e4', texture: 'linen' },
+    innerMat: '#7d8288',
+    fillet: { color: '#a9afb5', light: '#ffffff' },
+  },
+  'carved-mahogany': {
+    moulding: 0.6,
+    profile: ['#1c0a05', '#3a170c', '#4e2112', '#421c0e', '#260e07', '#45200f', '#1c0a05'],
+    shading: 0.24,
+    grain: { color: 'rgba(10, 3, 1, 0.45)', light: 'rgba(160, 84, 50, 0.1)', density: 1.1 },
+    carving: { dark: 'rgba(8, 2, 0, 0.7)', light: 'rgba(150, 82, 48, 0.32)' },
+    beads: { color: '#a97b22', light: '#f6dc8f' },
+    mat: { color: '#efe6d2', texture: 'paper', bevel: '#fbf6ea' },
+    innerMat: '#1d1d1d',
+    fillet: { color: '#b48526', light: '#fbe7a6' },
+  },
+  florentine: {
+    moulding: 0.6,
+    profile: ['#4a300a', '#a67a24', '#f0d27e', '#c99a36', '#6e4c10', '#e5c46b', '#8c6418'],
+    shading: 0.24,
+    panel: '#141210',
+    beads: { color: '#b48526', light: '#fbe7a6' },
+    outerBeads: true,
+    mat: { color: '#e4d8bf', texture: 'linen' },
+    innerMat: '#5a1a1a',
+    fillet: { color: '#c19434', light: '#fbe7a6' },
   },
 };
 
@@ -320,6 +402,10 @@ const FRAME_DEPTH: Record<FrameStyle, number> = {
   'brushed-silver': 0.85,
   gilded: 1.4,
   baroque: 1.75,
+  'museum-gilt': 1.9,
+  'silver-leaf': 1.75,
+  'carved-mahogany': 1.8,
+  florentine: 1.8,
 };
 
 export function frameDepth(style: FrameStyle): number {
@@ -501,6 +587,11 @@ function drawMat(
   const shadow = Math.max(2, size * 0.02);
   insetShadow(context, opening, shadow, style.floating ? 0.55 : 0.28);
 
+  if (mat.texture !== 'none' && !style.floating && (style.innerMat || style.fillet)) {
+    drawInnerMatAndFillet(context, style, photo, size);
+    return;
+  }
+
   if (style.floating) {
     // The photo floats off the backing: a soft drop shadow under it.
     context.save();
@@ -524,6 +615,55 @@ function drawMat(
     context.fillStyle = 'rgba(0, 0, 0, 0.35)';
     const lip = Math.max(1, size * 0.003);
     context.fillRect(photo.x - lip, photo.y - lip, photo.width + 2 * lip, photo.height + 2 * lip);
+  }
+}
+
+/**
+ * A fancy frame's inner mat, showing a thin reveal inside the outer mat's
+ * bevelled window, and a gilt slip right around the photo.
+ */
+function drawInnerMatAndFillet(
+  context: CanvasRenderingContext2D,
+  style: FrameLook,
+  photo: Rect,
+  size: number,
+): void {
+  const fillet = style.fillet ? Math.max(2, size * 0.012) : 0;
+  const reveal = style.innerMat ? Math.max(2, size * 0.018) : 0;
+  const grow = (rect: Rect, by: number): Rect => ({
+    x: rect.x - by,
+    y: rect.y - by,
+    width: rect.width + 2 * by,
+    height: rect.height + 2 * by,
+  });
+  const window = grow(photo, fillet + reveal);
+  const bevel = Math.max(1.5, size * 0.006);
+  // The outer mat's cut edge.
+  const outer = grow(window, bevel);
+  context.fillStyle = style.mat.bevel ?? '#fbf7ee';
+  context.fillRect(outer.x, outer.y, outer.width, outer.height);
+  context.fillStyle = 'rgba(0, 0, 0, 0.12)';
+  context.fillRect(outer.x + outer.width - bevel, outer.y, bevel, outer.height);
+  context.fillRect(outer.x, outer.y + outer.height - bevel, outer.width, bevel);
+  if (style.innerMat) {
+    context.fillStyle = style.innerMat;
+    context.fillRect(window.x, window.y, window.width, window.height);
+    insetShadow(context, window, Math.max(1.5, reveal * 0.6), 0.35);
+  }
+  if (style.fillet) {
+    // The slip: a rounded gilt strip, lit from the top left.
+    const slip = grow(photo, fillet);
+    const gradient = context.createLinearGradient(slip.x, slip.y, slip.x + slip.width, slip.y + slip.height);
+    gradient.addColorStop(0, style.fillet.light);
+    gradient.addColorStop(0.45, style.fillet.color);
+    gradient.addColorStop(1, style.fillet.color);
+    context.fillStyle = gradient;
+    context.fillRect(slip.x, slip.y, slip.width, slip.height);
+    context.strokeStyle = 'rgba(0, 0, 0, 0.35)';
+    context.lineWidth = Math.max(0.75, fillet * 0.18);
+    context.strokeRect(photo.x, photo.y, photo.width, photo.height);
+    context.strokeStyle = 'rgba(255, 250, 220, 0.6)';
+    context.strokeRect(slip.x, slip.y, slip.width, slip.height);
   }
 }
 
@@ -606,6 +746,13 @@ function drawMoulding(
   const along = side === 'top' || side === 'bottom';
   const length = along ? width : height;
   const across = (offset: number) => (side === 'top' || side === 'left' ? offset : (along ? height : width) - offset);
+  /** Fill the strip from `from` to `to` in from the outer edge, all along the side. */
+  const fillAcross = (from: number, to: number) => {
+    const a = across(from);
+    const b = across(to);
+    if (along) context.fillRect(0, Math.min(a, b), width, Math.abs(b - a));
+    else context.fillRect(Math.min(a, b), 0, Math.abs(b - a), height);
+  };
 
   if (style.grain) {
     // Long wavy grain lines running along the moulding.
@@ -680,10 +827,29 @@ function drawMoulding(
     }
   }
 
+  if (style.panel) {
+    // A lacquered band along the middle, with gilt lips either side.
+    const start = depth * 0.32;
+    const end = depth * 0.62;
+    const lip = depth * 0.035;
+    context.fillStyle = style.profile[2] ?? '#f0d27e';
+    fillAcross(start - lip, end + lip);
+    context.fillStyle = style.panel;
+    fillAcross(start, end);
+    const sheen = along
+      ? context.createLinearGradient(0, across(start), 0, across(end))
+      : context.createLinearGradient(across(start), 0, across(end), 0);
+    sheen.addColorStop(0, 'rgba(255, 255, 255, 0.18)');
+    sheen.addColorStop(0.4, 'rgba(255, 255, 255, 0)');
+    sheen.addColorStop(1, 'rgba(0, 0, 0, 0.25)');
+    context.fillStyle = sheen;
+    fillAcross(start, end);
+  }
+
   if (style.beads) {
     const radius = depth * 0.045;
-    const offset = depth - radius * 2.2;
-    for (let t = depth; t < length - depth; t += radius * 2.3) {
+    const offsets = [depth - radius * 2.2, ...(style.outerBeads ? [radius * 2.2] : [])];
+    for (const offset of offsets) for (let t = depth; t < length - depth; t += radius * 2.3) {
       const cx = along ? t : across(offset);
       const cy = along ? across(offset) : t;
       const bead = context.createRadialGradient(cx - radius * 0.35, cy - radius * 0.35, radius * 0.1, cx, cy, radius);
@@ -722,9 +888,10 @@ function drawCorners(context: CanvasRenderingContext2D, style: FrameLook, tile: 
     [depth / 2, tile.height - depth / 2],
   ] as const) {
     const base = context.createRadialGradient(cx - radius * 0.3, cy - radius * 0.3, radius * 0.1, cx, cy, radius);
-    base.addColorStop(0, '#fbe6a0');
-    base.addColorStop(0.55, '#c99c3c');
-    base.addColorStop(1, '#6e4c10');
+    const [light, mid, dark] = style.rosette ?? ['#fbe6a0', '#c99c3c', '#6e4c10'];
+    base.addColorStop(0, light);
+    base.addColorStop(0.55, mid);
+    base.addColorStop(1, dark);
     context.fillStyle = base;
     context.beginPath();
     for (let petal = 0; petal < 8; petal += 1) {
@@ -745,7 +912,7 @@ function drawCorners(context: CanvasRenderingContext2D, style: FrameLook, tile: 
     context.beginPath();
     context.arc(cx, cy, radius * 0.2, 0, Math.PI * 2);
     context.fill();
-    context.fillStyle = '#f6dc8f';
+    context.fillStyle = style.rosette?.[0] ?? '#f6dc8f';
     context.beginPath();
     context.arc(cx - radius * 0.06, cy - radius * 0.06, radius * 0.1, 0, Math.PI * 2);
     context.fill();
